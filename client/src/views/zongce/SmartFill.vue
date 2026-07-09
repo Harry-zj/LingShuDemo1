@@ -183,8 +183,21 @@ async function removeRuleSource(id) {
   else alert(res.msg)
 }
 async function toggleRuleItem(item) {
-  const res = await api.toggleRuleItem(item.id)
-  if (res.code === 200) item.status = res.data.status
+  const prev = item.status
+  // 乐观更新：先切状态，失败再回滚
+  item.status = item.status === 'confirmed' ? 'pending_confirm' : 'confirmed'
+  try {
+    const res = await api.toggleRuleItem(item.id)
+    if (res.code === 200) {
+      item.status = res.data.status  // 以后端返回为准
+    } else {
+      item.status = prev
+      alert(res.msg)
+    }
+  } catch (e) {
+    item.status = prev
+    alert('操作失败: ' + (e.response?.data?.msg || e.message))
+  }
 }
 async function removeRuleItem(id) {
   const res = await api.deleteRuleItem(id)

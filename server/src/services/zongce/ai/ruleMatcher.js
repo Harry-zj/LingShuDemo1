@@ -1,4 +1,4 @@
-const { chat } = require("./aiService");
+const { chatStreamJson } = require("./aiService");
 const { RULE_MATCH_SYSTEM, VERSION } = require("./promptTemplates");
 const { validateRuleMatch, validateRuleIdsExist, clamp01 } = require("./schemas");
 const { pool } = require("../../../config/database");
@@ -42,7 +42,7 @@ async function matchFactsToRules(facts, ruleItems, userId) {
     },
   ];
 
-  const rawResult = await chat(messages, { temperature: 0.1, expectJson: true, maxTokens: 2048 });
+  const rawResult = await chatStreamJson(messages, { temperature: 0.1, maxTokens: 2048 });
 
   // ★ 校验（内部记录 score 违规日志）
   const valid = validateRuleMatch(rawResult);

@@ -40,37 +40,47 @@
       </div>
     </div>
 
-    <!-- 规则清单（规则单） -->
+    <!-- 规则清单（按维度折叠分组） -->
     <div v-if="ruleItems.length" class="rule-summary">
-      <h4>规则清单（{{ ruleItems.filter(r => r.status === 'confirmed').length }}/{{ ruleItems.length }} 已确认）</h4>
-      <p class="hint">这是 AI 解析出的规则摘要，请逐条审核。勾选 = 确认，取消 = 暂不使用。</p>
-      <div class="rule-table-wrap">
-        <table class="rule-table">
-          <thead>
-            <tr>
-              <th>确认</th>
-              <th>类别</th>
-              <th>类型</th>
-              <th>描述</th>
-              <th>级别</th>
-              <th>分值</th>
-              <th>互斥组</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in ruleItems" :key="item.id" :class="{ dimmed: item.status !== 'confirmed' }">
-              <td><input type="checkbox" :checked="item.status === 'confirmed'" @change="$emit('toggle-item', item)" /></td>
-              <td><span class="cat-tag" :style="catStyle(item.category)">{{ catLabel(item.category) }}</span></td>
-              <td>{{ typeLabel(item.rule_type) }}</td>
-              <td class="desc-cell">{{ item.description }}</td>
-              <td>{{ levelLabel(item.level) }}</td>
-              <td>{{ item.score != null ? (item.rule_type === 'scoring' ? '+' : '') + item.score : '-' }}</td>
-              <td>{{ item.conflict_group || '-' }}</td>
-              <td><button class="btn-text danger" @click="$emit('remove-item', item.id)">删除</button></td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="rule-summary-header">
+        <h4>规则清单（{{ confirmedCount }}/{{ ruleItems.length }} 已确认）</h4>
+        <button class="btn-text" @click="confirmAll">✅ 全部确认</button>
+      </div>
+
+      <div v-for="group in groupedRules" :key="group.key" class="rule-group">
+        <div class="group-header" @click="group.open = !group.open">
+          <span class="group-arrow">{{ group.open ? '▼' : '▶' }}</span>
+          <span class="group-name" :style="{ color: group.color }">{{ group.label }}</span>
+          <span class="group-count">{{ group.confirmed }}/{{ group.items.length }}</span>
+          <button class="btn-text sm" @click.stop="confirmGroup(group)">确认本组</button>
+        </div>
+
+        <div v-show="group.open" class="group-body">
+          <!-- 子分组：加分项 / 上限 / 冲突 -->
+          <div v-for="sub in group.subs" :key="sub.key" class="sub-group">
+            <div class="sub-header">
+              <span class="sub-label">{{ sub.label }}</span>
+              <span class="sub-count">{{ sub.items.length }} 条</span>
+            </div>
+            <div class="rule-table-wrap">
+              <table class="rule-table">
+                <thead>
+                  <tr><th>确认</th><th>描述</th><th>级别</th><th>分值</th><th>互斥组</th><th>操作</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="item in sub.items" :key="item.id" :class="{ dimmed: item.status !== 'confirmed' }">
+                    <td><input type="checkbox" :checked="item.status === 'confirmed'" @change="$emit('toggle-item', item)" /></td>
+                    <td class="desc-cell">{{ item.description }}</td>
+                    <td>{{ levelLabel(item.level) }}</td>
+                    <td>{{ item.score != null ? (item.rule_type === 'scoring' ? '+' : '') + item.score : '-' }}</td>
+                    <td>{{ item.conflict_group || '-' }}</td>
+                    <td><button class="btn-text danger" @click="$emit('remove-item', item.id)">删</button></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -132,34 +142,25 @@ async function doParse(sourceId) {
   parsingId.value = sourceId
   parseProgress.value = { completed: 0, total: 1 }
   try {
-    // 启动解析
     const startRes = await api.parseRuleSource(sourceId)
-    if (startRes.code !== 200) { alert(startRes.msg); return }
+    if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
 
     const taskId = startRes.data.taskId
-    // 轮询进度
-    const timer = setInterval(async () => {
-      try {
-        const r = await api.getParseProgress(taskId)
-        if (r.code !== 200) return
-        const t = r.data
-        if (t.status === 'completed') {
-          clearInterval(timer)
-          parseProgress.value = { completed: t.result?.total || 1, total: t.result?.total || 1 }
-          emit('refresh')
-          parsingId.value = null
-        } else if (t.status === 'failed') {
-          clearInterval(timer)
-          alert('解析失败: ' + (t.error_msg || '未知错误'))
-          parsingId.value = null
-        } else if (t.result) {
-          try {
-            const p = typeof t.result === 'string' ? JSON.parse(t.result) : t.result
-            if (p.phase === 'parsing') parseProgress.value = p
-          } catch (e) { /* ignore */ }
-        }
-      } catch (e) { /* 轮询失败继续 */ }
-    }, 1500)
+    // SSE 流式接收进度
+    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream`)
+    es.addEventListener('progress', (e) => {
+      try { parseProgress.value = JSON.parse(e.data); } catch (_) {}
+    })
+    es.addEventListener('done', (e) => {
+      es.close()
+      emit('refresh')
+      parsingId.value = null
+    })
+    es.addEventListener('error', (e) => {
+      es.close()
+      try { const d = JSON.parse(e.data); alert('解析失败: ' + (d.msg || '未知错误')); } catch (_) { alert('解析连接失败'); }
+      parsingId.value = null
+    })
   } catch (e) {
     alert('启动解析失败: ' + (e.response?.data?.msg || e.message))
     parsingId.value = null
@@ -170,9 +171,38 @@ function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
 const catMap = { moral:'德育', intellectual:'智育', physical:'体育', aesthetic:'美育', labor:'劳育' }
 const catColors = { moral:'#EA8600', intellectual:'#1A73E8', physical:'#34A853', aesthetic:'#9C27B0', labor:'#FF6D00' }
 function catLabel(c) { return catMap[c] || c || '全局' }
-function catStyle(c) { return { background: (catColors[c]||'#9AA0A6')+'20', color: catColors[c]||'#9AA0A6', border: '1px solid '+(catColors[c]||'#9AA0A6')+'40' } }
 function typeLabel(t) { return { scoring:'加分', limit:'上限', conflict:'冲突' }[t] || t }
 function levelLabel(l) { return { national:'国家级', provincial:'省级', school:'校级', college:'院级' }[l] || l || '-' }
+
+// 动态分组
+const confirmedCount = computed(() => props.ruleItems.filter(r => r.status === 'confirmed').length)
+const groupedRules = computed(() => {
+  const groups = {}
+  for (const r of props.ruleItems) {
+    const cat = r.category || '__global__'
+    if (!groups[cat]) groups[cat] = { scoring: [], limit: [], conflict: [] }
+    groups[cat][r.rule_type || 'scoring'].push(r)
+  }
+  return Object.entries(groups).map(([cat, byType]) => {
+    const items = [...byType.scoring, ...byType.limit, ...byType.conflict]
+    return {
+      key: cat, label: catLabel(cat), color: catColors[cat] || '#9AA0A6',
+      items, open: true,
+      confirmed: items.filter(r => r.status === 'confirmed').length,
+      subs: [
+        { key: 'scoring', label: '加分项', items: byType.scoring },
+        { key: 'limit', label: '上限约束', items: byType.limit },
+        { key: 'conflict', label: '冲突规则', items: byType.conflict },
+      ].filter(s => s.items.length),
+    }
+  })
+})
+function confirmGroup(group) {
+  group.items.forEach(item => { if (item.status !== 'confirmed') emit('toggle-item', item) })
+}
+function confirmAll() {
+  props.ruleItems.forEach(item => { if (item.status !== 'confirmed') emit('toggle-item', item) })
+}
 </script>
 
 <style scoped>
@@ -224,4 +254,21 @@ function levelLabel(l) { return { national:'国家级', provincial:'省级', sch
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .badge { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-tag); background: #FEF7E0; color: #E37400; }
 .badge.parsed { background: #E6F4EA; color: #34A853; }
+
+.rule-summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.rule-group { border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 10px; overflow: hidden; }
+.group-header {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: #fafafa; cursor: pointer; user-select: none;
+}
+.group-header:hover { background: #f0f0f0; }
+.group-arrow { font-size: 12px; color: #999; width: 16px; }
+.group-name { font-weight: 600; font-size: 15px; }
+.group-count { font-size: 13px; color: #999; margin-right: auto; }
+.group-body { padding: 0 16px 12px; }
+.sub-group { margin-top: 12px; }
+.sub-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.sub-label { font-size: 13px; font-weight: 500; color: #666; }
+.sub-count { font-size: 12px; color: #999; }
+.btn-text.sm { padding: 2px 10px; font-size: 12px; }
 </style>

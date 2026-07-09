@@ -1,4 +1,4 @@
-const { chat } = require("./aiService");
+const { chatStreamJson } = require("./aiService");
 const { FACT_EXTRACT_SYSTEM, VERSION } = require("./promptTemplates");
 const { validateFactExtraction } = require("./schemas");
 const fs = require("fs");
@@ -72,18 +72,19 @@ async function extractFromImage(filePath, ext, fileName) {
   const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
   const mime = mimeMap[ext] || "image/png";
 
-  const messages = [
-    { role: "system", content: FACT_EXTRACT_SYSTEM },
-    {
-      role: "user",
-      content: [
-        { type: "text", text: `请提取以下图片中的客观事实（文件名仅供参考，不要据此推断）：${fileName}` },
-        { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } },
-      ],
-    },
-  ];
+  // Step 1: OCR 提取文字（非流式）
+  const { ocrImage } = require("./aiService");
+  const text = await ocrImage(base64);
+  if (!text.trim()) return { facts: [], overall_clarity: 0, missing_info: ["图片中未识别到文字"] };
 
-  return await chat(messages, { temperature: 0.1, expectJson: true, maxTokens: 2048 });
+  // Step 2: 从 OCR 文字中提取事实（流式）
+  return await chatStreamJson(
+    [
+      { role: "system", content: FACT_EXTRACT_SYSTEM },
+      { role: "user", content: `请从以下OCR识别结果中提取客观事实：\n\n${text}` },
+    ],
+    { temperature: 0.1, maxTokens: 2048 }
+  );
 }
 
 async function extractFromDocument(filePath, ext) {
@@ -107,7 +108,7 @@ async function extractFromDocument(filePath, ext) {
     { role: "user", content: `请提取以下文档中的客观事实：\n\n${text}` },
   ];
 
-  return await chat(messages, { temperature: 0.1, expectJson: true, maxTokens: 2048 });
+  return await chatStreamJson(messages, { temperature: 0.1, maxTokens: 2048 });
 }
 
 module.exports = { extractFacts };

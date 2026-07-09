@@ -1,5 +1,5 @@
 const { pool } = require("../../../config/database");
-const { chat } = require("./aiService");
+const { chatStreamJson, ocrImage } = require("./aiService");
 const { RULE_PARSE_SYSTEM, VERSION } = require("./promptTemplates");
 const { validateRuleParse } = require("./schemas");
 const { parseInChunks } = require("./ruleParserChunked");
@@ -42,12 +42,12 @@ async function parseRuleSource(sourceId, onProgress) {
       ? `=== 用户补充约束 ===\n${constraintText}\n\n=== 规则文档 ===\n${text}`
       : `=== 规则文档 ===\n${text}`;
 
-    rawResult = await chat(
+    rawResult = await chatStreamJson(
       [
         { role: "system", content: RULE_PARSE_SYSTEM },
         { role: "user", content: userContent },
       ],
-      { temperature: 0.1, expectJson: true, maxTokens: 8192 }
+      { temperature: 0.1, maxTokens: 8192 }
     );
   }
 
@@ -114,20 +114,7 @@ async function extractText(filePath, fileName) {
     if (ext === ".jpg" || ext === ".jpeg") mime = "image/jpeg";
     else if (ext === ".gif") mime = "image/gif";
 
-    const { chat } = require("./aiService");
-    return await chat(
-      [
-        { role: "system", content: "请从图片中识别并提取所有文字。只输出识别的文字，不要添加任何解释。" },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "请提取以下图片中的所有文字：" },
-            { type: "image_url", image_url: { url: `data:${mime};base64,${base64}` } },
-          ],
-        },
-      ],
-      { temperature: 0.1 }
-    );
+    return await ocrImage(base64);
   }
 
   if (ext === ".docx") {

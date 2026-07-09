@@ -55,11 +55,12 @@ exports.uploadAttachments = async (req, res) => {
     if (!mat.length) return res.json(Res.error("材料不存在"));
     const inserted = [];
     for (const f of req.files) {
+      const safeName = Buffer.from(f.originalname, 'latin1').toString('utf8');
       const [r] = await pool.execute(
         "INSERT INTO attachments (material_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)",
-        [id, f.originalname, f.filename, f.mimetype, f.size]
+        [id, safeName, f.filename, f.mimetype, f.size]
       );
-      inserted.push({ id: r.insertId, file_name: f.originalname });
+      inserted.push({ id: r.insertId, file_name: safeName });
     }
     res.json(Res.success(inserted, `已上传 ${inserted.length} 个文件`));
   } catch (e) { res.json(Res.error(e.message)); }

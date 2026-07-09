@@ -16,6 +16,7 @@ router.get("/rules/items",     auth, ruleCtrl.getRuleItems);
 router.put("/rules/items/:id/toggle", auth, ruleCtrl.toggleRuleItem);
 router.post("/rules/sources/:id/parse", auth, ruleCtrl.parseRuleSource);
 router.get("/rules/tasks/:taskId", auth, ruleCtrl.getParseProgress);
+router.get("/rules/tasks/:taskId/stream", auth, ruleCtrl.streamParseProgress);
 router.delete("/rules/sources/:id",   auth, ruleCtrl.deleteRuleSource);
 router.delete("/rules/items/:id",     auth, ruleCtrl.deleteRuleItem);
 

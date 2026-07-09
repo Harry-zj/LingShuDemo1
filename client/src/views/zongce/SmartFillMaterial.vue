@@ -18,8 +18,8 @@
         <div class="mat-right">
           <!-- 未识别时显示上传和AI分析按钮 -->
           <template v-if="!mat.recognition">
-            <button class="btn-text" @click="$refs['fu'+mat.id]?.click()">+ 上传证明</button>
-            <input :ref="'fu'+mat.id" type="file" hidden multiple accept=".png,.jpg,.jpeg,.pdf,.docx" @change="e => onFiles(mat.id, e)" />
+            <button class="btn-text" @click="fileInputs[mat.id]?.click()">+ 上传证明</button>
+            <input :ref="el => fileInputs[mat.id] = el" type="file" hidden multiple accept=".png,.jpg,.jpeg,.pdf,.docx" @change="e => onFiles(mat.id, e)" />
             <button class="btn primary sm" @click="$emit('analyze', mat.id)" :disabled="!mat.attachments.length">AI 分析</button>
           </template>
           <button class="btn-text danger" @click="$emit('remove', mat.id)">删除</button>
@@ -62,6 +62,7 @@
 <script setup>
 defineProps({ materials: Array, ruleItems: Array })
 const emit = defineEmits(['create','upload','analyze','confirm','dismiss','remove'])
+const fileInputs = {}
 
 function onFiles(matId, e) {
   const files = Array.from(e.target.files)

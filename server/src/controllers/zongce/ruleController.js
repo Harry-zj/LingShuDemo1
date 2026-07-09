@@ -111,6 +111,54 @@ exports.getParseProgress = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
+// SSE 流式推送解析进度
+exports.streamParseProgress = async (req, res) => {
+  const taskId = req.params.taskId;
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+  const timer = setInterval(async () => {
+    try {
+      const [rows] = await pool.execute("SELECT * FROM ai_tasks WHERE id = ?", [taskId]);
+      if (!rows.length) {
+        send("error", { msg: "任务不存在" });
+        clearInterval(timer);
+        res.end();
+        return;
+      }
+      const task = rows[0];
+
+      if (task.status === "completed") {
+        let progress = {};
+        try { progress = typeof task.result === "string" ? JSON.parse(task.result) : (task.result || {}); } catch (e) {}
+        send("done", progress);
+        clearInterval(timer);
+        res.end();
+      } else if (task.status === "failed") {
+        send("error", { msg: task.error_msg || "解析失败" });
+        clearInterval(timer);
+        res.end();
+      } else {
+        let progress = { completed: 0, total: 1, phase: "parsing" };
+        try { if (task.result) progress = typeof task.result === "string" ? JSON.parse(task.result) : task.result; } catch (e) {}
+        send("progress", progress);
+      }
+    } catch (e) {
+      send("error", { msg: e.message });
+      clearInterval(timer);
+      res.end();
+    }
+  }, 1000);
+
+  req.on("close", () => { clearInterval(timer); });
+};
+
 async function runParseInBackground(taskId, sourceId) {
   try {
     const result = await parseRuleSource(sourceId, (progress) => {
