@@ -8,11 +8,13 @@ exports.uploadRuleFiles = async (req, res) => {
     if (!req.files || req.files.length === 0) return res.json(Res.error("请选择文件"));
     const inserted = [];
     for (const f of req.files) {
+      // multer 中文文件名编码修正
+      const safeName = Buffer.from(f.originalname, 'latin1').toString('utf8');
       const [r] = await pool.execute(
         "INSERT INTO rule_sources (user_id, source_type, file_name, file_path, status) VALUES (?, 'file', ?, ?, 'pending')",
-        [req.user.id, f.originalname, f.filename]
+        [req.user.id, safeName, f.filename]
       );
-      inserted.push({ id: r.insertId, file_name: f.originalname, status: 'pending' });
+      inserted.push({ id: r.insertId, file_name: safeName, status: 'pending' });
     }
     res.json(Res.success(inserted, `已上传 ${inserted.length} 个文件`));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -83,10 +85,46 @@ exports.deleteRuleItem = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// AI 解析规则来源
+// AI 解析规则来源（异步，返回 task_id）
 exports.parseRuleSource = async (req, res) => {
   try {
-    const result = await parseRuleSource(req.params.id);
-    res.json(Res.success(result, `解析完成，生成 ${result.count} 条规则项`));
+    // 创建任务
+    const [r] = await pool.execute(
+      "INSERT INTO ai_tasks (target_type, target_id, status) VALUES ('rule_parse', ?, 'processing')",
+      [req.params.id]
+    );
+    const taskId = r.insertId;
+
+    // 后台执行（不 await），通过 ai_tasks 表追踪进度
+    runParseInBackground(taskId, req.params.id);
+
+    res.json(Res.success({ taskId }, "解析任务已启动"));
   } catch (e) { res.json(Res.error(e.message)); }
 };
+
+// 查询解析进度
+exports.getParseProgress = async (req, res) => {
+  try {
+    const [rows] = await pool.execute("SELECT * FROM ai_tasks WHERE id = ?", [req.params.taskId]);
+    if (!rows.length) return res.json(Res.error("任务不存在"));
+    res.json(Res.success(rows[0]));
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
+async function runParseInBackground(taskId, sourceId) {
+  try {
+    const result = await parseRuleSource(sourceId, (progress) => {
+      pool.execute("UPDATE ai_tasks SET result = ? WHERE id = ?",
+        [JSON.stringify(progress), taskId]);
+    });
+    await pool.execute(
+      "UPDATE ai_tasks SET status = 'completed', result = ? WHERE id = ?",
+      [JSON.stringify({ ...result, done: true }), taskId]
+    );
+  } catch (e) {
+    await pool.execute(
+      "UPDATE ai_tasks SET status = 'failed', error_msg = ? WHERE id = ?",
+      [e.message, taskId]
+    );
+  }
+}

@@ -19,7 +19,10 @@ export const toggleRuleItem = (id) =>
   request.put(`/zongce/rules/items/${id}/toggle`);
 
 export const parseRuleSource = (id) =>
-  request.post(`/zongce/rules/sources/${id}/parse`);
+  request.post(`/zongce/rules/sources/${id}/parse`, null, { timeout: 30000 });
+
+export const getParseProgress = (taskId) =>
+  request.get(`/zongce/rules/tasks/${taskId}`);
 
 export const deleteRuleSource = (id) =>
   request.delete(`/zongce/rules/sources/${id}`);
@@ -40,7 +43,7 @@ export const uploadAttachments = (materialId, formData) =>
   });
 
 export const analyzeMaterial = (materialId) =>
-  request.post(`/zongce/materials/${materialId}/analyze`);
+  request.post(`/zongce/materials/${materialId}/analyze`, null, { timeout: 120000 });
 
 export const deleteMaterial = (id) =>
   request.delete(`/zongce/materials/${id}`);

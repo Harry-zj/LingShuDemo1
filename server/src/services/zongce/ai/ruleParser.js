@@ -2,13 +2,14 @@ const { pool } = require("../../../config/database");
 const { chat } = require("./aiService");
 const { RULE_PARSE_SYSTEM, VERSION } = require("./promptTemplates");
 const { validateRuleParse } = require("./schemas");
+const { parseInChunks } = require("./ruleParserChunked");
 const fs = require("fs");
 const path = require("path");
 
 // ============================================================
 //  解析规则来源 → rule_items（完整事务：DELETE+INSERT+UPDATE）
 // ============================================================
-async function parseRuleSource(sourceId) {
+async function parseRuleSource(sourceId, onProgress) {
   const [sources] = await pool.execute("SELECT * FROM rule_sources WHERE id = ?", [sourceId]);
   if (!sources.length) throw new Error("规则来源不存在");
   const source = sources[0];
@@ -28,17 +29,27 @@ async function parseRuleSource(sourceId) {
   );
   const constraintText = constraints.map((s) => s.original_text).join("\n");
 
-  const userContent = constraintText
-    ? `=== 用户补充约束 ===\n${constraintText}\n\n=== 规则文档 ===\n${text}`
-    : `=== 规则文档 ===\n${text}`;
+  // 大文档（>4000字）拆段并行解析，小文档直发
+  const LARGE_DOC_THRESHOLD = 4000;
+  let rawResult;
+  let chunkCount = 1;
 
-  const rawResult = await chat(
-    [
-      { role: "system", content: RULE_PARSE_SYSTEM },
-      { role: "user", content: userContent },
-    ],
-    { temperature: 0.1, expectJson: true, maxTokens: 4096 }
-  );
+  if (text.length > LARGE_DOC_THRESHOLD) {
+    rawResult = await parseInChunks(text, constraintText, onProgress);
+    chunkCount = Math.ceil(text.length / 3000);
+  } else {
+    const userContent = constraintText
+      ? `=== 用户补充约束 ===\n${constraintText}\n\n=== 规则文档 ===\n${text}`
+      : `=== 规则文档 ===\n${text}`;
+
+    rawResult = await chat(
+      [
+        { role: "system", content: RULE_PARSE_SYSTEM },
+        { role: "user", content: userContent },
+      ],
+      { temperature: 0.1, expectJson: true, maxTokens: 8192 }
+    );
+  }
 
   const valid = validateRuleParse(rawResult);
   if (!valid.ok) throw new Error("AI解析结果校验失败: " + valid.error);
@@ -77,7 +88,7 @@ async function parseRuleSource(sourceId) {
     }
 
     // 更新 source 状态 + 附加解析元信息
-    const meta = `\n\n--- AI解析记录 ---\n模型: deepseek-chat\nPrompt版本: ${VERSION}\n解析时间: ${new Date().toISOString()}\n原始响应: ${JSON.stringify(rawResult).slice(0, 5000)}`;
+    const meta = `\n\n--- AI解析记录 ---\n模型: deepseek-chat\n分段数: ${chunkCount}\nPrompt版本: ${VERSION}\n解析时间: ${new Date().toISOString()}`;
     await conn.execute(
       "UPDATE rule_sources SET status = 'parsed', original_text = CONCAT(COALESCE(original_text,''), ?) WHERE id = ?",
       [meta, sourceId]

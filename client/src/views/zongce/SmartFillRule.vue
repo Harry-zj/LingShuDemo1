@@ -5,7 +5,8 @@
       <div class="upload-left">
         <div class="upload-zone" @click="$refs.fileInput.click()" @dragover.prevent @drop.prevent="onDrop">
           <span class="upload-icon">📁</span>
-          <span>{{ uploading ? '上传中...' : '拖拽或点击上传规则文件' }}</span>
+          <span v-if="uploading">{{ uploadingFiles.length }} 个文件上传中...</span>
+          <span v-else>拖拽或点击上传规则文件</span>
           <span class="hint">支持 .docx .xlsx .pdf .png .jpg，可多选</span>
         </div>
         <input type="file" ref="fileInput" multiple hidden accept=".docx,.xlsx,.pdf,.png,.jpg,.jpeg" @change="onFiles" />
@@ -16,13 +17,25 @@
       </div>
     </div>
 
+    <!-- 解析进度条 -->
+    <div v-if="parsingId" class="progress-bar-wrap">
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: parsePercent + '%' }"></div>
+      </div>
+      <span class="progress-text">{{ parseProgress.completed || 0 }}/{{ parseProgress.total || '?' }} 段已完成</span>
+    </div>
+
     <!-- 已上传的来源 -->
     <div v-if="ruleSources.length" class="source-list">
       <h4>已上传的规则来源</h4>
       <div v-for="src in ruleSources" :key="src.id" class="source-row">
         <span>{{ src.source_type === 'file' ? '📄' : '💬' }} {{ src.file_name || truncate(src.original_text, 40) }}</span>
-        <span class="badge" :class="src.status">{{ src.status === 'parsed' ? '已解析' : '待解析' }}</span>
-        <button v-if="src.status !== 'parsed'" class="btn-text primary" @click="doParse(src.id)">🔍 解析</button>
+        <span class="badge" :class="src.status">
+          {{ parsingId === src.id ? `解析中 ${parseProgress.completed || 0}/${parseProgress.total || '?'}` : (src.status === 'parsed' ? '已解析' : '待解析') }}
+        </span>
+        <button v-if="src.status !== 'parsed'" class="btn-text primary" :disabled="!!parsingId" @click="doParse(src.id)">
+          {{ parsingId === src.id ? '⏳ AI解析中...' : '🔍 解析' }}
+        </button>
         <button class="btn-text danger" @click="$emit('remove-source', src.id)">删除</button>
       </div>
     </div>
@@ -64,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import * as api from '../../api/zongce'
 
 const props = defineProps({ ruleSources: Array, ruleItems: Array })
@@ -73,10 +86,18 @@ const emit = defineEmits(['remove-source','remove-item','toggle-item','refresh']
 const ruleText = ref('')
 const fileInput = ref(null)
 const uploading = ref(false)
+const uploadingFiles = ref([])
+const parsingId = ref(null)
+const parseProgress = ref({ completed: 0, total: 0 })
+const parsePercent = computed(() => {
+  if (!parseProgress.value.total) return 0
+  return Math.round((parseProgress.value.completed / parseProgress.value.total) * 100)
+})
 
 async function onFiles(e) {
-  const files = e.target.files
+  const files = Array.from(e.target.files)
   if (!files.length) return
+  uploadingFiles.value = files.map(f => f.name)
   uploading.value = true
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
@@ -84,11 +105,13 @@ async function onFiles(e) {
   alert(res.msg)
   if (res.code === 200) emit('refresh')
   uploading.value = false
+  uploadingFiles.value = []
   e.target.value = ''
 }
 async function onDrop(e) {
-  const files = e.dataTransfer.files
+  const files = Array.from(e.dataTransfer.files)
   if (!files.length) return
+  uploadingFiles.value = files.map(f => f.name)
   uploading.value = true
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
@@ -96,6 +119,7 @@ async function onDrop(e) {
   alert(res.msg)
   if (res.code === 200) emit('refresh')
   uploading.value = false
+  uploadingFiles.value = []
 }
 async function sendText() {
   if (!ruleText.value.trim()) return
@@ -105,9 +129,41 @@ async function sendText() {
   ruleText.value = ''
 }
 async function doParse(sourceId) {
-  const res = await api.parseRuleSource(sourceId)
-  alert(res.msg)
-  if (res.code === 200) emit('refresh')
+  parsingId.value = sourceId
+  parseProgress.value = { completed: 0, total: 1 }
+  try {
+    // 启动解析
+    const startRes = await api.parseRuleSource(sourceId)
+    if (startRes.code !== 200) { alert(startRes.msg); return }
+
+    const taskId = startRes.data.taskId
+    // 轮询进度
+    const timer = setInterval(async () => {
+      try {
+        const r = await api.getParseProgress(taskId)
+        if (r.code !== 200) return
+        const t = r.data
+        if (t.status === 'completed') {
+          clearInterval(timer)
+          parseProgress.value = { completed: t.result?.total || 1, total: t.result?.total || 1 }
+          emit('refresh')
+          parsingId.value = null
+        } else if (t.status === 'failed') {
+          clearInterval(timer)
+          alert('解析失败: ' + (t.error_msg || '未知错误'))
+          parsingId.value = null
+        } else if (t.result) {
+          try {
+            const p = typeof t.result === 'string' ? JSON.parse(t.result) : t.result
+            if (p.phase === 'parsing') parseProgress.value = p
+          } catch (e) { /* ignore */ }
+        }
+      } catch (e) { /* 轮询失败继续 */ }
+    }, 1500)
+  } catch (e) {
+    alert('启动解析失败: ' + (e.response?.data?.msg || e.message))
+    parsingId.value = null
+  }
 }
 
 function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
@@ -131,6 +187,11 @@ function levelLabel(l) { return { national:'国家级', provincial:'省级', sch
 .upload-zone:hover { border-color: var(--color-primary); }
 .upload-icon { font-size: 32px; }
 .hint { font-size: 12px; color: #999; }
+
+.progress-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.progress-bar { flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--color-primary); border-radius: 4px; transition: width 0.3s; }
+.progress-text { font-size: 13px; color: var(--color-primary); white-space: nowrap; }
 .upload-right { display: flex; flex-direction: column; gap: 8px; }
 .upload-right textarea {
   flex: 1; border: 1px solid var(--color-border); border-radius: var(--radius-sm);

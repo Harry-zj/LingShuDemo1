@@ -14,18 +14,33 @@ exports.createMaterial = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 获取材料列表（含附件和识别结果）
+// 获取材料列表（含附件和识别结果，一次查询避免 N+1）
 exports.getMaterials = async (req, res) => {
   try {
     const [materials] = await pool.execute(
       "SELECT * FROM materials WHERE user_id = ? ORDER BY created_at DESC",
       [req.user.id]
     );
+    if (!materials.length) return res.json(Res.success([]));
+
+    const ids = materials.map((m) => m.id);
+    const placeholders = ids.map(() => "?").join(",");
+
+    // 批量查附件和识别结果
+    const [atts] = await pool.execute(
+      `SELECT * FROM attachments WHERE material_id IN (${placeholders})`, ids
+    );
+    const [recs] = await pool.execute(
+      `SELECT * FROM material_recognitions WHERE material_id IN (${placeholders})`, ids
+    );
+
+    // 按 material_id 分组
+    const attMap = {}; for (const a of atts) { (attMap[a.material_id] ||= []).push(a); }
+    const recMap = {}; for (const r of recs) { recMap[r.material_id] = r; }
+
     for (const m of materials) {
-      const [atts] = await pool.execute("SELECT * FROM attachments WHERE material_id = ?", [m.id]);
-      m.attachments = atts;
-      const [recs] = await pool.execute("SELECT * FROM material_recognitions WHERE material_id = ?", [m.id]);
-      m.recognition = recs.length > 0 ? recs[0] : null;
+      m.attachments = attMap[m.id] || [];
+      m.recognition = recMap[m.id] || null;
     }
     res.json(Res.success(materials));
   } catch (e) { res.json(Res.error(e.message)); }

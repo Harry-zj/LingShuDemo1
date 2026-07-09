@@ -81,7 +81,7 @@
         @remove-source="removeRuleSource"
         @toggle-item="toggleRuleItem"
         @remove-item="removeRuleItem"
-        @refresh="loadAll"
+        @refresh="refreshRules"
       />
 
       <SmartFillMaterial
@@ -153,25 +153,33 @@ const confirmedRecCount = computed(() =>
 )
 const totalScore = computed(() => evaluation.value?.total_score ?? null)
 
-// ========== 初始化加载 ==========
-async function loadAll() {
-  const [srcRes, itemRes, matRes, evalRes, tplRes] = await Promise.all([
-    api.getRuleSources(), api.getRuleItems(), api.getMaterials(),
-    api.getEvaluation(), api.getTemplates(),
-  ])
-  if (srcRes.code === 200) ruleSources.value = srcRes.data || []
-  if (itemRes.code === 200) ruleItems.value = itemRes.data || []
-  if (matRes.code === 200) materials.value = matRes.data || []
-  if (evalRes.code === 200 && evalRes.data) evaluation.value = evalRes.data
-  if (tplRes.code === 200) templates.value = tplRes.data || []
+// ========== 按需刷新（只拉变了的） ==========
+async function refreshRules() {
+  const [s, i] = await Promise.all([api.getRuleSources(), api.getRuleItems()]);
+  if (s.code === 200) ruleSources.value = s.data || [];
+  if (i.code === 200) ruleItems.value = i.data || [];
 }
-onMounted(loadAll)
+async function refreshMaterials() {
+  const r = await api.getMaterials();
+  if (r.code === 200) materials.value = r.data || [];
+}
+async function refreshEval() {
+  const r = await api.getEvaluation();
+  if (r.code === 200 && r.data) evaluation.value = r.data;
+}
+async function refreshTemplates() {
+  const r = await api.getTemplates();
+  if (r.code === 200) templates.value = r.data || [];
+}
+onMounted(async () => {
+  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]);
+});
 
 // ========== 规则 ==========
 async function removeRuleSource(id) {
   if (!confirm('删除规则来源将同时删除其所有规则项，确定？')) return
   const res = await api.deleteRuleSource(id)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshRules()
   else alert(res.msg)
 }
 async function toggleRuleItem(item) {
@@ -180,7 +188,7 @@ async function toggleRuleItem(item) {
 }
 async function removeRuleItem(id) {
   const res = await api.deleteRuleItem(id)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshRules()
 }
 
 // ========== 材料 ==========
@@ -193,32 +201,32 @@ async function uploadFiles(matId, files) {
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
   const res = await api.uploadAttachments(matId, fd)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshMaterials()
   else alert(res.msg)
 }
 async function analyzeMaterial(matId) {
   const res = await api.analyzeMaterial(matId)
-  if (res.code === 200) { alert(res.msg); loadAll() }
+  if (res.code === 200) { alert(res.msg); refreshMaterials() }
   else alert(res.msg)
 }
 async function confirmRecognition(recId) {
   const res = await api.confirmRecognition(recId)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshMaterials()
 }
 async function dismissRecognition(recId) {
   const res = await api.dismissRecognition(recId)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshMaterials()
 }
 async function removeMaterial(id) {
   if (!confirm('确定删除该材料及其附件？')) return
   const res = await api.deleteMaterial(id)
-  if (res.code === 200) loadAll()
+  if (res.code === 200) refreshMaterials()
 }
 
 // ========== 评分 ==========
 async function calculateScore() {
   const res = await api.calculateScore()
-  if (res.code === 200) { alert(res.msg); loadAll() }
+  if (res.code === 200) { alert(res.msg); refreshEval() }
   else alert(res.msg)
 }
 
@@ -226,12 +234,12 @@ async function calculateScore() {
 async function uploadTemplate(file) {
   const fd = new FormData(); fd.append('file', file)
   const res = await api.uploadTemplate(fd)
-  if (res.code === 200) { alert(res.msg); loadAll() }
+  if (res.code === 200) { alert(res.msg); refreshTemplates() }
   else alert(res.msg)
 }
 async function doFill(tplId) {
   const res = await api.doFill(tplId)
-  if (res.code === 200) { alert(res.msg); loadAll() }
+  if (res.code === 200) alert(res.msg)
   else alert(res.msg)
 }
 function downloadFill() { alert('下载功能待实现') }

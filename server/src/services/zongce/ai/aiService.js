@@ -28,7 +28,7 @@ async function chat(messages, options = {}) {
           Authorization: `Bearer ${DEEPSEEK.apiKey}`,
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(60000),
+        signal: AbortSignal.timeout(120000),
       });
 
       if (!res.ok) {

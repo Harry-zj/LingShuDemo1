@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const auth = require("../middleware/auth");
+const auth = require("../middleware/devAuth");  // 开发模式，正式上线改回 ../middleware/auth
 const upload = require("../middleware/upload");
 
 const ruleCtrl = require("../controllers/zongce/ruleController");
@@ -15,6 +15,7 @@ router.get("/rules/sources",   auth, ruleCtrl.getRuleSources);
 router.get("/rules/items",     auth, ruleCtrl.getRuleItems);
 router.put("/rules/items/:id/toggle", auth, ruleCtrl.toggleRuleItem);
 router.post("/rules/sources/:id/parse", auth, ruleCtrl.parseRuleSource);
+router.get("/rules/tasks/:taskId", auth, ruleCtrl.getParseProgress);
 router.delete("/rules/sources/:id",   auth, ruleCtrl.deleteRuleSource);
 router.delete("/rules/items/:id",     auth, ruleCtrl.deleteRuleItem);
 

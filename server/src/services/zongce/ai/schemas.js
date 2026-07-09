@@ -14,6 +14,37 @@ const VALID_SCOPES = ["dimension", "global"];
 //  通用工具
 // ============================================================
 
+/** AI 经常返回字符串 "undefined"/"null" 或缺失字段，统一清洗 */
+function sanitize(item) {
+  const cleaned = {
+    category: null,
+    description: "",
+    level: null,
+    score: null,
+    rule_type: "scoring",
+    limit_value: null,
+    scope: null,
+    strategy: null,
+    max_times: 1,
+    conflict_group: null,
+    proof_required: [],
+    ...item,  // AI返回值覆盖默认值
+  };
+  // 清洗"undefined"/"null"字符串和NaN
+  for (const key of Object.keys(cleaned)) {
+    const v = cleaned[key];
+    if (v === "undefined" || v === "null" || v === "" || v === undefined || (typeof v === "number" && isNaN(v))) {
+      cleaned[key] = null;
+    }
+  }
+  // 不可为null的字段
+  if (!cleaned.max_times) cleaned.max_times = 1;
+  if (!cleaned.description) cleaned.description = "";
+  if (!cleaned.rule_type || !["scoring","limit","conflict"].includes(cleaned.rule_type)) cleaned.rule_type = "scoring";
+  if (!Array.isArray(cleaned.proof_required)) cleaned.proof_required = [];
+  return cleaned;
+}
+
 function checkExtraFields(obj, allowed, label) {
   const extra = Object.keys(obj).filter((k) => !allowed.has(k));
   return extra.length > 0 ? [`${label} 包含非法字段: ${extra.join(", ")}`] : [];
@@ -48,6 +79,9 @@ function validateRuleParse(data) {
   if (topExtra.length) return { ok: false, error: topExtra[0] };
 
   if (!Array.isArray(data.rule_items)) return { ok: false, error: "缺少 rule_items 数组" };
+
+  // ★ 清洗 AI 的字符串 "undefined"/"null"
+  data.rule_items = data.rule_items.map(sanitize);
 
   const errors = [];
   for (let i = 0; i < data.rule_items.length; i++) {

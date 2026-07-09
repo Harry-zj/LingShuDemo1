@@ -9,6 +9,7 @@ const pool = mysql.createPool({
   user: process.env.DB_USER || "root",
   password: process.env.DB_PASSWORD || "135246",
   database: "lingshu_zongce",
+  charset: "utf8mb4",
   multipleStatements: true,
   waitForConnections: true,
   connectionLimit: 10,
@@ -22,6 +23,7 @@ async function initDatabase() {
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
     password: process.env.DB_PASSWORD || "135246",
+    charset: "utf8mb4",
     multipleStatements: true,
   });
   const tmpConn = await tmpPool.getConnection();
@@ -53,6 +55,16 @@ async function initDatabase() {
         if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
       }
     }
+
+    // 开发环境：确保 dev 用户存在
+    try {
+      const bcrypt = require("bcryptjs");
+      const pwd = await bcrypt.hash("123456", 10);
+      await conn.execute(
+        "INSERT IGNORE INTO users (id, username, password, role, real_name) VALUES (1, 'dev', ?, 'student', '开发测试')",
+        [pwd]
+      );
+    } catch (e) { /* 忽略 */ }
 
     console.log("[DB] lingshu_zongce 初始化完成");
   } catch (err) {
