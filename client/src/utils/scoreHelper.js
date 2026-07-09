@@ -1,164 +1,109 @@
 /**
  * 五维评分转换工具
- * ------------------------------------------------
- * 用途：将各种原始数据（GPA、活动记录、体测成绩等）统一转换成五维格式：
- *   { zhiyu: 0-100, deyu: 0-100, tiyu: 0-100, meiyu: 0-100, laoyu: 0-100 }
- *
- * 使用方式：
- *   import { rawToDimensions } from "@/utils/scoreHelper"
- *   const dims = rawToDimensions(rawData)
- *
- * 扩展方式：
- *   当你知道每个维度的原始数据字段后，修改下面五个 calcXxx 函数即可。
- *   每个函数入参是原始数据对象，返回值是 0-100 的数值。
+ * 将综测原始数据（F类/A类/B类分数）映射为"德智体美劳"五维
  */
-
-// ============================================================
-// 维度计算器（每个维度一个函数，组员各自实现具体规则）
-// ============================================================
-
-/**
- * 智育（学业成绩）
- * @param {Object} raw - 原始数据，字段待定
- * @returns {number} 0-100
- */
-function calcZhiyu(raw) {
-  // TODO: 替换为真实计算逻辑
-  // 示例：GPA * 20 + 竞赛加分
-  if (raw.zhiyu != null) return clamp(raw.zhiyu, 0, 100)
-  if (raw.gpa != null) return clamp(raw.gpa * 20, 0, 100)
-  return 0
-}
-
-/**
- * 德育（思想品德）
- * @param {Object} raw - 原始数据，字段待定
- * @returns {number} 0-100
- */
-function calcDeyu(raw) {
-  if (raw.deyu != null) return clamp(raw.deyu, 0, 100)
-  // TODO: 示例：志愿时长(h) * 2 + 思政课成绩 * 0.4
-  return 0
-}
-
-/**
- * 体育（体育锻炼）
- * @param {Object} raw - 原始数据，字段待定
- * @returns {number} 0-100
- */
-function calcTiyu(raw) {
-  if (raw.tiyu != null) return clamp(raw.tiyu, 0, 100)
-  // TODO: 示例：体测成绩 * 0.6 + 体育课成绩 * 0.4
-  return 0
-}
-
-/**
- * 美育（审美与艺术）
- * @param {Object} raw - 原始数据，字段待定
- * @returns {number} 0-100
- */
-function calcMeiyu(raw) {
-  if (raw.meiyu != null) return clamp(raw.meiyu, 0, 100)
-  // TODO: 替换为真实计算逻辑
-  return 0
-}
-
-/**
- * 劳育（劳动实践）
- * @param {Object} raw - 原始数据，字段待定
- * @returns {number} 0-100
- */
-function calcLaoyu(raw) {
-  if (raw.laoyu != null) return clamp(raw.laoyu, 0, 100)
-  // TODO: 替换为真实计算逻辑
-  return 0
-}
-
-// ============================================================
-// 工具函数
-// ============================================================
-
-/** 将数值限制在 [min, max] 范围 */
-function clamp(val, min, max) {
-  const n = Number(val)
-  if (isNaN(n)) return 0
-  return Math.max(min, Math.min(max, n))
-}
-
-/** 归一化：将原始分数映射到 0-100 */
-function normalize(value, maxValue) {
-  if (!maxValue || maxValue === 0) return 0
-  return clamp((Number(value) || 0) / maxValue * 100, 0, 100)
-}
-
-// ============================================================
-// 主入口
-// ============================================================
-
-/** 计算器注册表 */
-const calculators = {
-  zhiyu: calcZhiyu,
-  deyu: calcDeyu,
-  tiyu: calcTiyu,
-  meiyu: calcMeiyu,
-  laoyu: calcLaoyu,
-}
-
-/**
- * 将原始数据转换为五维评分
- * @param {Object} raw - 原始数据对象（字段格式不限）
- * @returns {{ zhiyu: number, deyu: number, tiyu: number, meiyu: number, laoyu: number }}
- */
-export function rawToDimensions(raw) {
-  if (!raw) return { zhiyu: 0, deyu: 0, tiyu: 0, meiyu: 0, laoyu: 0 }
-  return {
-    zhiyu: calculators.zhiyu(raw),
-    deyu: calculators.deyu(raw),
-    tiyu: calculators.tiyu(raw),
-    meiyu: calculators.meiyu(raw),
-    laoyu: calculators.laoyu(raw),
-  }
-}
-
-/**
- * 计算五维总分（可加权）
- * @param {Object} dims - { zhiyu, deyu, tiyu, meiyu, laoyu }
- * @param {Object} weights - 各维度权重，默认均等
- * @returns {number}
- */
-export function calcTotalScore(dims, weights = {}) {
-  const keys = ["zhiyu", "deyu", "tiyu", "meiyu", "laoyu"]
-  const w = keys.map(k => weights[k] ?? 0.2)
-  return parseFloat(keys.reduce((sum, k, i) => sum + (dims[k] || 0) * w[i], 0).toFixed(2))
-}
-
-/**
- * 替换某个维度的计算器（运行时动态注入）
- * @param {string} key - zhiyu | deyu | tiyu | meiyu | laoyu
- * @param {Function} fn - (raw) => number
- */
-export function registerCalculator(key, fn) {
-  if (calculators[key]) calculators[key] = fn
-}
 
 // ============================================================
 // 常量
 // ============================================================
 
-export const DIMENSION_NAMES = {
-  zhiyu: "智育",
-  deyu: "德育",
-  tiyu: "体育",
-  meiyu: "美育",
-  laoyu: "劳育",
+export const DIMENSION_KEYS = ["de", "zhi", "ti", "mei", "lao"]
+
+export const DIMENSION_CONFIG = [
+  { key: "de",  name: "德", color: "#D97706", desc: "思想政治 · 道德品质 · 纪律观念" },
+  { key: "zhi", name: "智", color: "#4F46E5", desc: "课程成绩 · 学术竞赛 · 科技学术" },
+  { key: "ti",  name: "体", color: "#059669", desc: "身心健康 · 文体竞赛" },
+  { key: "mei", name: "美", color: "#7C3AED", desc: "宣传报道" },
+  { key: "lao", name: "劳", color: "#EA580C", desc: "社会实践 · 劳动教育 · 社会工作" },
+]
+
+/** 等级划分 */
+export function getGradeLevel(score) {
+  if (score >= 90) return { label: "优秀", color: "#059669", bg: "#ECFDF5" }
+  if (score >= 80) return { label: "良好", color: "#4F46E5", bg: "#EEF2FF" }
+  if (score >= 70) return { label: "中等", color: "#D97706", bg: "#FFFBEB" }
+  if (score >= 60) return { label: "合格", color: "#DC2626", bg: "#FEF2F2" }
+  return { label: "待提升", color: "#9CA3AF", bg: "#F3F4F6" }
 }
 
-export const DIMENSION_COLORS = {
-  zhiyu: "#1A73E8",
-  deyu: "#EA8600",
-  tiyu: "#34A853",
-  meiyu: "#9C27B0",
-  laoyu: "#FF6D00",
+// ============================================================
+// 五维计算
+// ============================================================
+
+/**
+ * 将原始综测数据映射为五维（0-100）
+ * @param {{ aScores: {}, bScores: {}, scores: {} }} data
+ * @returns {{ de: number, zhi: number, ti: number, mei: number, lao: number }}
+ */
+export function rawToDimensions(data) {
+  if (!data) return Object.fromEntries(DIMENSION_KEYS.map(k => [k, 0]))
+  const { aScores = {}, bScores = {}, scores = {} } = data
+  return {
+    de:  calcDe(aScores),
+    zhi: calcZhi(scores, bScores),
+    ti:  calcTi(aScores, bScores),
+    mei: calcMei(bScores),
+    lao: calcLao(bScores),
+  }
 }
 
-export { normalize, clamp }
+/**
+ * 德：A1×0.4 + A2×0.3 + A4×0.3 → 满分20 → 归一化×100
+ */
+function calcDe(a) {
+  const raw = (a.A1 || 0) * 0.4 + (a.A2 || 0) * 0.3 + (a.A4 || 0) * 0.3
+  return clamp(raw / 20 * 100, 0, 100)
+}
+
+/**
+ * 智：F2×0.5 + B2×0.25 + B3×0.25 → 满分65 → 归一化×100
+ */
+function calcZhi(s, b) {
+  const raw = (s.F2 || 0) * 0.5 + (b.B2 || 0) * 0.25 + (b.B3 || 0) * 0.25
+  return clamp(raw / 65 * 100, 0, 100)
+}
+
+/**
+ * 体：A5×0.4 + B7×0.6 → 满分26 → 归一化×100
+ */
+function calcTi(a, b) {
+  const raw = (a.A5 || 0) * 0.4 + (b.B7 || 0) * 0.6
+  return clamp(raw / 26 * 100, 0, 100)
+}
+
+/**
+ * 美：B4 → 满分30 → 归一化×100
+ */
+function calcMei(b) {
+  return clamp((b.B4 || 0) / 30 * 100, 0, 100)
+}
+
+/**
+ * 劳：B6×0.5 + B8×0.3 + B5×0.2 → 满分30 → 归一化×100
+ */
+function calcLao(b) {
+  const raw = (b.B6 || 0) * 0.5 + (b.B8 || 0) * 0.3 + (b.B5 || 0) * 0.2
+  return clamp(raw / 30 * 100, 0, 100)
+}
+
+// ============================================================
+// 总分（F 体系）
+// ============================================================
+
+/**
+ * 综测总分 F = F1×10% + F2×65% + F3×25%
+ */
+export function calcTotalScore(scores = {}) {
+  const { F1 = 0, F2 = 0, F3 = 0 } = scores
+  return parseFloat((F1 * 0.1 + F2 * 0.65 + F3 * 0.25).toFixed(2))
+}
+
+// ============================================================
+// 工具
+// ============================================================
+
+function clamp(val, min = 0, max = 100) {
+  const n = Number(val)
+  if (isNaN(n)) return 0
+  return Math.max(min, Math.min(max, n.toFixed(1)))
+}

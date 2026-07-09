@@ -4,26 +4,22 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from "vue"
 import * as echarts from "echarts"
+import { DIMENSION_CONFIG } from "../utils/scoreHelper"
 
 const props = defineProps({
-  dimensions: { type: Object, default: () => ({}) },
-  size: { type: Number, default: 320 }
+  data: { type: Object, default: () => ({}) },          // { de: 85, zhi: 90, ... }
+  dimensions: { type: Array, default: () => DIMENSION_CONFIG }, // [{ key, name, color }]
+  maxScore: { type: Number, default: 100 },
+  size: { type: Number, default: 320 },
 })
 
 const chartRef = ref(null)
 let chart = null
 
-const dimConfig = [
-  { key: "zhiyu", name: "智育", color: "#4F46E5" },
-  { key: "deyu", name: "德育", color: "#D97706" },
-  { key: "tiyu", name: "体育", color: "#059669" },
-  { key: "meiyu", name: "美育", color: "#7C3AED" },
-  { key: "laoyu", name: "劳育", color: "#EA580C" },
-]
-
-function buildOption(dimensions) {
-  const indicator = dimConfig.map(d => ({ name: d.name, max: 100 }))
-  const values = dimConfig.map(d => dimensions?.[d.key] ?? 0)
+function buildOption() {
+  const indicator = props.dimensions.map(d => ({ name: d.name, max: props.maxScore }))
+  const values = props.dimensions.map(d => props.data?.[d.key] ?? 0)
+  const primaryColor = props.dimensions[1]?.color || "#4F46E5"
   return {
     radar: {
       center: ["50%", "50%"],
@@ -35,9 +31,14 @@ function buildOption(dimensions) {
     },
     series: [{
       type: "radar",
-      data: [{ value: values, name: "我的评分", areaStyle: { color: "rgba(79,70,229,0.12)" }, lineStyle: { color: "#4F46E5", width: 2 }, itemStyle: { color: "#4F46E5" } }],
+      data: [{
+        value: values, name: "得分",
+        areaStyle: { color: "rgba(79,70,229,0.12)" },
+        lineStyle: { color: primaryColor, width: 2 },
+        itemStyle: { color: primaryColor },
+      }],
       symbol: "circle",
-      symbolSize: 6,
+      symbolSize: 5,
     }]
   }
 }
@@ -45,13 +46,15 @@ function buildOption(dimensions) {
 function initChart() {
   if (!chartRef.value) return
   chart = echarts.init(chartRef.value)
-  chart.setOption(buildOption(props.dimensions))
+  chart.setOption(buildOption())
   window.addEventListener("resize", handleResize)
 }
 
 function handleResize() { chart?.resize() }
 
-watch(() => props.dimensions, (val) => { if (chart) chart.setOption(buildOption(val)) }, { deep: true })
+watch(() => [props.data, props.dimensions], () => {
+  if (chart) chart.setOption(buildOption())
+}, { deep: true })
 
 onMounted(initChart)
 onUnmounted(() => { window.removeEventListener("resize", handleResize); chart?.dispose() })
