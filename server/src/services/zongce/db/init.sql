@@ -59,9 +59,13 @@ CREATE TABLE IF NOT EXISTS rule_items (
   score DECIMAL(5,2) DEFAULT NULL,
   -- 加分/扣分值（limit和conflict类为NULL）
   rule_type ENUM('scoring','limit','conflict') NOT NULL DEFAULT 'scoring',
-  -- scoring:  加分项   如 "国家级荣誉 +5分"
-  -- limit:    上限约束  如 "德育总分不超过20"、"每大类上限30"
-  -- conflict: 冲突规则  如 "同类荣誉只取最高分"
+  -- scoring: 加分项  limit: 上限约束  conflict: 冲突规则
+  limit_value DECIMAL(5,2) DEFAULT NULL,
+  -- limit类型：上限值（如20、30）
+  scope VARCHAR(50) DEFAULT NULL,
+  -- 作用范围：dimension（单维度）| global（全局）
+  strategy VARCHAR(50) DEFAULT NULL,
+  -- 处理策略：take_highest（择高）| dedup（去重）| cap（封顶）
   max_times INT DEFAULT 1,
   conflict_group VARCHAR(100) DEFAULT NULL,
   -- 互斥组名，同组内只取最高分。如 "honor_title" 组包含国家/省/校级荣誉称号

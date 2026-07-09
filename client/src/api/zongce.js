@@ -18,6 +18,9 @@ export const getRuleItems = () =>
 export const toggleRuleItem = (id) =>
   request.put(`/zongce/rules/items/${id}/toggle`);
 
+export const parseRuleSource = (id) =>
+  request.post(`/zongce/rules/sources/${id}/parse`);
+
 export const deleteRuleSource = (id) =>
   request.delete(`/zongce/rules/sources/${id}`);
 

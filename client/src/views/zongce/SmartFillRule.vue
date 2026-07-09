@@ -22,6 +22,7 @@
       <div v-for="src in ruleSources" :key="src.id" class="source-row">
         <span>{{ src.source_type === 'file' ? '📄' : '💬' }} {{ src.file_name || truncate(src.original_text, 40) }}</span>
         <span class="badge" :class="src.status">{{ src.status === 'parsed' ? '已解析' : '待解析' }}</span>
+        <button v-if="src.status !== 'parsed'" class="btn-text primary" @click="doParse(src.id)">🔍 解析</button>
         <button class="btn-text danger" @click="$emit('remove-source', src.id)">删除</button>
       </div>
     </div>
@@ -103,6 +104,11 @@ async function sendText() {
   if (res.code === 200) emit('refresh')
   ruleText.value = ''
 }
+async function doParse(sourceId) {
+  const res = await api.parseRuleSource(sourceId)
+  alert(res.msg)
+  if (res.code === 200) emit('refresh')
+}
 
 function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
 const catMap = { moral:'德育', intellectual:'智育', physical:'体育', aesthetic:'美育', labor:'劳育' }
@@ -153,6 +159,7 @@ function levelLabel(l) { return { national:'国家级', provincial:'省级', sch
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: var(--color-primary); color: #fff; }
 .btn-text { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; }
+.btn-text.primary { color: var(--color-primary); border-color: var(--color-primary); }
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .badge { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-tag); background: #FEF7E0; color: #E37400; }
 .badge.parsed { background: #E6F4EA; color: #34A853; }
