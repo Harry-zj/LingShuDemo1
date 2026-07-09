@@ -14,11 +14,11 @@ const chartRef = ref(null)
 let chart = null
 
 const dimConfig = [
-  { key: "zhiyu", name: "智育", color: "#1A73E8" },
-  { key: "deyu", name: "德育", color: "#EA8600" },
-  { key: "tiyu", name: "体育", color: "#34A853" },
-  { key: "meiyu", name: "美育", color: "#9C27B0" },
-  { key: "laoyu", name: "劳育", color: "#FF6D00" },
+  { key: "zhiyu", name: "智育", color: "#4F46E5" },
+  { key: "deyu", name: "德育", color: "#D97706" },
+  { key: "tiyu", name: "体育", color: "#059669" },
+  { key: "meiyu", name: "美育", color: "#7C3AED" },
+  { key: "laoyu", name: "劳育", color: "#EA580C" },
 ]
 
 function buildOption(dimensions) {
@@ -29,13 +29,13 @@ function buildOption(dimensions) {
       center: ["50%", "50%"],
       radius: "65%",
       indicator,
-      axisName: { fontSize: 13, color: "#5F6368" },
-      splitArea: { areaStyle: { color: ["#F8F9FA", "#FFFFFF"] } },
-      splitLine: { lineStyle: { color: "#DADCE0" } },
+      axisName: { fontSize: 13, color: "rgba(8,6,20,0.56)" },
+      splitArea: { areaStyle: { color: ["rgba(99,102,241,0.02)", "rgba(255,255,255,0)"] } },
+      splitLine: { lineStyle: { color: "rgba(15,10,30,0.06)" } },
     },
     series: [{
       type: "radar",
-      data: [{ value: values, name: "我的评分", areaStyle: { color: "rgba(26,115,232,0.15)" }, lineStyle: { color: "#1A73E8", width: 2 }, itemStyle: { color: "#1A73E8" } }],
+      data: [{ value: values, name: "我的评分", areaStyle: { color: "rgba(79,70,229,0.12)" }, lineStyle: { color: "#4F46E5", width: 2 }, itemStyle: { color: "#4F46E5" } }],
       symbol: "circle",
       symbolSize: 6,
     }]
@@ -51,15 +51,10 @@ function initChart() {
 
 function handleResize() { chart?.resize() }
 
-watch(() => props.dimensions, (val) => {
-  if (chart) chart.setOption(buildOption(val))
-}, { deep: true })
+watch(() => props.dimensions, (val) => { if (chart) chart.setOption(buildOption(val)) }, { deep: true })
 
 onMounted(initChart)
-onUnmounted(() => {
-  window.removeEventListener("resize", handleResize)
-  chart?.dispose()
-})
+onUnmounted(() => { window.removeEventListener("resize", handleResize); chart?.dispose() })
 </script>
 <style scoped>
 .radar-chart-container { width: 100%; height: 100%; min-height: 280px; }

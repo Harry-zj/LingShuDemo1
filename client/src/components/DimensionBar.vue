@@ -26,11 +26,11 @@ const fillStyle = computed(() => ({
 }))
 </script>
 <style scoped>
-.dim-item { margin-bottom: 16px; }
+.dim-item { opacity: 0; }  /* 由父级 animation 控制显示 */
 .dim-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .dim-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .dim-label { font-size: 14px; color: var(--color-text); flex: 1; }
-.dim-score { font-size: 14px; font-weight: 600; color: var(--color-text-secondary); }
-.dim-bar-track { height: 8px; background: var(--color-bg); border-radius: 4px; overflow: hidden; }
-.dim-bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s ease; }
+.dim-score { font-size: 14px; font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); }
+.dim-bar-track { height: 8px; background: var(--color-surface-variant); border-radius: 4px; overflow: hidden; }
+.dim-bar-fill { height: 100%; border-radius: 4px; transition: width 0.8s var(--easing-spring); }
 </style>

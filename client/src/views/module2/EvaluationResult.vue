@@ -1,25 +1,30 @@
 <template>
   <div class="evaluation-page">
     <div class="page-header">
-      <h2>评定结果分析</h2>
-      <select v-model="currentBatch" @change="loadData" class="batch-select">
+      <div>
+        <h2>评定结果分析</h2>
+        <p class="page-desc">五维综合素质评分详情</p>
+      </div>
+      <select v-model="currentBatch" @change="loadData" class="batch-select glass-card">
         <option value="">选择批次</option>
         <option v-for="b in batches" :key="b.id" :value="b.id">{{ b.title }}</option>
       </select>
     </div>
 
     <!-- 加载态 -->
-    <div v-if="loading" class="skeleton">
-      <div class="sk-score"></div>
+    <div v-if="loading" class="loading-state">
+      <div class="skeleton skeleton-card" style="height:180px"></div>
       <div class="sk-grid">
-        <div class="sk-radar"></div>
-        <div class="sk-rank"></div>
+        <div class="skeleton skeleton-card" style="height:340px"></div>
+        <div class="skeleton skeleton-card" style="height:340px"></div>
       </div>
     </div>
 
     <!-- 空状态 -->
-    <div v-else-if="!evalData" class="empty-state">
-      <div class="empty-icon">📋</div>
+    <div v-else-if="!evalData" class="empty-state glass-card">
+      <div class="empty-icon">
+        <VIcon icon="mdi:chart-line-variant" />
+      </div>
       <p>暂无评定数据</p>
       <span>请等待老师完成评定后查看</span>
     </div>
@@ -27,13 +32,19 @@
     <!-- 正常数据 -->
     <template v-else>
       <div class="overview-grid">
-        <div class="card radar-card">
-          <h3>五维能力雷达</h3>
+        <!-- 雷达图卡片 -->
+        <div class="card glass-card radar-card" style="animation: fadeInUp 0.5s var(--easing-spring) both;">
+          <div class="card-accent" style="background: var(--color-primary)"></div>
+          <h3><VIcon icon="mdi:chart-radar" /> 五维能力雷达</h3>
           <RadarChart :dimensions="evalData.dimension_scores" :size="320" />
         </div>
-        <div class="card rank-card">
-          <h3>综测成绩</h3>
-          <div class="total-score">{{ evalData.total_score ?? "--" }}</div>
+        <!-- 成绩卡片 -->
+        <div class="card glass-card rank-card" style="animation: fadeInUp 0.5s var(--easing-spring) both; animation-delay: 0.1s;">
+          <div class="card-accent" style="background: var(--color-primary-gradient-bright)"></div>
+          <h3><VIcon icon="mdi:trophy-outline" /> 综测成绩</h3>
+          <div class="total-score" :style="{ background: 'var(--color-primary-gradient-bright)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }">
+            {{ evalData.total_score ?? "--" }}
+          </div>
           <div class="score-unit">分</div>
           <div class="rank-info" v-if="evalData.class_rank">
             班级排名 <strong>第 {{ evalData.class_rank }} 名</strong> / 共 {{ evalData.class_size }} 人
@@ -45,11 +56,14 @@
         </div>
       </div>
 
-      <div class="card dim-card">
-        <h3>维度评分明细</h3>
+      <!-- 维度评分明细 -->
+      <div class="card glass-card dim-card" style="animation: fadeInUp 0.5s var(--easing-spring) both; animation-delay: 0.2s;">
+        <div class="card-accent" style="background: var(--color-meiyu)"></div>
+        <h3><VIcon icon="mdi:layers-triple-outline" /> 维度评分明细</h3>
         <DimensionBar
-          v-for="d in dimensionList" :key="d.key"
+          v-for="(d, i) in dimensionList" :key="d.key"
           :name="d.name" :score="d.score" :color="d.color"
+          :style="{ animation: 'fadeInUp 0.4s var(--easing-spring) both', animationDelay: (0.15 + i * 0.08) + 's' }"
         />
       </div>
     </template>
@@ -63,31 +77,21 @@ import RadarChart from "../../components/RadarChart.vue"
 import DimensionBar from "../../components/DimensionBar.vue"
 
 const dimConfig = [
-  { key: "zhiyu", name: "智育", color: "#1A73E8" },
-  { key: "deyu", name: "德育", color: "#EA8600" },
-  { key: "tiyu", name: "体育", color: "#34A853" },
-  { key: "meiyu", name: "美育", color: "#9C27B0" },
-  { key: "laoyu", name: "劳育", color: "#FF6D00" },
+  { key: "zhiyu", name: "智育", color: "#4F46E5" },
+  { key: "deyu", name: "德育", color: "#D97706" },
+  { key: "tiyu", name: "体育", color: "#059669" },
+  { key: "meiyu", name: "美育", color: "#7C3AED" },
+  { key: "laoyu", name: "劳育", color: "#EA580C" },
 ]
-
 const loading = ref(true)
 const evalData = ref(null)
 const batches = ref([])
 const currentBatch = ref("")
-
-const dimensionList = computed(() =>
-  dimConfig.map(d => ({
-    ...d,
-    score: evalData.value?.dimension_scores?.[d.key] ?? 0
-  }))
-)
-
+const dimensionList = computed(() => dimConfig.map(d => ({ ...d, score: evalData.value?.dimension_scores?.[d.key] ?? 0 })))
 const percentile = computed(() => {
   if (!evalData.value?.class_rank || !evalData.value?.class_size) return 0
-  const { class_rank, class_size } = evalData.value
-  return ((class_size - class_rank) / class_size * 100).toFixed(0)
+  return ((evalData.value.class_size - evalData.value.class_rank) / evalData.value.class_size * 100).toFixed(0)
 })
-
 async function loadData() {
   loading.value = true
   try {
@@ -100,45 +104,40 @@ async function loadData() {
   } catch { evalData.value = null }
   finally { loading.value = false }
 }
-
 onMounted(loadData)
 </script>
 <style scoped>
-.evaluation-page { display: flex; flex-direction: column; gap: 24px; }
-.page-header { display: flex; justify-content: space-between; align-items: center; }
-.page-header h2 { font-size: 24px; }
-.batch-select { padding: 8px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); font-size: 14px; background: var(--color-white); outline: none; }
-.batch-select:focus { border-color: var(--color-primary); }
+.evaluation-page { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.page-header h2 { font-size: var(--font-scale-h2); font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.page-desc { font-size: var(--font-scale-body-sm); color: var(--color-text-secondary); margin-top: 2px; }
+.batch-select { padding: 8px 16px; border: none; border-radius: var(--radius-full); font-size: 14px; background: transparent; outline: none; color: var(--color-text); cursor: pointer; }
+.batch-select:focus { box-shadow: var(--glass-shadow-hover); }
 
-/* 骨架屏 */
-.skeleton { display: flex; flex-direction: column; gap: 24px; }
-.sk-score { height: 160px; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--radius-card); }
+.loading-state { display: flex; flex-direction: column; gap: 24px; }
 .sk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.sk-radar, .sk-rank { height: 340px; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: var(--radius-card); }
-@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 
-/* 空状态 */
-.empty-state { text-align: center; padding: 80px 24px; background: var(--color-white); border-radius: var(--radius-card); border: 1px solid var(--color-border); }
-.empty-icon { font-size: 48px; margin-bottom: 16px; }
+.empty-state { text-align: center; padding: 80px 24px; }
+.empty-icon { font-size: 48px; color: var(--color-primary); margin-bottom: 16px; opacity: 0.5; }
 .empty-state p { font-size: 18px; color: var(--color-text); margin-bottom: 8px; }
 .empty-state span { font-size: 14px; color: var(--color-text-secondary); }
 
-/* 概览区域 */
 .overview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-.card { background: var(--color-white); border-radius: var(--radius-card); border: 1px solid var(--color-border); padding: 24px; }
-.radar-card h3 { font-size: 16px; margin-bottom: 8px; }
-.radar-card { display: flex; flex-direction: column; align-items: center; }
+.card { position: relative; overflow: hidden; }
+.card-accent { position: absolute; top: 0; left: 0; right: 0; height: 3px; opacity: 0.6; border-radius: 3px 3px 0 0; }
+.card h3 { font-size: 16px; font-weight: var(--font-weight-semibold); margin-bottom: 20px; display: flex; align-items: center; gap: 8px; color: var(--color-text); }
 
-.rank-card { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.rank-card h3 { font-size: 16px; margin-bottom: 16px; }
-.total-score { font-size: 64px; font-weight: 700; color: var(--color-primary); line-height: 1; }
+.radar-card { display: flex; flex-direction: column; align-items: center; padding: 24px 24px 16px; }
+.rank-card { text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; }
+.rank-card h3 { margin-bottom: 12px; }
+.total-score { font-size: 72px; font-weight: var(--font-weight-bold); line-height: 1; }
 .score-unit { font-size: 16px; color: var(--color-text-secondary); margin-bottom: 16px; }
 .rank-info { font-size: 15px; color: var(--color-text-secondary); margin-bottom: 4px; }
 .rank-info strong { color: var(--color-text); }
-.percentile { font-size: 14px; color: var(--color-success); margin-top: 4px; }
+.percentile { font-size: 14px; color: var(--color-success); margin-top: 4px; font-weight: var(--font-weight-medium); }
 .percentile strong { font-size: 18px; }
-
-.dim-card h3 { font-size: 16px; margin-bottom: 20px; }
+.dim-card { padding: 24px; }
+.dim-card h3 { margin-bottom: 24px; }
 
 @media (max-width: 768px) { .overview-grid { grid-template-columns: 1fr; } }
 </style>
