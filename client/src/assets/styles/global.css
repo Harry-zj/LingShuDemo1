@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ﻿/* ==========================================
    灵枢 — 全局样式
    Indigo × Purple 呼吸感体系
@@ -111,11 +110,3 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
 }
-=======
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-body { background: var(--color-bg); color: var(--color-text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
-a { color: var(--color-primary); text-decoration: none; }
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
-.fade-enter-from, .fade-leave-to { opacity: 0; }
->>>>>>> origin/main
