@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿<template>
   <div class="auth-layout">
     <!-- 多层动态光斑：模拟星云呼吸感 -->
@@ -90,3 +91,11 @@
   padding: 24px;
 }
 </style>
+=======
+<template>
+  <div class="auth-layout"><slot /></div>
+</template>
+<style scoped>
+.auth-layout { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--color-bg); }
+</style>
+>>>>>>> origin/main

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿<template>
   <div class="stub-page">
     <div class="page-header">
@@ -43,3 +44,6 @@
 .stub-card > p { font-size: 14px; color: var(--color-text-secondary); }
 .skeleton-preview { width: 100%; max-width: 400px; margin-top: 16px; }
 </style>
+=======
+<template><div class="stub"><h2>个人发展画像</h2><p>五维雷达图、班级对比、趋势图等由组员实现</p></div></template>
+>>>>>>> origin/main

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿:root {
   /* ═══════ 灵枢·五维 品牌色系 ═══════ */
   --color-primary: #4F46E5;
@@ -148,3 +149,51 @@
 @keyframes skeleton-loading { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
 @keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes glowPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.3); } }
+=======
+:root {
+  /* Google Material You 色彩体系 */
+  --color-primary: #1A73E8;
+  --color-primary-light: #E8F0FE;
+  --color-bg: #F8F9FA;
+  --color-white: #FFFFFF;
+  --color-border: #DADCE0;
+  --color-error: #D93025;
+  --color-error-bg: #FCE8E6;
+  --color-success: #34A853;
+  --color-success-bg: #E6F4EA;
+  --color-warning: #E37400;
+  --color-warning-bg: #FEF7E0;
+  --color-gray: #9AA0A6;
+  --color-gray-bg: #F1F3F4;
+  --color-text: #202124;
+  --color-text-secondary: #5F6368;
+  /* 维度色 */
+  --color-zhiyu: #1A73E8;
+  --color-deyu: #EA8600;
+  --color-tiyu: #34A853;
+  --color-meiyu: #9C27B0;
+  --color-laoyu: #FF6D00;
+  /* 间距系统 8dp网格 */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  /* 圆角 */
+  --radius-card: 24px;
+  --radius-btn: 100px;
+  --radius-tag: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  /* 字号 */
+  --font-title: 20px;
+  --font-body: 16px;
+  --font-caption: 12px;
+  --font-number: 32px;
+  --font-table: 14px;
+  /* 阴影 */
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-nav: 0 2px 8px rgba(0,0,0,0.1);
+  --shadow-modal: 0 8px 30px rgba(0,0,0,0.2);
+}
+>>>>>>> origin/main
