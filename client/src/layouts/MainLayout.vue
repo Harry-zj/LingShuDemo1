@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="main-layout">
     <!-- 全局底层光斑氛围 -->
     <div class="bg-atmosphere">
@@ -27,9 +27,9 @@
           <VIcon icon="mdi:chart-pie-outline" class="nav-icon" />
           <span class="nav-text">个性评定</span>
         </router-link>
-        <router-link to="/module3/student" class="nav-item" active-class="active">
+        <router-link :to="managementEntry.path" class="nav-item" active-class="active">
           <VIcon icon="mdi:account-group-outline" class="nav-icon" />
-          <span class="nav-text">信息管理</span>
+          <span class="nav-text">{{ managementEntry.label }}</span>
         </router-link>
       </nav>
       <div class="nav-right" v-if="userStore.isLoggedIn">
@@ -65,12 +65,18 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useRouter } from 'vue-router';
 const userStore = useUserStore();
 const router = useRouter();
 const showUserMenu = ref(false);
+const managementEntry = computed(() => {
+  const role = userStore.role;
+  if (role === 'teacher') return { path: '/module3/teacher', label: '教师总控' };
+  if (role === 'class_leader') return { path: '/module3/class-leader', label: '班级初审' };
+  return { path: '/module3/student', label: '我的综测' };
+});
 function goHome() { router.push('/home'); }
 function handleLogout() { showUserMenu.value = false; userStore.logout(); router.push('/login'); }
 </script>

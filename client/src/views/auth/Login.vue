@@ -1,9 +1,9 @@
-﻿<template>
+<template>
   <div class="login-wrapper">
     <div class="login-brand">
       <VIcon icon="mdi:brain" class="brand-icon" />
       <h1 class="brand-title">灵枢</h1>
-      <p class="brand-desc">高校综测智能填写与决策平台</p>
+      <p class="brand-desc">综测管理平台</p>
     </div>
     <div class="login-card glass-card">
       <h2 class="login-title">欢迎回来</h2>
@@ -28,7 +28,7 @@
           <span v-else class="btn-loading"><VIcon icon="mdi:loading" class="spin" />登录中...</span>
         </button>
       </form>
-      <p class="login-tip">测试账号：student / 123456</p>
+      <p class="login-tip">演示账号：student / leader / teacher，密码均为 123456</p>
     </div>
   </div>
 </template>

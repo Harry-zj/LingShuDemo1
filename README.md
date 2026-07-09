@@ -4,14 +4,15 @@
 
 灵枢是一个高校综测全流程管理平台，帮助学生、班干部和老师完成从材料提交、AI智能填表到个性化评定报告生成的全流程。
 
-**技术栈：** Vue 3 + Vite（前端）| Node.js + Express + MySQL（后端）| Google Material You 设计风格
+**技术栈：** Vue 3 + Vite（前端）| Node.js + Express（后端）| 当前阶段使用内存 mock 数据，暂不连接 MySQL | Google Material You 设计风格
 
 ## 快速开始
 
 ### 环境要求
 - Node.js >= 18
-- MySQL 8.0+
 - Git
+
+> 当前需求补全版本默认不连接数据库，后端使用 `server/src/mock/assessmentStore.js` 中的内存演示数据。
 
 ### 安装与启动
 ```bash
@@ -22,13 +23,23 @@ cd LingShuDemo1
 cd server && npm install
 cd ../client && npm install
 
-# 配置数据库（编辑 server/.env）
-# 启动 MySQL，创建数据库 lingshu
-
-# 启动开发服务器
+# 当前版本无需配置数据库，直接启动开发服务器
 cd server && npm run dev   # 后端 → http://localhost:3000
 cd client && npm run dev   # 前端 → http://localhost:5173
 ```
+
+
+### 演示账号
+
+当前免数据库演示模式提供以下账号，密码均为 `123456`：
+
+| 用户名 | 角色 | 说明 |
+|---|---|---|
+| student | 学生 | 提交材料、查看审核状态、修改退回材料 |
+| leader | 班干部 | 查看本班待初审材料、通过/退回/驳回 |
+| teacher | 老师 | 批次管理、老师复核、统计导出、查看日志 |
+
+更多本次需求补全说明见 `需求补全说明.md`。
 
 ## 项目结构
 

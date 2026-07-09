@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="smart-fill">
     <div class="top-bar">
       <div class="top-bar-left">
@@ -43,9 +43,15 @@
         <div class="panel-header">
           <h3><VIcon icon="mdi:table-eye" />填报预览</h3>
         </div>
-        <div class="preview-placeholder">
+        <div class="preview-placeholder" v-if="!aiPreview">
           <VIcon icon="mdi:table-large" class="placeholder-icon" />
           <p>AI 完成匹配后，表格填写结果将在这里实时显示</p>
+        </div>
+        <div class="preview-result" v-else>
+          <p>识别类别：{{ aiPreview.category }}</p>
+          <p>建议分值：{{ aiPreview.suggested_score }}</p>
+          <p>置信度：{{ Math.round(aiPreview.confidence * 100) }}%</p>
+          <ul><li v-for="tip in aiPreview.tips" :key="tip">{{ tip }}</li></ul>
         </div>
       </section>
     </div>
@@ -53,18 +59,50 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getMaterials, uploadFile, aiMatch } from '../../api/module1'
+import { computed, ref, onMounted } from 'vue'
+import { getMaterials, uploadFile, aiMatch, createMaterial } from '../../api/module1'
+import { getBatches } from '../../api/module3'
 import { STATUS_MAP } from '../../utils/constants'
 const materials = ref([])
+const batches = ref([])
 const fileInput = ref(null)
+const aiPreview = ref(null)
+const activeBatch = computed(() => batches.value.find((b) => b.status === 'published'))
 function getLabel(item) { return item.ai_label || item.title || '未标注' }
 function getStatusLabel(s) { return STATUS_MAP[s]?.label || s }
 function getBadgeStyle(s) { const m = STATUS_MAP[s]; return m ? { background: m.bg, color: m.color } : {} }
-async function loadMaterials() { const res = await getMaterials(); if (res.code === 200) materials.value = res.data || [] }
+async function loadMaterials() {
+  const [mRes, bRes] = await Promise.all([getMaterials(), getBatches()])
+  if (mRes.code === 200) materials.value = mRes.data || []
+  if (bRes.code === 200) batches.value = bRes.data || []
+}
 function triggerUpload() { fileInput.value?.click() }
-async function handleUpload(e) { const files = e.target.files; if (!files.length) return; const fd = new FormData(); fd.append('file', files[0]); fd.append('material_id', '1'); await uploadFile(fd); loadMaterials() }
-async function handleAiMatch() { await aiMatch({ material_id: materials.value[0]?.id }); alert('AI智能匹配功能由组员实现') }
+async function handleUpload(e) {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+  if (!activeBatch.value) return alert('暂无已发布综测批次，无法上传材料')
+  for (const file of files) {
+    const created = await createMaterial({
+      batch_id: activeBatch.value.id,
+      title: file.name.replace(/\.[^.]+$/, ''),
+      category: '待识别',
+      score: 0,
+      application_text: '由智能填表页上传生成的材料草稿'
+    })
+    if (created.code !== 200) { alert(created.msg); continue }
+    const fd = new FormData()
+    fd.append('file', file)
+    fd.append('material_id', created.data.id)
+    await uploadFile(fd)
+  }
+  e.target.value = ''
+  loadMaterials()
+}
+async function handleAiMatch() {
+  const res = await aiMatch({ material_id: materials.value[0]?.id })
+  if (res.code === 200) aiPreview.value = res.data
+  alert(res.msg || 'AI匹配完成')
+}
 onMounted(loadMaterials)
 </script>
 
@@ -136,6 +174,9 @@ onMounted(loadMaterials)
 }
 .preview-placeholder:hover { border-color: var(--color-primary-light); background: var(--gradient-primary-subtle); }
 .placeholder-icon { font-size: 48px; color: var(--color-text-tertiary); }
+.preview-result { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-white); color: var(--color-text-secondary); }
+.preview-result p { font-size: 14px; }
+.preview-result ul { padding-left: 18px; font-size: 13px; }
 
 @media (max-width: 768px) { .workspace { grid-template-columns: 1fr; } .top-bar { flex-direction: column; } }
 </style>
