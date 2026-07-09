@@ -4,6 +4,7 @@ const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 const config = require("./config");
 const { initDatabase } = require("./config/database");
+const { initZongceDatabase } = require("./config/zongceDatabase");
 const app = express();
 // 中间件
 app.use(cors());
@@ -21,5 +22,6 @@ app.get("/api/health", (req, res) => res.json({ code: 200, msg: "灵枢服务运
 app.listen(config.port, async () => {
   console.log(`[Server] 灵枢后端已启动: http://localhost:${config.port}`);
   await initDatabase();
+  await initZongceDatabase();
 });
 

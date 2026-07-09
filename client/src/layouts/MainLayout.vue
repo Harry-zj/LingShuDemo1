@@ -6,7 +6,7 @@
       </div>
       <nav class="nav-menu">
         <router-link to="/home">首页</router-link>
-        <router-link to="/module1/smart-fill">智能填表</router-link>
+        <router-link to="/zongce/smart-fill">智能填表</router-link>
         <router-link to="/module2/evaluation">个性评定</router-link>
         <router-link to="/module3/student">信息管理</router-link>
       </nav>

@@ -17,9 +17,9 @@ import { useRouter } from "vue-router";
 const router = useRouter();
 function goTo(path) { router.push(path); }
 const modules = [
-  { title: "智能填表", desc: "上传规则文件与证明材料，AI自动解析匹配并填入表格", path: "/module1/smart-fill" },
-  { title: "批量填表", desc: "上传名单和模板，一键批量生成多人文档", path: "/module1/batch-fill" },
-  { title: "对话填表", desc: "以轻松对话方式，AI引导逐步完成填表", path: "/module1/chat-fill" },
+  { title: "智能填表", desc: "上传规则文件与证明材料，AI自动解析匹配并填入表格", path: "/zongce/smart-fill" },
+  { title: "批量填表", desc: "上传名单和模板，一键批量生成多人文档", path: "/zongce/batch-fill" },
+  { title: "对话填表", desc: "以轻松对话方式，AI引导逐步完成填表", path: "/zongce/chat-fill" },
   { title: "个性评定", desc: "五维评分分析、班级对比、个人发展画像", path: "/module2/evaluation" },
   { title: "评定报告", desc: "自动生成个性化评定报告与改进建议", path: "/module2/report" },
   { title: "我的综测", desc: "学生端：查看通知、提交材料、追踪审核状态", path: "/module3/student" },
