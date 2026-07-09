@@ -52,7 +52,7 @@ LingShuDemo1/
 ├── server/                 # Node.js 后端
 │   └── src/
 │       ├── config/         # 数据库配置、全局配置
-│       ├── controllers/    # 控制器（业务逻辑处理）
+│       ├── controllers/    # 控制器（业务逻辑处理）m
 │       ├── middleware/     # 中间件（auth, roleCheck, upload）
 │       ├── routes/         # 路由定义
 │       ├── services/       # 业务逻辑层（组员实现）
