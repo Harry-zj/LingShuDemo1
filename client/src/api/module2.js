@@ -1,0 +1,1 @@
+import request from "./request"; export const getEvaluation = (p) => request.get("/module2/evaluation",{params:p}); export const generateReport = (d) => request.post("/module2/report",d); export const getClassStats = (p) => request.get("/module2/class-stats",{params:p}); export const getAdvice = (p) => request.get("/module2/advice",{params:p});
