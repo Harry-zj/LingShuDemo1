@@ -1,6 +1,112 @@
+﻿/* ==========================================
+   灵枢 — 全局样式
+   Indigo × Purple 呼吸感体系
+   ========================================== */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-body { background: var(--color-bg); color: var(--color-text); line-height: 1.5; -webkit-font-smoothing: antialiased; }
-a { color: var(--color-primary); text-decoration: none; }
-.fade-enter-active, .fade-leave-active { transition: opacity 0.3s ease; }
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  height: 100%;
+  font-family: var(--font-family);
+  font-size: var(--font-scale-body);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-relaxed);
+  color: var(--color-text);
+  background: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#app { min-height: 100vh; }
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; transition: background var(--duration-fast) var(--easing-standard); }
+::-webkit-scrollbar-thumb:hover { background: var(--color-gray); }
+
+/* 选中文本 */
+::selection { background: var(--color-primary-light); color: var(--color-primary); }
+
+/* 链接 */
+a { color: var(--color-primary); text-decoration: none; transition: color var(--duration-fast) var(--easing-standard); }
+a:hover { color: var(--color-primary-hover); }
+
+/* 图片 */
+img { max-width: 100%; height: auto; display: block; }
+
+/* 按钮 */
+button { font-family: inherit; cursor: pointer; border: none; background: none; font-size: inherit; }
+button:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+
+/* 输入框 */
+input, select, textarea { font-family: inherit; font-size: inherit; }
+
+/* ==========================================
+   页面过渡
+   ========================================== */
+.page-enter-active { animation: pageEnter var(--duration-slow) var(--easing-decelerate); }
+.page-leave-active { animation: pageLeave var(--duration-fast) var(--easing-accelerate); }
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes pageLeave {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+
+.fade-enter-active, .fade-leave-active { transition: opacity var(--duration-normal) var(--easing-standard); }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+.slide-up-enter-active { transition: all var(--duration-slow) var(--easing-spring); }
+.slide-up-leave-active { transition: all var(--duration-fast) var(--easing-standard); }
+.slide-up-enter-from { opacity: 0; transform: translateY(30px); }
+.slide-up-leave-to { opacity: 0; transform: translateY(-10px); }
+
+/* ==========================================
+   玻璃质感工具类
+   ========================================== */
+.glass-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  transition: all var(--duration-normal) var(--easing-spring);
+}
+.glass-card:hover {
+  box-shadow: var(--glass-shadow-hover);
+  transform: translateY(-2px);
+}
+
+/* ==========================================
+   骨架屏
+   ========================================== */
+.skeleton {
+  background: linear-gradient(90deg, var(--color-gray-bg) 25%, var(--color-border) 37%, var(--color-gray-bg) 63%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s var(--easing-standard) infinite;
+  border-radius: var(--radius-sm);
+}
+.skeleton-text { height: 14px; margin-bottom: 8px; width: 100%; }
+.skeleton-text:last-child { width: 60%; }
+.skeleton-card { height: 120px; border-radius: var(--radius-lg); }
+
+/* ==========================================
+   工具类
+   ========================================== */
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border-width: 0;
+}
