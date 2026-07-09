@@ -1,1 +1,0 @@
-print("hello,mt name is wltf!")
