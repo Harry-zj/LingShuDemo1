@@ -2,7 +2,7 @@ const { pool } = require("../config/database"); const Res = require("../utils/re
 exports.getEvaluation = async (req, res) => {
   try {
     const { batch_id } = req.query;
-    const [rows] = await pool.execute("SELECT * FROM evaluation_results WHERE student_id = ?" + (batch_id ? " AND batch_id = ?" : "") + " ORDER BY created_at DESC LIMIT 1", batch_id ? [req.user.id, batch_id] : [req.user.id]);
+    const [rows] = await pool.execute("SELECT * FROM evaluation_results WHERE user_id = ?" + (batch_id ? " LIMIT 1" : " ORDER BY created_at DESC LIMIT 1"), [req.user.id]);
     res.json(Res.success(rows[0] || null));
   } catch (e) { res.json(Res.error(e.message)); }
 };

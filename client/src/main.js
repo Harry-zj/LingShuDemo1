@@ -2,7 +2,12 @@
 import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
-import { Icon } from '@iconify/vue';
+import { Icon, addAPIProvider } from '@iconify/vue';
+
+// 使用官方 Iconify API，避免 api.unisvg.com 超时
+addAPIProvider('', {
+  resources: ['https://api.iconify.design'],
+});
 import './assets/styles/variables.css';
 import './assets/styles/global.css';
 

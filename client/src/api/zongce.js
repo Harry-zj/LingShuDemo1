@@ -82,3 +82,32 @@ export const downloadFill = (id) =>
 
 export const getMockData = () =>
   request.get("/zongce/mock-data");
+
+// ===== 批量填表 =====
+export const batchUploadFiles = (formData) =>
+  request.post("/zongce/batch-fill/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    timeout: 60000,
+  });
+
+export const batchUpdateMapping = (taskId, mappings) =>
+  request.put("/zongce/batch-fill/mapping", { taskId, mappings });
+
+export const batchExecuteFill = (taskId, mappings) =>
+  request.post(`/zongce/batch-fill/execute/${taskId}`, { mappings }, { timeout: 120000 });
+
+export const batchDownloadResult = (id) =>
+  request.get(`/zongce/batch-fill/${id}/download`, { responseType: "blob" });
+
+// ===== 对话式填表 =====
+export const chatFillUpload = (formData) =>
+  request.post("/zongce/chat-fill/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+export const chatFillAnalyze = (templateId) =>
+  request.post(`/zongce/chat-fill/analyze/${templateId}`, null, { timeout: 60000 });
+
+export const chatFillDoFill = (templateId, fieldContents) =>
+  request.post("/zongce/chat-fill/fill", { templateId, fieldContents });
+

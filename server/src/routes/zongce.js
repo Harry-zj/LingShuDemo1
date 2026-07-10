@@ -7,6 +7,8 @@ const materialCtrl = require("../controllers/zongce/materialController");
 const recogCtrl = require("../controllers/zongce/recognitionController");
 const evalCtrl = require("../controllers/zongce/evaluationController");
 const fillCtrl = require("../controllers/zongce/fillController");
+const batchFillCtrl = require("../controllers/zongce/batchFillController");
+const chatFillCtrl = require("../controllers/zongce/chatFillController");
 
 // ===== 规则 =====
 router.post("/rules/upload",   auth, upload.array("files", 10), ruleCtrl.uploadRuleFiles);
@@ -43,5 +45,21 @@ router.post("/fill/:templateId", auth, fillCtrl.doFill);
 router.get("/fill/:id/download", auth, fillCtrl.downloadFill);
 router.get("/mock-data",         auth, fillCtrl.getMockData);
 
+
+
+// ===== 批量填表 =====
+router.post("/batch-fill/upload", auth, upload.fields([
+  { name: "excel", maxCount: 1 },
+  { name: "template", maxCount: 1 },
+]), batchFillCtrl.uploadFiles);
+router.put("/batch-fill/mapping",  auth, batchFillCtrl.updateMapping);
+router.post("/batch-fill/execute/:taskId", auth, batchFillCtrl.executeBatchFill);
+router.get("/batch-fill/:id/download",     batchFillCtrl.downloadResult);
+
+// ===== 对话式填表 =====
+router.post("/chat-fill/upload",      auth, upload.single("file"), chatFillCtrl.uploadTemplate);
+router.post("/chat-fill/analyze/:templateId", auth, chatFillCtrl.analyzeTemplate);
+router.post("/chat-fill/chat",        auth, chatFillCtrl.chatField);
+router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
 
 module.exports = router;

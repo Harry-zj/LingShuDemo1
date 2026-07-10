@@ -33,7 +33,7 @@
         </div>
       </div>
 
-      <div class="func-card" :class="{ active: activeCard === 'material', locked: !ruleReady }" @click="openCard('material')">
+      <div class="func-card" :class="{ active: activeCard === 'material' }" @click="openCard('material')">
         <div class="card-icon">②</div>
         <div class="card-content">
           <h3>材料上传与识别</h3>
@@ -44,7 +44,7 @@
         </div>
       </div>
 
-      <div class="func-card" :class="{ active: activeCard === 'score', locked: !ruleReady }" @click="openCard('score')">
+      <div class="func-card" :class="{ active: activeCard === 'score' }" @click="openCard('score')">
         <div class="card-icon">③</div>
         <div class="card-content">
           <h3>评分清单</h3>
@@ -55,13 +55,13 @@
         </div>
       </div>
 
-      <div class="func-card" :class="{ active: activeCard === 'form', locked: totalScore === null }" @click="openCard('form')">
+      <div class="func-card" :class="{ active: activeCard === 'form' }" @click="openCard('form')">
         <div class="card-icon">④</div>
         <div class="card-content">
           <h3>自动填表</h3>
           <p>上传 Word 模板，一键自动填充并下载</p>
           <span class="card-status" :class="totalScore !== null ? 'ready' : 'locked'">
-            {{ totalScore !== null ? '📝 可填表' : '🔒 请先完成评分' }}
+            📝 自动填表
           </span>
         </div>
       </div>

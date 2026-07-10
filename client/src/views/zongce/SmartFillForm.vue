@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="form-page">
     <!-- ===== 上传模板区 ===== -->
     <div class="upload-section">
@@ -203,7 +203,6 @@ function validateAndUpload(file){
   if(ext!=='docx'){formatError.value=true;setTimeout(()=>formatError.value=false,3000);return}
   uploadedTemplate.value={name:file.name,size:file.size,file};
   fillDone.value=false;fillError.value='';
-  emit('upload-template',file)
 }
 function removeTemplate(){uploadedTemplate.value=null;fillDone.value=false;fillError.value=''}
 

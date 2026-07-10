@@ -88,6 +88,7 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useUserStore } from '../../stores/user'
 import * as api from '../../api/zongce'
 
 const props = defineProps({ ruleSources: Array, ruleItems: Array })
@@ -147,7 +148,7 @@ async function doParse(sourceId) {
 
     const taskId = startRes.data.taskId
     // SSE 流式接收进度
-    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream`)
+    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(useUserStore().token)}`)
     es.addEventListener('progress', (e) => {
       try { parseProgress.value = JSON.parse(e.data); } catch (_) {}
     })

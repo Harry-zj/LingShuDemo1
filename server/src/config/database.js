@@ -46,32 +46,9 @@ async function initDatabase() {
       .replace(/USE\s+lingshu_zongce\s*;\s*/i, "");
     await conn.query(tableSql);
 
-    // 安全迁移：给已存在的表补列（MySQL 不支持 IF NOT EXISTS，用 try/catch）
-    const migrations = [
-      "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",
-      "ALTER TABLE rule_items ADD COLUMN scope VARCHAR(50) DEFAULT NULL AFTER limit_value",
-      "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
-      "ALTER TABLE fill_templates ADD COLUMN template_type VARCHAR(20) DEFAULT 'docx' AFTER file_path",
-      "ALTER TABLE evaluation_results ADD COLUMN grade VARCHAR(10) DEFAULT NULL AFTER total_score",
-      "ALTER TABLE evaluation_results ADD COLUMN formula TEXT DEFAULT NULL AFTER grade",
-    ];
-    for (const s of migrations) {
-      try { await conn.execute(s); } catch (e) {
-        if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
-      }
-    }
+    console.log("[DB] 建表完成，开始种子数据...");
 
-    // 开发环境：确保 dev 用户存在
-    try {
-      const bcrypt = require("bcryptjs");
-      const pwd = await bcrypt.hash("123456", 10);
-      await conn.execute(
-        "INSERT IGNORE INTO users (id, username, password, role, real_name) VALUES (1, 'dev', ?, 'student', '开发测试')",
-        [pwd]
-      );
-    } catch (e) { /* 忽略 */ }
-
-    // ★ 种子数据（INSERT IGNORE 幂等安全）
+    // 种子数据（INSERT IGNORE 幂等安全，只含张三测试用户）
     await seedDevData(conn);
 
     console.log("[DB] lingshu_zongce 初始化完成");
