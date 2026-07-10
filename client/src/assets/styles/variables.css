@@ -1,0 +1,166 @@
+﻿:root {
+  /* =========================================================
+     LingShu × Tool of NA inspired visual system
+     黑底 / 胶片感 / 超大标题 / 圆角影像卡 / 高对比信息层级
+     ========================================================= */
+
+  /* Brand palette */
+  --color-primary: #f4b847;
+  --color-primary-hover: #ffe08a;
+  --color-primary-light: rgba(244, 184, 71, 0.16);
+  --color-primary-gradient: linear-gradient(135deg, #fff3bd 0%, #f4b847 42%, #ff6a3d 100%);
+  --color-primary-gradient-bright: linear-gradient(135deg, #fff6cf 0%, #f4b847 46%, #ff4d6d 100%);
+
+  --color-accent: #00d4ff;
+  --color-accent-light: rgba(0, 212, 255, 0.13);
+  --color-glow: #ff4d6d;
+  --color-cyan-accent: #00d4ff;
+
+  /* Five-dimension accents */
+  --color-zhiyu: #00a3ff;
+  --color-deyu: #f4b847;
+  --color-tiyu: #35d07f;
+  --color-meiyu: #ff4dca;
+  --color-laoyu: #ff6a3d;
+  --color-wuxing-water: rgba(0, 163, 255, 0.15);
+  --color-wuxing-earth: rgba(244, 184, 71, 0.15);
+  --color-wuxing-wood: rgba(53, 208, 127, 0.15);
+  --color-wuxing-fire: rgba(255, 77, 202, 0.15);
+  --color-wuxing-metal: rgba(255, 106, 61, 0.15);
+
+  /* Meridian lines */
+  --meridian-line: rgba(255, 255, 255, 0.14);
+  --meridian-line-active: rgba(244, 184, 71, 0.58);
+  --meridian-glow: 0 0 28px rgba(244, 184, 71, 0.20);
+  --meridian-node: rgba(255, 255, 255, 0.08);
+  --meridian-node-active: rgba(244, 184, 71, 0.22);
+
+  /* Surfaces */
+  --color-bg: #050505;
+  --color-surface: #0d0d0d;
+  --color-surface-variant: #151515;
+  --color-border: rgba(255, 255, 255, 0.14);
+  --color-border-focus: #f4b847;
+  --color-white: #ffffff;
+
+  /* Glass / poster panels */
+  --glass-bg: linear-gradient(145deg, rgba(255, 255, 255, 0.115), rgba(255, 255, 255, 0.045));
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-blur: blur(22px) saturate(130%);
+  --glass-shadow: 0 28px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --glass-shadow-hover: 0 38px 120px rgba(0, 0, 0, 0.56), 0 0 0 1px rgba(244, 184, 71, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-nav-bg: rgba(7, 7, 7, 0.72);
+
+  /* Semantic colors */
+  --color-error: #ff5b69;
+  --color-error-bg: rgba(255, 91, 105, 0.14);
+  --color-success: #35d07f;
+  --color-success-bg: rgba(53, 208, 127, 0.14);
+  --color-warning: #f4b847;
+  --color-warning-bg: rgba(244, 184, 71, 0.16);
+  --color-gray: rgba(245, 241, 232, 0.42);
+  --color-gray-bg: rgba(255, 255, 255, 0.08);
+
+  /* Text */
+  --color-text: rgba(246, 242, 232, 0.94);
+  --color-text-secondary: rgba(246, 242, 232, 0.64);
+  --color-text-tertiary: rgba(246, 242, 232, 0.38);
+  --color-text-inverse: #050505;
+
+  /* Atmosphere */
+  --gradient-hero:
+    radial-gradient(circle at 78% 28%, rgba(244, 184, 71, 0.18), transparent 30%),
+    radial-gradient(circle at 18% 16%, rgba(0, 212, 255, 0.15), transparent 30%),
+    radial-gradient(circle at 65% 88%, rgba(255, 77, 109, 0.13), transparent 28%),
+    linear-gradient(145deg, #050505 0%, #0c0a08 44%, #050505 100%);
+  --gradient-atmosphere:
+    radial-gradient(circle at 10% 10%, rgba(0, 212, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 88% 8%, rgba(244, 184, 71, 0.16), transparent 25%),
+    radial-gradient(circle at 82% 88%, rgba(255, 77, 109, 0.10), transparent 32%),
+    #050505;
+  --gradient-primary-subtle: linear-gradient(135deg, rgba(244, 184, 71, 0.14), rgba(0, 212, 255, 0.07));
+  --gradient-cosmos: var(--gradient-atmosphere);
+
+  /* Spacing */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  /* Radius */
+  --radius-xs: 4px;
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-xl: 36px;
+  --radius-full: 999px;
+
+  /* Shadows */
+  --shadow-level-0: none;
+  --shadow-level-1: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-level-2: 0 16px 44px rgba(0, 0, 0, 0.34);
+  --shadow-level-3: 0 24px 70px rgba(0, 0, 0, 0.40);
+  --shadow-level-4: 0 32px 100px rgba(0, 0, 0, 0.50);
+  --shadow-level-5: 0 44px 140px rgba(0, 0, 0, 0.60);
+  --shadow-elevated: 0 26px 76px rgba(0, 0, 0, 0.52), 0 0 0 1px rgba(244, 184, 71, 0.18);
+  --shadow-art: 0 36px 120px rgba(0, 0, 0, 0.56);
+  --shadow-art-soft: 0 24px 76px rgba(0, 0, 0, 0.42);
+
+  /* Typography */
+  --font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Inter", "SF Pro Display", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+  --font-display: "Arial Narrow", "Impact", "Haettenschweiler", "DIN Condensed", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-scale-h1: clamp(44px, 7vw, 112px);
+  --font-scale-h2: clamp(30px, 4vw, 64px);
+  --font-scale-h3: 22px;
+  --font-scale-body: 16px;
+  --font-scale-body-sm: 14px;
+  --font-scale-caption: 12px;
+  --font-weight-regular: 400;
+  --font-weight-medium: 600;
+  --font-weight-semibold: 750;
+  --font-weight-bold: 900;
+  --line-height-tight: 0.95;
+  --line-height-normal: 1.45;
+  --line-height-relaxed: 1.72;
+  --line-height-loose: 1.9;
+  --letter-spacing-wider: 0.12em;
+  --container-wide: 1480px;
+
+  /* Motion */
+  --duration-instant: 0.1s;
+  --duration-fast: 0.18s;
+  --duration-normal: 0.28s;
+  --duration-slow: 0.52s;
+  --duration-slower: 0.82s;
+  --duration-breathe: 3s;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --easing-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --easing-breathe: cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+@keyframes meridianFlow { 0% { stroke-dashoffset: 1000; } 100% { stroke-dashoffset: 0; } }
+@keyframes meridianPulse { 0%, 100% { r: 4; opacity: 0.65; } 50% { r: 9; opacity: 0.18; } }
+@keyframes nodeGlow { 0%, 100% { box-shadow: 0 0 0 0 rgba(244,184,71,0.20); } 50% { box-shadow: 0 0 0 14px rgba(244,184,71,0); } }
+@keyframes hubPulse { 0%, 100% { transform: scale(1); opacity: 0.38; } 50% { transform: scale(1.14); opacity: 0.58; } }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.018); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@keyframes orbDrift1 { 0%, 100% { transform: translate(0, 0) scale(1); } 30% { transform: translate(38px, -48px) scale(1.12); } 64% { transform: translate(-28px, 24px) scale(0.94); } }
+@keyframes orbDrift2 { 0%, 100% { transform: translate(0, 0) scale(1); } 25% { transform: translate(-45px, 22px) scale(1.08); } 62% { transform: translate(30px, -34px) scale(0.92); } }
+@keyframes orbDrift3 { 0%, 100% { transform: translate(0, 0) scale(1); } 35% { transform: translate(20px, -42px) scale(1.1); } 70% { transform: translate(-24px, 34px) scale(0.9); } }
+@keyframes rotateSlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.48; } }
+@keyframes shimmer { 0% { background-position: -220% 0; } 100% { background-position: 220% 0; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes skeleton-loading { 0% { background-position: -220% 0; } 100% { background-position: 220% 0; } }
+@keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes glowPulse { 0%, 100% { opacity: 0.45; transform: scale(1); } 50% { opacity: 0.82; transform: scale(1.24); } }
+@keyframes editorialReveal { from { opacity: 0; transform: translateY(18px); letter-spacing: 0.22em; } to { opacity: 1; transform: translateY(0); letter-spacing: inherit; } }
+@keyframes filmGrain { 0%, 100% { transform: translate(0, 0); } 20% { transform: translate(-1%, 1%); } 40% { transform: translate(1%, -1%); } 60% { transform: translate(-1%, -1%); } 80% { transform: translate(1%, 1%); } }
