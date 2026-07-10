@@ -84,17 +84,39 @@
         </div>
       </div>
 
-      <!-- 五维概览卡片 -->
+      <!-- 五维概览卡片（点击展开计算明细） -->
       <div class="card glass-card dim-overview reveal" style="animation-delay: 0.35s;">
         <div class="card-accent" style="background: var(--color-meiyu)"></div>
         <h3><VIcon icon="mdi:layers-triple-outline" /> 五维评级</h3>
         <div class="dim-row">
           <div class="dim-chip" v-for="d in dimensionList" :key="d.key"
-            :style="{ borderColor: d.color }">
+            :class="{ 'chip-active': expandedDim === d.key }"
+            :style="{ borderColor: expandedDim === d.key ? d.color : 'var(--color-border)', background: expandedDim === d.key ? d.color + '08' : '' }"
+            @click="toggleDimDetail(d.key)">
             <span class="chip-dot" :style="{ background: d.color }"></span>
             <span class="chip-name">{{ d.name }}</span>
             <span class="chip-score">{{ d.score }}</span>
             <span class="chip-level" :style="{ background: d.level.bg, color: d.level.color }">{{ d.level.label }}</span>
+            <VIcon icon="mdi:chevron-down" class="chip-arrow" :class="{ rotated: expandedDim === d.key }" />
+          </div>
+        </div>
+
+        <!-- 展开的计算明细 -->
+        <div class="dim-detail" v-if="expandedDim && dimDetail" :style="{ borderColor: dimDetail.color }">
+          <div class="dd-header">
+            <span class="dd-dot" :style="{ background: dimDetail.color }"></span>
+            <span class="dd-name">{{ dimDetail.name }} · {{ dimDetail.score }} 分</span>
+            <span class="dd-level" :style="{ background: dimDetail.level.bg, color: dimDetail.level.color }">{{ dimDetail.level.label }}</span>
+          </div>
+          <div class="dd-formula">
+            <div class="dd-row" v-for="item in dimDetail.items" :key="item.label">
+              <span class="dd-label">{{ item.label }}</span>
+              <span class="dd-calc">{{ item.value }}{{ item.weight ? ' × ' + item.weight : '' }}</span>
+              <span class="dd-result" v-if="item.result != null">= {{ item.result }}</span>
+            </div>
+            <div class="dd-total">
+              原始得分 {{ dimDetail.rawTotal }} / {{ dimDetail.maxRaw }} → 归一化 × 100 = <strong>{{ dimDetail.score }}</strong> 分
+            </div>
           </div>
         </div>
       </div>
@@ -105,6 +127,9 @@
         <h3><VIcon icon="mdi:chart-bar" /> 素质拓展分项得分（B类）</h3>
         <div ref="bChartRef" class="b-chart-box"></div>
       </div>
+
+      <!-- 历史发展与发展趋势 -->
+      <HistoryTrend :currentDimensions="dimensionScores" :selectedYear="result?.year || null" />
     </template>
   </div>
 </template>
@@ -114,6 +139,7 @@ import * as echarts from "echarts"
 import { getEvaluation } from "../../api/module2"
 import { getBatches } from "../../api/module3"
 import RadarChart from "../../components/RadarChart.vue"
+import HistoryTrend from "../../components/HistoryTrend.vue"
 import { rawToDimensions, calcTotalScore, DIMENSION_CONFIG, getGradeLevel } from "../../utils/scoreHelper"
 
 const loading = ref(true)
@@ -124,10 +150,91 @@ const displayScore = ref(0)
 const displayPercent = ref(0)
 const bChartRef = ref(null)
 let bChart = null
+const expandedDim = ref(null)
+
+function toggleDimDetail(key) {
+  expandedDim.value = expandedDim.value === key ? null : key
+}
+
+// 每个维度的原始分计算明细
+const dimCalcMap = {
+  de: {
+    items: [
+      { label: "思想政治 A1", value: "A1/20", weight: "×0.4" },
+      { label: "道德品质 A2", value: "A2/20", weight: "×0.3" },
+      { label: "纪律观念 A4", value: "A4/20", weight: "×0.3" },
+    ],
+    maxRaw: 20, calc: (a) => (a.A1||0)*0.4 + (a.A2||0)*0.3 + (a.A4||0)*0.3
+  },
+  zhi: {
+    items: [
+      { label: "课程成绩 F2", value: "F2/100", weight: "×0.4" },
+      { label: "职业技能 B1", value: "B1/30", weight: "×0.2" },
+      { label: "学术竞赛 B2", value: "B2/30", weight: "×0.2" },
+      { label: "科技学术 B3", value: "B3/30", weight: "×0.2" },
+    ],
+    maxRaw: 58, calc: (s, b) => (s.F2||0)*0.4 + (b.B1||0)*0.2 + (b.B2||0)*0.2 + (b.B3||0)*0.2
+  },
+  ti: {
+    items: [
+      { label: "身心健康 A5", value: "A5/20", weight: "×0.4" },
+      { label: "文体竞赛 B7", value: "B7/30", weight: "×0.6" },
+    ],
+    maxRaw: 26, calc: (a, b) => (a.A5||0)*0.4 + (b.B7||0)*0.6
+  },
+  mei: {
+    items: [
+      { label: "宣传报道 B4", value: "B4/30", weight: "×1.0" },
+    ],
+    maxRaw: 30, calc: (a, b) => (b.B4||0)
+  },
+  lao: {
+    items: [
+      { label: "社会实践 B6", value: "B6/30", weight: "×0.5" },
+      { label: "劳动教育 B8", value: "B8/30", weight: "×0.3" },
+      { label: "社会工作 B5", value: "B5/30", weight: "×0.2" },
+    ],
+    maxRaw: 30, calc: (a, b) => (b.B6||0)*0.5 + (b.B8||0)*0.3 + (b.B5||0)*0.2
+  },
+}
+
+const dimDetail = computed(() => {
+  const key = expandedDim.value
+  if (!key || !result.value || !dimCalcMap[key]) return null
+  const cfg = dimCalcMap[key]
+  const raw = cfg.calc(result.value.aScores || {}, result.value.bScores || {})
+  const dimCfg = DIMENSION_CONFIG.find(d => d.key === key)
+  const score = Math.round(raw / cfg.maxRaw * 100)
+
+  // 用实际值填充明细
+  const filledItems = cfg.items.map(item => {
+    const parts = item.value.split("/")
+    const cat = parts[0]
+    const max = parseInt(parts[1])
+    // 从 aScores 或 bScores 或 scores 中取值
+    let val = result.value.aScores?.[cat] ?? result.value.bScores?.[cat] ?? result.value.scores?.[cat] ?? 0
+    const resultVal = parseFloat((val * parseFloat(item.weight?.replace("×","") || 1)).toFixed(1))
+    return {
+      label: item.label,
+      value: `${val} / ${max}`,
+      weight: item.weight,
+      result: resultVal,
+    }
+  })
+
+  return {
+    key, name: dimCfg?.name, score,
+    color: dimCfg?.color,
+    level: getGradeLevel(score),
+    items: filledItems,
+    rawTotal: raw.toFixed(1),
+    maxRaw: cfg.maxRaw,
+  }
+})
 
 // B1-B8 配置：名称、满分、配色
 const bConfig = [
-  { key: "B1", name: "职业技能", color: "#818CF8" },
+  { key: "B1", name: "职业技能", color: "#6366F1" },
   { key: "B2", name: "学术竞赛", color: "#6366F1" },
   { key: "B3", name: "科技学术", color: "#4F46E5" },
   { key: "B4", name: "宣传报道", color: "#A78BFA" },
@@ -169,15 +276,17 @@ watch(dimensionScores, (v) => { if (v && Object.values(v).some(x => x > 0)) anim
 
 async function loadData() {
   loading.value = true
+  bChart?.dispose(); bChart = null  // 切换数据时重建图表
   try {
     const r1 = await getBatches()
     if (r1.code === 200) batches.value = r1.data || []
-    const params = currentBatch.value ? { batch_id: currentBatch.value } : {}
+    const params = {}
+    if (currentBatch.value) params.batch_id = currentBatch.value
     const r2 = await getEvaluation(params)
     if (r2.code === 200 && r2.data) result.value = r2.data
     else result.value = null
   } catch { result.value = null }
-  finally { loading.value = false }
+  finally { loading.value = false; await nextTick(); buildBChart() }
 }
 
 function buildBChart() {
@@ -198,8 +307,6 @@ function buildBChart() {
   })
 }
 function handleResize() { bChart?.resize() }
-
-watch(() => result.value, async () => { await nextTick(); buildBChart() })
 
 onMounted(() => { window.addEventListener("resize", handleResize); loadData() })
 onUnmounted(() => { window.removeEventListener("resize", handleResize); bChart?.dispose() })
@@ -268,7 +375,25 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); bChart?.
 .b-chart-card { padding: 24px; position: relative; z-index: 1; }
 .b-chart-box { width: 100%; height: 300px; }
 .dim-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-.dim-chip { display: flex; align-items: center; gap: 8px; padding: 14px 12px; border: 1px solid; border-radius: var(--radius-lg); background: var(--color-surface); justify-content: center; }
+.dim-chip { display: flex; align-items: center; gap: 8px; padding: 14px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); justify-content: center; cursor: pointer; transition: all var(--duration-fast); user-select: none; }
+.dim-chip:hover { border-color: var(--color-primary); transform: translateY(-2px); box-shadow: var(--shadow-level-2); }
+.chip-active { border-width: 2px; }
+.chip-arrow { font-size: 16px; color: var(--color-text-secondary); transition: transform var(--duration-fast); }
+.chip-arrow.rotated { transform: rotate(180deg); }
+
+/* 展开明细 */
+.dim-detail { margin-top: 20px; padding: 20px; border: 1px solid; border-radius: var(--radius-lg); background: var(--color-bg); animation: fadeInUp 0.3s var(--easing-spring); }
+.dd-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.dd-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dd-name { font-size: 15px; font-weight: var(--font-weight-semibold); color: var(--color-text); flex: 1; }
+.dd-level { font-size: 12px; padding: 2px 10px; border-radius: var(--radius-full); font-weight: var(--font-weight-medium); }
+.dd-formula { font-size: 14px; }
+.dd-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px dashed var(--color-border); }
+.dd-label { width: 120px; flex-shrink: 0; color: var(--color-text); }
+.dd-calc { color: var(--color-text-secondary); font-family: monospace; }
+.dd-result { color: var(--color-primary); font-weight: var(--font-weight-semibold); font-family: monospace; margin-left: auto; }
+.dd-total { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: 13px; }
+.dd-total strong { color: var(--color-primary); font-size: 15px; }
 .chip-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .chip-name { font-size: 14px; font-weight: var(--font-weight-medium); color: var(--color-text); }
 .chip-score { font-size: 18px; font-weight: var(--font-weight-bold); color: var(--color-text); }

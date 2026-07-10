@@ -1,4 +1,5 @@
 const { pool } = require("../config/database"); const Res = require("../utils/response");
+const { generateReport: aiGenerate } = require("../services/aiService");
 
 // 维度配置（与前端 scoreHelper.js 保持一致）
 const DIM_CONFIG = [
@@ -13,7 +14,7 @@ const DIM_CONFIG = [
 function calcDimensions(data) {
   const { aScores = {}, bScores = {}, scores = {} } = data;
   const de  = clamp(((aScores.A1||0)*0.4 + (aScores.A2||0)*0.3 + (aScores.A4||0)*0.3) / 20 * 100);
-  const zhi = clamp(((scores.F2||0)*0.5 + (bScores.B2||0)*0.25 + (bScores.B3||0)*0.25) / 65 * 100);
+  const zhi = clamp(((scores.F2||0)*0.4 + (bScores.B1||0)*0.2 + (bScores.B2||0)*0.2 + (bScores.B3||0)*0.2) / 58 * 100);
   const ti  = clamp(((aScores.A5||0)*0.4 + (bScores.B7||0)*0.6) / 26 * 100);
   const mei = clamp((bScores.B4||0) / 30 * 100);
   const lao = clamp(((bScores.B6||0)*0.5 + (bScores.B8||0)*0.3 + (bScores.B5||0)*0.2) / 30 * 100);
@@ -23,40 +24,95 @@ function calcF(scores = {}) { return parseFloat(((scores.F1||0)*0.1 + (scores.F2
 function getLevel(s) { if (s >= 90) return "优秀"; if (s >= 80) return "良好"; if (s >= 70) return "中等"; if (s >= 60) return "合格"; return "待提升"; }
 function clamp(v, min=0, max=100) { const n = Number(v); return isNaN(n) ? 0 : Math.max(min, Math.min(max, Math.round(n))); }
 
-// 获取 mock 数据
-function getMockData() {
-  return {
+// 多学年 mock 数据
+const MOCK_BY_YEAR = {
+  "大一": {
+    student: { name: "张三", grade: "2023级", major: "计算机科学与技术", class: "计科2301班", semester: "2023-2024学年" },
+    scores: { F1: 80, F2: 72, F3: 75 },
+    aScores: { A1: 16, A2: 14, A3: 15, A4: 13, A5: 12 },
+    bScores: { B1: 18, B2: 14, B3: 16, B4: 12, B5: 16, B6: 20, B7: 14, B8: 18 },
+    classAvg: { F1: 78, F2: 70, F3: 72, A1: 15, A2: 13, A3: 14, A4: 12, A5: 11, B1: 17, B2: 13, B3: 15, B4: 10, B5: 15, B6: 18, B7: 12, B8: 16 },
+    rank: 18, totalStudents: 38, majorRank: 52, majorTotal: 118
+  },
+  "大二": {
+    student: { name: "张三", grade: "2023级", major: "计算机科学与技术", class: "计科2301班", semester: "2024-2025学年" },
+    scores: { F1: 82, F2: 75, F3: 78 },
+    aScores: { A1: 17, A2: 15, A3: 16, A4: 14, A5: 13 },
+    bScores: { B1: 20, B2: 16, B3: 18, B4: 14, B5: 18, B6: 22, B7: 15, B8: 20 },
+    classAvg: { F1: 79, F2: 71, F3: 74, A1: 16, A2: 13, A3: 15, A4: 12, A5: 12, B1: 19, B2: 14, B3: 16, B4: 11, B5: 16, B6: 19, B7: 13, B8: 17 },
+    rank: 12, totalStudents: 38, majorRank: 35, majorTotal: 118
+  },
+  "大三": {
     student: { name: "张三", grade: "2023级", major: "计算机科学与技术", class: "计科2301班", semester: "2025-2026学年" },
-    scores: { F1: 85, F2: 78, F3: 82 },
+    scores: { F1: 85, F2: 80, F3: 84 },
     aScores: { A1: 18, A2: 16, A3: 17, A4: 15, A5: 14 },
     bScores: { B1: 22, B2: 18, B3: 20, B4: 15, B5: 20, B6: 24, B7: 16, B8: 22 },
     classAvg: { F1: 80, F2: 72, F3: 75, A1: 16, A2: 14, A3: 15, A4: 13, A5: 12, B1: 20, B2: 16, B3: 18, B4: 12, B5: 18, B6: 20, B7: 14, B8: 18 },
-    rank: 5, totalStudents: 38
-  };
-}
+    rank: 5, totalStudents: 38, majorRank: 8, majorTotal: 118
+  }
+};
 
-// 获取评定结果
+// 批次标题 → 学年映射
+const BATCH_YEAR_MAP = {
+  "2023-2024学年": "大一",
+  "2024-2025学年": "大二",
+  "2025-2026学年": "大三"
+};
+
+// 获取评定结果（默认大三，选批次后按批次标题匹配学年）
 exports.getEvaluation = async (req, res) => {
   try {
-    const data = getMockData();
+    let year = "大三"; // 默认
+    const { batch_id } = req.query;
+    if (batch_id) {
+      const [batches] = await pool.execute("SELECT title FROM batches WHERE id = ?", [batch_id]);
+      if (batches.length) {
+        year = BATCH_YEAR_MAP[batches[0].title] || "大三";
+      }
+    }
+    const data = JSON.parse(JSON.stringify(MOCK_BY_YEAR[year] || MOCK_BY_YEAR["大三"]));
     data.scores.F = calcF(data.scores);
-    res.json(Res.success(data));
+    res.json(Res.success({ ...data, year }));
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 生成评定报告
+// 生成评定报告（优先 AI，失败时模板兜底）
 exports.generateReport = async (req, res) => {
   try {
-    const data = getMockData();
+    // 根据 batch_id 确定学年
+    let year = "大三";
+    if (req.body.batch_id) {
+      const [batches] = await pool.execute("SELECT title FROM batches WHERE id = ?", [req.body.batch_id]);
+      if (batches.length) year = BATCH_YEAR_MAP[batches[0].title] || "大三";
+    }
+    const data = JSON.parse(JSON.stringify(MOCK_BY_YEAR[year] || MOCK_BY_YEAR["大三"]));
     data.scores.F = calcF(data.scores);
     const dims = calcDimensions(data);
+    const totalScore = data.scores.F;
+    const dimDetail = DIM_CONFIG.map(d => ({ ...d, score: dims[d.key], levelLabel: getLevel(dims[d.key]) }));
+    const subScores = { F1: data.scores.F1, F2: data.scores.F2, F3: data.scores.F3 };
 
-    // 排序维度
+    // 尝试 AI 生成
+    const aiResult = await aiGenerate({
+      student: data.student, totalScore, dimensions: dimDetail, subScores,
+      rank: data.rank, totalStudents: data.totalStudents
+    });
+
+    if (aiResult) {
+      // AI 成功
+      res.json(Res.success({
+        report_content: aiResult.report,
+        advice: aiResult.advice,
+        dimensions: dims,
+        total_score: totalScore,
+        source: "ai"
+      }, "AI 评语生成成功"));
+      return;
+    }
+
+    // AI 失败 — 模板兜底
     const sorted = DIM_CONFIG.map(d => ({ ...d, score: dims[d.key] })).sort((a, b) => b.score - a.score);
     const best = sorted[0], second = sorted[1], worst = sorted[4], secondWorst = sorted[3];
-
-    // 生成报告文本
-    const totalScore = data.scores.F;
     const reportLines = [
       `综测总分：${totalScore} 分  |  班级排名：第 ${data.rank} / ${data.totalStudents} 名`,
       `计算公式：F = F1×10% + F2×65% + F3×25% = ${data.scores.F1}×10% + ${data.scores.F2}×65% + ${data.scores.F3}×25%`,
@@ -86,14 +142,14 @@ exports.generateReport = async (req, res) => {
     if (sorted[4]) advice.push({ type: "weakness", title: `重点提升「${sorted[4].name}」维度`, content: `${sorted[4].desc}方面目前得分${sorted[4].score}分（${getLevel(sorted[4].score)}），建议分析薄弱原因，积极参与相关活动，补齐短板。` });
     if (sorted[3] && sorted[3].score < 75) advice.push({ type: "weakness", title: `同步关注「${sorted[3].name}」维度`, content: `${sorted[3].desc}维度得分${sorted[3].score}分，仍有提升空间，可作为下阶段努力方向。` });
 
-    res.json(Res.success({ report_content: reportContent, advice, dimensions: dims, total_score: totalScore }, "报告生成成功"));
+    res.json(Res.success({ report_content: reportContent, advice, dimensions: dims, total_score: totalScore, source: "template" }, "报告生成成功（模板）"));
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
 // 班级统计
 exports.getClassStats = async (req, res) => {
   try {
-    const data = getMockData();
+    const data = JSON.parse(JSON.stringify(MOCK_BY_YEAR["大三"]));
     res.json(Res.success({
       avg_score: 75.3,
       class_size: data.totalStudents,
@@ -104,10 +160,37 @@ exports.getClassStats = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
+// 历史发展数据（从 MOCK_BY_YEAR 统一计算，确保五维分数与学年数据一致）
+exports.getHistory = async (req, res) => {
+  try {
+    const years = ["大一", "大二", "大三"];
+    const semesters = years.map(year => {
+      const data = MOCK_BY_YEAR[year];
+      data.scores.F = calcF(data.scores);
+      const dims = calcDimensions(data);
+      const totalScore = data.scores.F;
+      return {
+        semester: data.student.semester,
+        year,
+        scores: { ...dims, total: totalScore },
+        ranking: { majorRank: data.majorRank, majorTotal: data.majorTotal, classRank: data.rank, classTotal: data.totalStudents },
+        rating: getLevel(totalScore),
+        milestones: []
+      };
+    });
+    // 大三的里程碑
+    semesters[2].milestones = ["完成暑期社会实践项目", "获校级三等奖学金"];
+    semesters[1].milestones = ["担任班级学习委员", "获院级优秀学生干部"];
+    semesters[0].milestones = ["参加编程竞赛获校级三等奖", "加入学生会宣传部"];
+
+    res.json(Res.success({ semesters, currentSemester: "2025-2026学年" }));
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
 // 发展建议
 exports.getAdvice = async (req, res) => {
   try {
-    const data = getMockData();
+    const data = JSON.parse(JSON.stringify(MOCK_BY_YEAR["大三"]));
     const dims = calcDimensions(data);
     const sorted = DIM_CONFIG.map(d => ({ ...d, score: dims[d.key] })).sort((a, b) => b.score - a.score);
     const advice = [];

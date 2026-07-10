@@ -20,7 +20,24 @@ function buildOption() {
   const indicator = props.dimensions.map(d => ({ name: d.name, max: props.maxScore }))
   const values = props.dimensions.map(d => props.data?.[d.key] ?? 0)
   const primaryColor = props.dimensions[1]?.color || "#4F46E5"
+
+  // 主系列（五边形面）+ 每个维度一个独立点位（用于悬停单独提示）
+  const dimSeries = props.dimensions.map((d, idx) => {
+    const arr = new Array(props.dimensions.length).fill(null)
+    arr[idx] = values[idx]
+    return {
+      type: "radar",
+      data: [{ value: arr, name: d.name }],
+      symbol: "circle", symbolSize: 7,
+      itemStyle: { color: d.color },
+      lineStyle: { opacity: 0 },
+      areaStyle: { opacity: 0 },
+      tooltip: { formatter: () => d.name + "：" + (values[idx] || 0) + " 分" },
+    }
+  })
+
   return {
+    tooltip: { trigger: "item" },
     radar: {
       center: ["50%", "50%"],
       radius: "65%",
@@ -29,17 +46,20 @@ function buildOption() {
       splitArea: { areaStyle: { color: ["rgba(99,102,241,0.02)", "rgba(255,255,255,0)"] } },
       splitLine: { lineStyle: { color: "rgba(15,10,30,0.06)" } },
     },
-    series: [{
-      type: "radar",
-      data: [{
-        value: values, name: "得分",
-        areaStyle: { color: "rgba(79,70,229,0.12)" },
+    series: [
+      // 主面积系列（不可见、不交互，纯展示）
+      {
+        type: "radar",
+        data: [{ value: values, name: "得分" }],
+        symbol: "none",
+        silent: true,
+        areaStyle: { color: "rgba(79,70,229,0.10)" },
         lineStyle: { color: primaryColor, width: 2 },
-        itemStyle: { color: primaryColor },
-      }],
-      symbol: "circle",
-      symbolSize: 5,
-    }]
+        itemStyle: { opacity: 0 },
+      },
+      // 每个维度独立的悬停点
+      ...dimSeries,
+    ]
   }
 }
 
