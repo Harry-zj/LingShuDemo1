@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="main-layout">
     <!-- 全局底层光斑氛围 -->
     <div class="bg-atmosphere">
@@ -15,21 +15,9 @@
         </span>
       </div>
       <nav class="nav-menu">
-        <router-link to="/home" class="nav-item" active-class="active">
-          <VIcon icon="mdi:home-outline" class="nav-icon" />
-          <span class="nav-text">首页</span>
-        </router-link>
-        <router-link to="/zongce/smart-fill" class="nav-item" active-class="active">
-          <VIcon icon="mdi:file-document-edit-outline" class="nav-icon" />
-          <span class="nav-text">智能填表</span>
-        </router-link>
-        <router-link to="/module2/evaluation" class="nav-item" active-class="active">
-          <VIcon icon="mdi:chart-pie-outline" class="nav-icon" />
-          <span class="nav-text">个性评定</span>
-        </router-link>
-        <router-link to="/module3/student" class="nav-item" active-class="active">
-          <VIcon icon="mdi:account-group-outline" class="nav-icon" />
-          <span class="nav-text">信息管理</span>
+        <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="nav-item" active-class="active">
+          <VIcon :icon="item.icon" class="nav-icon" />
+          <span class="nav-text">{{ item.text }}</span>
         </router-link>
       </nav>
       <div class="nav-right" v-if="userStore.isLoggedIn">
@@ -65,13 +53,40 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useRouter } from 'vue-router';
 const userStore = useUserStore();
+
+const navItems = computed(() => {
+  const role = userStore.role;
+  if (role === 'admin') {
+    return [
+      { to: '/module3/batch-manage', icon: 'mdi:cog-outline', text: '批次设置' },
+      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '统计总览' }
+    ];
+  }
+  if (['class_committee', 'counselor', 'student_affairs'].includes(role)) {
+    return [
+      { to: '/module3/class-leader', icon: 'mdi:account-search-outline', text: '待评价学生' },
+      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '统计总览' }
+    ];
+  }
+  return [
+    { to: '/home', icon: 'mdi:home-outline', text: '首页' },
+    { to: '/zongce/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
+    { to: '/module2/evaluation', icon: 'mdi:chart-pie-outline', text: '个性评定' },
+    { to: '/module3/student', icon: 'mdi:account-group-outline', text: '信息管理' }
+  ];
+});
+
 const router = useRouter();
 const showUserMenu = ref(false);
-function goHome() { router.push('/home'); }
+function goHome() {
+  if (userStore.role === 'admin') router.push('/module3/batch-manage');
+  else if (['class_committee', 'counselor', 'student_affairs'].includes(userStore.role)) router.push('/module3/class-leader');
+  else router.push('/home');
+}
 function handleLogout() { showUserMenu.value = false; userStore.logout(); router.push('/login'); }
 </script>
 

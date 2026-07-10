@@ -2,6 +2,11 @@ const router = require("express").Router();
 const ctrl = require("../controllers/module1Controller");
 const auth = require("../middleware/auth");
 const upload = require("../middleware/upload");
+
+router.get("/smart-result", auth, ctrl.getSmartResult);
+router.put("/smart-result", auth, ctrl.updateSmartResult);
+router.post("/smart-result/submit", auth, ctrl.submitSmartResult);
+
 router.get("/materials", auth, ctrl.getMaterials);
 router.post("/materials", auth, ctrl.createMaterial);
 router.put("/materials/:id/submit", auth, ctrl.submitMaterial);
@@ -9,4 +14,5 @@ router.post("/upload", auth, upload.single("file"), ctrl.uploadAttachment);
 router.post("/ai-match", auth, ctrl.aiMatch);
 router.post("/batch-fill", auth, ctrl.batchFill);
 router.post("/chat-fill", auth, ctrl.chatFill);
+
 module.exports = router;

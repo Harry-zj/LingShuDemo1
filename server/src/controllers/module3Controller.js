@@ -1,68 +1,104 @@
-const { pool } = require("../config/database"); const Res = require("../utils/response");
-// 创建批次
+const Res = require("../utils/response");
+const store = require("../mock/assessmentStore");
+
 exports.createBatch = async (req, res) => {
   try {
-    const { title, description, start_time, end_time, requirements } = req.body;
-    const [r] = await pool.execute("INSERT INTO batches (title, description, start_time, end_time, requirements, created_by) VALUES (?, ?, ?, ?, ?, ?)", [title, description || "", start_time, end_time, requirements || "", req.user.id]);
-    res.json(Res.success({ id: r.insertId }, "批次创建成功"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const operator = store.getUser(req.user.id);
+    const batch = store.createBatch(req.body, operator);
+    res.json(Res.success(batch, "管理员创建批次成功"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 获取批次列表
+
 exports.getBatches = async (req, res) => {
-  try {
-    const [rows] = await pool.execute("SELECT * FROM batches ORDER BY created_at DESC");
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
+  res.json(Res.success(store.listBatches()));
 };
-// 更新批次状态
+
 exports.updateBatchStatus = async (req, res) => {
   try {
-    const { id } = req.params; const { status } = req.body;
-    await pool.execute("UPDATE batches SET status = ? WHERE id = ?", [status, id]);
-    res.json(Res.success(null, "状态更新成功"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const operator = store.getUser(req.user.id);
+    const batch = store.updateBatchStatus(req.params.id, req.body.status, operator);
+    res.json(Res.success(batch, "批次状态更新成功"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 审核材料
-exports.reviewMaterial = async (req, res) => {
+
+exports.getSettings = async (req, res) => {
+  res.json(Res.success(store.getSettings()));
+};
+
+exports.updateSettings = async (req, res) => {
   try {
-    const { id } = req.params; const { action, comment } = req.body;
-    const role = req.user.role;
-    const statusMap = {
-      class_leader: { approve: "pending_teacher", return: "returned_by_class_leader", reject: "rejected" },
-      teacher: { approve: "approved", return: "returned_by_teacher", reject: "rejected" }
-    };
-    const newStatus = statusMap[role]?.[action];
-    if (!newStatus) return res.json(Res.error("无效操作"));
-    await pool.execute("UPDATE materials SET status = ? WHERE id = ?", [newStatus, id]);
-    await pool.execute("INSERT INTO review_records (material_id, reviewer_id, reviewer_role, action, comment) VALUES (?, ?, ?, ?, ?)", [id, req.user.id, role, action, comment || ""]);
-    res.json(Res.success(null, "审核完成"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const operator = store.getUser(req.user.id);
+    res.json(Res.success(store.updateSettings(req.body, operator), "设置已保存"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 我的材料
+
 exports.getMyMaterials = async (req, res) => {
   try {
-    const { batch_id } = req.query;
-    let sql = "SELECT * FROM materials WHERE student_id = ?"; const params = [req.user.id];
-    if (batch_id) { sql += " AND batch_id = ?"; params.push(batch_id); }
-    sql += " ORDER BY created_at DESC";
-    const [rows] = await pool.execute(sql, params);
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const user = store.getUser(req.user.id);
+    res.json(Res.success(store.listFormsByUser(user)));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 待审核列表
+
+exports.getFormDetail = async (req, res) => {
+  try {
+    const user = store.getUser(req.user.id);
+    const form = store.getForm(req.params.id);
+    if (user.role === "class_committee" && form.class_id !== user.class_id) {
+      return res.json(Res.error("无权查看其他班级学生"));
+    }
+    res.json(Res.success(form));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.setFormLevel = async (req, res) => {
+  try {
+    const operator = store.getUser(req.user.id);
+    res.json(Res.success(store.setFormLevel(req.params.id, req.body.level, operator), "等级已更新"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
 exports.getPendingReviews = async (req, res) => {
   try {
-    const [rows] = await pool.execute("SELECT m.*, u.real_name as student_name FROM materials m JOIN users u ON m.student_id = u.id WHERE m.status = ? ORDER BY m.created_at DESC", [req.user.role === "class_leader" ? "pending_class_leader" : "pending_teacher"]);
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const user = store.getUser(req.user.id);
+    res.json(Res.success(store.pendingReviews(user)));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 统计
-exports.getStatistics = async (req, res) => {
+
+exports.reviewMaterial = async (req, res) => {
   try {
-    const { batch_id } = req.query;
-    const [rows] = await pool.execute("SELECT status, COUNT(*) as count FROM materials WHERE batch_id = ? GROUP BY status", [batch_id]);
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const reviewer = store.getUser(req.user.id);
+    const form = store.reviewForm(req.params.id, reviewer, req.body.action, req.body.comment || "", req.body.level || "");
+    res.json(Res.success(form, "评价处理完成"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 导出Excel（预留）
-exports.exportExcel = async (req, res) => { res.json(Res.success(null, "Excel导出功能待实现")); };
+
+exports.getStatistics = async (req, res) => {
+  res.json(Res.success(store.getStatistics()));
+};
+
+exports.exportExcel = async (req, res) => {
+  const csv = store.exportCsv();
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", "attachment; filename=assessment-summary.csv");
+  res.send(csv);
+};
+
+exports.getLogs = async (req, res) => {
+  res.json(Res.success(store.logs()));
+};

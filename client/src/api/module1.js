@@ -1,1 +1,11 @@
-import request from "./request"; export const getMaterials = (p) => request.get("/module1/materials",{params:p}); export const createMaterial = (d) => request.post("/module1/materials",d); export const submitMaterial = (id) => request.put(`/module1/materials/${id}/submit`); export const uploadFile = (d) => request.post("/module1/upload",d); export const aiMatch = (d) => request.post("/module1/ai-match",d); export const batchFill = (d) => request.post("/module1/batch-fill",d); export const chatFill = (d) => request.post("/module1/chat-fill",d);
+import request from "./request";
+export const getSmartResult = () => request.get("/module1/smart-result");
+export const updateSmartResult = (d) => request.put("/module1/smart-result", d);
+export const submitSmartResult = () => request.post("/module1/smart-result/submit");
+export const getMaterials = (p) => request.get("/module1/materials", { params: p });
+export const createMaterial = (d) => request.post("/module1/materials", d);
+export const submitMaterial = (id) => request.put(`/module1/materials/${id}/submit`);
+export const uploadFile = (d) => request.post("/module1/upload", d, { headers: { "Content-Type": "multipart/form-data" } });
+export const aiMatch = (d) => request.post("/module1/ai-match", d);
+export const batchFill = (d) => request.post("/module1/batch-fill", d);
+export const chatFill = (d) => request.post("/module1/chat-fill", d);

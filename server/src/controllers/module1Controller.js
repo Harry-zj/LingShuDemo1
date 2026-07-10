@@ -1,47 +1,73 @@
-const { pool } = require("../config/database"); const Res = require("../utils/response");
-// 获取材料列表
+const Res = require("../utils/response");
+const store = require("../mock/assessmentStore");
+
+exports.getSmartResult = async (req, res) => {
+  try {
+    res.json(Res.success(store.getSmartResult(req.user.id)));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.updateSmartResult = async (req, res) => {
+  try {
+    res.json(Res.success(store.updateFormItems(req.user.id, req.body), "智能填表结果已修改"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.submitSmartResult = async (req, res) => {
+  try {
+    res.json(Res.success(store.submitSmartResult(req.user.id), "已提交给班级测评小组评价"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
 exports.getMaterials = async (req, res) => {
   try {
-    const { batch_id } = req.query;
-    let sql = "SELECT m.*, u.real_name as student_name FROM materials m JOIN users u ON m.student_id = u.id WHERE 1=1";
-    const params = [];
-    if (batch_id) { sql += " AND m.batch_id = ?"; params.push(batch_id); }
-    sql += " ORDER BY m.created_at DESC";
-    const [rows] = await pool.execute(sql, params);
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const result = store.getSmartResult(req.user.id);
+    res.json(Res.success(result.grouped_items));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 创建材料
+
 exports.createMaterial = async (req, res) => {
-  try {
-    const { batch_id, title, category } = req.body;
-    const [r] = await pool.execute("INSERT INTO materials (batch_id, student_id, title, category) VALUES (?, ?, ?, ?)", [batch_id, req.user.id, title, category || ""]);
-    res.json(Res.success({ id: r.insertId }, "创建成功"));
-  } catch (e) { res.json(Res.error(e.message)); }
+  res.json(Res.error("学生端不再手动填写加分项目，请从信息管理页查看和修改智能填表结果"));
 };
-// 提交材料
+
 exports.submitMaterial = async (req, res) => {
   try {
-    const { id } = req.params;
-    await pool.execute("UPDATE materials SET status='pending_class_leader', submit_time=NOW() WHERE id=? AND student_id=?", [id, req.user.id]);
-    res.json(Res.success(null, "提交成功"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    res.json(Res.success(store.submitSmartResult(req.user.id), "智能填表结果已提交"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// 上传附件
+
 exports.uploadAttachment = async (req, res) => {
   try {
     if (!req.file) return res.json(Res.error("请选择文件"));
-    const { material_id } = req.body;
-    const [r] = await pool.execute("INSERT INTO attachments (material_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)", [material_id, req.file.originalname, req.file.filename, req.file.mimetype, req.file.size]);
-    res.json(Res.success({ id: r.insertId, file_name: req.file.filename }, "上传成功"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const form = store.uploadEvidence(req.user.id, req.file);
+    res.json(Res.success({ form }, "支撑材料上传成功，智能填表结果已刷新"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
 };
-// AI智能匹配（预留）
-exports.aiMatch = async (req, res) => {
-  try { res.json(Res.success(null, "AI匹配功能待组员实现")); } catch (e) { res.json(Res.error(e.message)); }
-};
-// 批量填表（预留）
-exports.batchFill = async (req, res) => { res.json(Res.success(null, "批量填表功能待组员实现")); };
-// 对话填表（预留）
-exports.chatFill = async (req, res) => { res.json(Res.success(null, "对话填表功能待组员实现")); };
 
+exports.aiMatch = async (req, res) => {
+  try {
+    res.json(Res.success(store.getSmartResult(req.user.id), "已返回智能填表模块生成的评价表结果"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.batchFill = async (req, res) => {
+  res.json(Res.success(null, "批量智能填表接口预留，本次不实现识别算法"));
+};
+
+exports.chatFill = async (req, res) => {
+  res.json(Res.success(null, "对话式智能填表接口预留，本次不实现识别算法"));
+};

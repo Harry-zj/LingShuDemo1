@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="login-wrapper">
     <div class="login-brand">
       <VIcon icon="mdi:brain" class="brand-icon" />
@@ -28,7 +28,7 @@
           <span v-else class="btn-loading"><VIcon icon="mdi:loading" class="spin" />登录中...</span>
         </button>
       </form>
-      <p class="login-tip">测试账号：student / 123456</p>
+      <p class="login-tip">测试账号：student、admin、classgroup、counselor、affairs / 123456</p>
     </div>
   </div>
 </template>
@@ -47,7 +47,13 @@ async function handleLogin() {
   loading.value = true;
   try {
     const res = await login(form.value);
-    if (res.code === 200) { userStore.setAuth(res.data.token, res.data.user); router.push('/home'); }
+    if (res.code === 200) {
+      userStore.setAuth(res.data.token, res.data.user);
+      const role = res.data.user.role;
+      if (role === 'admin') router.push('/module3/batch-manage');
+      else if (['class_committee', 'counselor', 'student_affairs'].includes(role)) router.push('/module3/class-leader');
+      else router.push('/home');
+    }
     else { alert(res.msg); }
   } catch (e) { alert('登录失败，请检查网络连接'); }
   finally { loading.value = false; }

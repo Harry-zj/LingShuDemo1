@@ -1,1 +1,14 @@
-import request from "./request"; export const getBatches = (p) => request.get("/module3/batches",{params:p}); export const createBatch = (d) => request.post("/module3/batches",d); export const updateBatchStatus = (id,d) => request.put(`/module3/batches/${id}/status`,d); export const getMyMaterials = (p) => request.get("/module3/materials",{params:p}); export const reviewMaterial = (id,d) => request.put(`/module3/materials/${id}/review`,d); export const getPendingReviews = () => request.get("/module3/pending"); export const getStatistics = (p) => request.get("/module3/statistics",{params:p}); export const exportExcel = (d) => request.post("/module3/export",d);
+import request from "./request";
+export const getBatches = (p) => request.get("/module3/batches", { params: p });
+export const createBatch = (d) => request.post("/module3/batches", d);
+export const updateBatchStatus = (id, d) => request.put(`/module3/batches/${id}/status`, d);
+export const getSettings = () => request.get("/module3/settings");
+export const updateSettings = (d) => request.put("/module3/settings", d);
+export const getMyMaterials = (p) => request.get("/module3/materials", { params: p });
+export const getFormDetail = (id) => request.get(`/module3/forms/${id}`);
+export const setFormLevel = (id, d) => request.put(`/module3/forms/${id}/level`, d);
+export const reviewMaterial = (id, d) => request.put(`/module3/materials/${id}/review`, d);
+export const getPendingReviews = () => request.get("/module3/pending");
+export const getStatistics = (p) => request.get("/module3/statistics", { params: p });
+export const exportExcel = (d) => request.post("/module3/export", d, { responseType: "blob" });
+export const getLogs = () => request.get("/module3/logs");

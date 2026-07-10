@@ -1,14 +1,14 @@
 <template>
-  <div class="class-leader-desk">
+  <div class="reviewer-student-list">
     <div class="page-header">
-      <h2>{{ currentRoleName }}待评价学生</h2>
-      <p class="page-desc">先选择学生，再进入详细材料审核界面</p>
+      <h2>{{ roleName }}待评价学生</h2>
+      <p class="page-desc">先选择某一个学生，再进入详细材料审查界面</p>
     </div>
 
     <div class="stats-row">
       <div class="stat-card warning">
-        <VIcon icon="mdi:clock-outline" class="stat-icon" />
-        <div class="stat-num">{{ pending.length }}</div>
+        <VIcon icon="mdi:account-clock-outline" class="stat-icon" />
+        <div class="stat-num">{{ students.length }}</div>
         <div class="stat-lbl">待评价学生</div>
       </div>
       <div class="stat-card success">
@@ -17,36 +17,35 @@
         <div class="stat-lbl">已认定通过</div>
       </div>
       <div class="stat-card error">
-        <VIcon icon="mdi:close-circle-outline" class="stat-icon" />
-        <div class="stat-num">{{ (stats?.returned || 0) + (stats?.rejected || 0) }}</div>
-        <div class="stat-lbl">退回/不予认定</div>
+        <VIcon icon="mdi:undo" class="stat-icon" />
+        <div class="stat-num">{{ stats?.returned || 0 }}</div>
+        <div class="stat-lbl">已退回</div>
       </div>
     </div>
 
     <div class="review-list glass-card">
       <div class="panel-header">
         <h3><VIcon icon="mdi:account-search-outline" />学生列表</h3>
-        <span class="panel-badge">{{ pending.length }} 人待处理</span>
+        <span class="panel-badge">点击学生进入详情审查</span>
       </div>
 
       <div class="student-list">
-        <div class="student-row" v-for="(form, i) in pending" :key="form.id"
+        <div class="student-row" v-for="(student, i) in students" :key="student.id"
           :style="{ animationDelay: (i * 0.06) + 's' }"
-          @click="goDetail(form.id)">
-          <div class="student-main">
-            <VIcon icon="mdi:account-circle-outline" class="student-icon" />
-            <div>
-              <div class="student-name">{{ form.student_name }}</div>
-              <div class="student-meta">学号：{{ form.student_no }} · 班级：{{ form.class_name }} · 综合分：{{ form.scores.total }} · 等级：{{ form.level }}</div>
-            </div>
+          @click="goDetail(student.id)">
+          <div class="student-info">
+            <div class="student-name">{{ student.student_name }}</div>
+            <div class="student-meta">学号：{{ student.student_no }} · 班级：{{ student.class_name }}</div>
+            <div class="student-meta">{{ student.batch_title }}</div>
           </div>
-          <div class="student-status">
-            <span>{{ form.status_label }}</span>
-            <VIcon icon="mdi:chevron-right" />
+          <div class="student-score">
+            <strong>{{ student.total_score }}</strong>
+            <span>{{ student.grade || student.auto_grade }}</span>
           </div>
+          <VIcon icon="mdi:chevron-right" class="go-icon" />
         </div>
 
-        <div class="empty-state" v-if="!pending.length">
+        <div class="empty-state" v-if="!students.length">
           <VIcon icon="mdi:check-all" />
           <span>暂无待评价学生</span>
         </div>
@@ -58,20 +57,19 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { getPendingReviews, getStatistics } from '../../api/module3';
-import { useRouter } from 'vue-router';
-import { useUserStore } from '../../stores/user';
 import { ROLE_LABEL } from '../../utils/constants';
+import { useUserStore } from '../../stores/user';
+import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const userStore = useUserStore();
-const currentRoleName = computed(() => ROLE_LABEL[userStore.role] || '评价人员');
-const pending = ref([]);
+const roleName = computed(() => ROLE_LABEL[userStore.role] || '评价人员');
+const students = ref([]);
 const stats = ref(null);
 
 async function load() {
-  const pendingRes = await getPendingReviews();
-  if (pendingRes.code === 200) pending.value = pendingRes.data;
-  const statRes = await getStatistics();
+  const [pendingRes, statRes] = await Promise.all([getPendingReviews(), getStatistics()]);
+  if (pendingRes.code === 200) students.value = pendingRes.data;
   if (statRes.code === 200) stats.value = statRes.data;
 }
 
@@ -83,7 +81,7 @@ onMounted(load);
 </script>
 
 <style scoped>
-.class-leader-desk { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
+.reviewer-student-list { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
 .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -99,17 +97,18 @@ onMounted(load);
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .panel-badge { padding: 4px 10px; border-radius: var(--radius-full); background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
 .student-list { display: flex; flex-direction: column; gap: 12px; }
-.student-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px; border-radius: var(--radius-lg); background: var(--color-bg); cursor: pointer; animation: slideInUp 0.4s var(--easing-decelerate) both; }
-.student-row:hover { transform: translateY(-1px); background: var(--color-surface); box-shadow: var(--shadow-sm); }
-.student-main { display: flex; align-items: center; gap: 12px; }
-.student-icon { font-size: 32px; color: var(--color-primary); }
+.student-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; padding: 16px; border-radius: var(--radius-lg); background: var(--color-bg); cursor: pointer; animation: slideInUp 0.4s var(--easing-decelerate) both; }
+.student-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .student-name { font-weight: var(--font-weight-semibold); margin-bottom: 4px; }
-.student-meta { font-size: 13px; color: var(--color-text-secondary); }
-.student-status { display: flex; align-items: center; gap: 6px; color: var(--color-primary); font-size: 13px; white-space: nowrap; }
+.student-meta { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
+.student-score { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.student-score strong { font-size: 24px; color: var(--color-primary); }
+.student-score span { font-size: 12px; color: var(--color-text-secondary); }
+.go-icon { font-size: 24px; color: var(--color-text-tertiary); }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px; color: var(--color-text-tertiary); }
 .empty-state .v-icon { font-size: 40px; }
 @media (max-width: 768px) {
   .stats-row { grid-template-columns: 1fr; }
-  .student-row { flex-direction: column; align-items: flex-start; }
+  .student-row { grid-template-columns: 1fr; }
 }
 </style>
