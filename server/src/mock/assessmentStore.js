@@ -1,473 +1,561 @@
-// 综测管理平台内存数据仓库
-// 说明：当前阶段按需求分析先禁用真实数据库，所有数据保存在服务进程内存中。
-// 重启后会恢复为下面的演示数据，后续接入数据库时可将本文件替换为持久化 service/DAO。
-const bcrypt = require('bcryptjs');
-
-const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
-const daysFromNow = (days) => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 19).replace('T', ' ');
-};
-const toInt = (v) => Number.parseInt(v, 10);
-
-const counters = {
-  users: 6,
-  classes: 3,
-  batches: 3,
-  materials: 7,
-  attachments: 5,
-  reviewRecords: 5,
-  notifications: 5,
-  operationLogs: 5,
+const ROLE_LABEL = {
+  student: "学生",
+  admin: "管理员",
+  class_committee: "班级测评小组",
+  counselor: "辅导员",
+  student_affairs: "学生工作处",
 };
 
-const state = {
-  users: [
-    { id: 1, username: 'student', password: bcrypt.hashSync('123456', 4), role: 'student', real_name: '张三', class_id: 1, phone: '13800000001', avatar: '', created_at: now(), updated_at: now() },
-    { id: 2, username: 'student2', password: bcrypt.hashSync('123456', 4), role: 'student', real_name: '李四', class_id: 1, phone: '13800000002', avatar: '', created_at: now(), updated_at: now() },
-    { id: 3, username: 'leader', password: bcrypt.hashSync('123456', 4), role: 'class_leader', real_name: '王班长', class_id: 1, phone: '13800000003', avatar: '', created_at: now(), updated_at: now() },
-    { id: 4, username: 'teacher', password: bcrypt.hashSync('123456', 4), role: 'teacher', real_name: '陈老师', class_id: null, phone: '13800000004', avatar: '', created_at: now(), updated_at: now() },
-    { id: 5, username: 'student3', password: bcrypt.hashSync('123456', 4), role: 'student', real_name: '赵六', class_id: 2, phone: '13800000005', avatar: '', created_at: now(), updated_at: now() },
-  ],
-  classes: [
-    { id: 1, name: '软件工程2301班', major: '软件工程', grade: '2023', teacher_id: 4, leader_id: 3, created_at: now() },
-    { id: 2, name: '软件工程2302班', major: '软件工程', grade: '2023', teacher_id: 4, leader_id: null, created_at: now() },
-  ],
-  batches: [
-    { id: 1, title: '2025-2026学年综合测评', description: '面向2023级软件工程专业的年度综合测评。', start_time: daysFromNow(-8), end_time: daysFromNow(12), status: 'published', requirements: '请按德育、智育、体育、美育、劳育分类提交加分申请，并上传清晰证明材料。', created_by: 4, created_at: daysFromNow(-10), updated_at: now() },
-    { id: 2, title: '2024-2025学年综合测评归档', description: '历史批次，仅用于查看和归档。', start_time: '2025-06-01 00:00:00', end_time: '2025-06-30 23:59:59', status: 'archived', requirements: '历史批次。', created_by: 4, created_at: '2025-06-01 09:00:00', updated_at: '2025-07-01 09:00:00' },
-  ],
-  materials: [
-    { id: 1, batch_id: 1, student_id: 1, title: '互联网+校赛一等奖', category: '竞赛获奖', score: 2.0, application_text: '参加互联网+创新创业大赛并获得校赛一等奖。', status: 'pending_class_leader', submit_time: daysFromNow(-1), created_at: daysFromNow(-2), updated_at: daysFromNow(-1) },
-    { id: 2, batch_id: 1, student_id: 2, title: '志愿服务20小时', category: '社会实践', score: 1.0, application_text: '参与学院迎新志愿服务累计20小时。', status: 'pending_teacher', submit_time: daysFromNow(-2), created_at: daysFromNow(-3), updated_at: daysFromNow(-2) },
-    { id: 3, batch_id: 1, student_id: 1, title: '优秀团员申请', category: '荣誉称号', score: 1.5, application_text: '申请优秀团员加分，证明材料需补充。', status: 'returned_by_teacher', submit_time: daysFromNow(-4), created_at: daysFromNow(-6), updated_at: daysFromNow(-2) },
-    { id: 4, batch_id: 1, student_id: 2, title: 'CET-6 通过', category: '学业成果', score: 1.0, application_text: '大学英语六级成绩通过。', status: 'approved', submit_time: daysFromNow(-6), created_at: daysFromNow(-8), updated_at: daysFromNow(-3) },
-    { id: 5, batch_id: 1, student_id: 5, title: '院级文体活动参与', category: '文体活动', score: 0.5, application_text: '参与院级文体活动。', status: 'draft', submit_time: null, created_at: daysFromNow(-1), updated_at: daysFromNow(-1) },
-    { id: 6, batch_id: 1, student_id: 5, title: '优秀学生干部', category: '荣誉称号', score: 1.5, application_text: '申请优秀学生干部加分。', status: 'rejected', submit_time: daysFromNow(-3), created_at: daysFromNow(-4), updated_at: daysFromNow(-2) },
-  ],
-  attachments: [
-    { id: 1, material_id: 1, file_name: 'internet-plus-award.pdf', original_name: '互联网+获奖证书.pdf', file_path: 'internet-plus-award.pdf', file_type: 'application/pdf', file_size: 204800, created_at: daysFromNow(-2) },
-    { id: 2, material_id: 2, file_name: 'volunteer-hours.jpg', original_name: '志愿服务证明.jpg', file_path: 'volunteer-hours.jpg', file_type: 'image/jpeg', file_size: 512000, created_at: daysFromNow(-3) },
-    { id: 3, material_id: 3, file_name: 'league-member.docx', original_name: '优秀团员证明.docx', file_path: 'league-member.docx', file_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', file_size: 102400, created_at: daysFromNow(-6) },
-    { id: 4, material_id: 4, file_name: 'cet6.png', original_name: '六级成绩单.png', file_path: 'cet6.png', file_type: 'image/png', file_size: 307200, created_at: daysFromNow(-8) },
-  ],
-  reviewRecords: [
-    { id: 1, material_id: 2, reviewer_id: 3, reviewer_role: 'class_leader', action: 'approve', comment: '材料完整，提交老师复核。', created_at: daysFromNow(-2) },
-    { id: 2, material_id: 3, reviewer_id: 3, reviewer_role: 'class_leader', action: 'approve', comment: '班级初审通过。', created_at: daysFromNow(-4) },
-    { id: 3, material_id: 3, reviewer_id: 4, reviewer_role: 'teacher', action: 'return', comment: '请补充学院盖章证明。', created_at: daysFromNow(-2) },
-    { id: 4, material_id: 4, reviewer_id: 3, reviewer_role: 'class_leader', action: 'approve', comment: '成绩单清晰。', created_at: daysFromNow(-6) },
-    { id: 5, material_id: 4, reviewer_id: 4, reviewer_role: 'teacher', action: 'approve', comment: '复核通过。', created_at: daysFromNow(-3) },
-  ],
-  notifications: [
-    { id: 1, user_id: 1, title: '材料被老师退回', content: '“优秀团员申请”需要补充学院盖章证明。', is_read: 0, created_at: daysFromNow(-2) },
-    { id: 2, user_id: 2, title: '材料审核通过', content: '“CET-6 通过”已完成老师复核。', is_read: 0, created_at: daysFromNow(-3) },
-    { id: 3, user_id: 1, title: '截止时间提醒', content: '当前综测批次将在12天后截止，请及时提交材料。', is_read: 0, created_at: now() },
-    { id: 4, user_id: 4, title: '有材料待复核', content: '当前批次存在待老师审核材料。', is_read: 0, created_at: now() },
-  ],
-  operationLogs: [
-    { id: 1, user_id: 4, action: 'create_batch', target_type: 'batch', target_id: 1, detail: '创建并发布2025-2026学年综合测评。', created_at: daysFromNow(-10) },
-    { id: 2, user_id: 1, action: 'submit_material', target_type: 'material', target_id: 1, detail: '提交互联网+校赛一等奖。', created_at: daysFromNow(-1) },
-    { id: 3, user_id: 3, action: 'review_material', target_type: 'material', target_id: 2, detail: '班干部初审通过。', created_at: daysFromNow(-2) },
-    { id: 4, user_id: 4, action: 'review_material', target_type: 'material', target_id: 3, detail: '老师退回材料。', created_at: daysFromNow(-2) },
-  ],
+const STATUS_LABEL = {
+  smart_ready: "智能填表待提交",
+  pending_class_committee: "待班级测评小组评价",
+  returned_by_class_committee: "班级测评小组退回",
+  pending_counselor: "待辅导员评价",
+  returned_by_counselor: "辅导员退回",
+  pending_student_affairs: "待学生工作处评价",
+  returned_by_student_affairs: "学生工作处退回",
+  approved: "学生工作处认定通过",
+  rejected: "不予认定",
 };
 
-function nextId(key) {
-  const id = counters[key] || 1;
-  counters[key] = id + 1;
-  return id;
-}
+let nextId = 2000;
+const now = () => new Date().toISOString().slice(0, 19).replace("T", " ");
+const clone = (data) => JSON.parse(JSON.stringify(data));
 
-function publicUser(user) {
+const users = [
+  { id: 1, username: "student", password: "123456", role: "student", real_name: "张同学", student_no: "20240001", class_id: 1, class_name: "计科2401班", college: "信息科学与工程学院", major: "计算机科学与技术", grade: "2024级" },
+  { id: 2, username: "admin", password: "123456", role: "admin", real_name: "管理员" },
+  { id: 3, username: "classgroup", password: "123456", role: "class_committee", real_name: "班级测评小组", class_id: 1, class_name: "计科2401班" },
+  { id: 4, username: "counselor", password: "123456", role: "counselor", real_name: "辅导员", class_id: 1, class_name: "计科2401班" },
+  { id: 5, username: "affairs", password: "123456", role: "student_affairs", real_name: "学生工作处" },
+
+  // 兼容上一版账号
+  { id: 6, username: "reviewer1", password: "123456", role: "class_committee", real_name: "班级测评小组", class_id: 1, class_name: "计科2401班" },
+  { id: 7, username: "reviewer2", password: "123456", role: "counselor", real_name: "辅导员", class_id: 1, class_name: "计科2401班" },
+  { id: 8, username: "reviewer3", password: "123456", role: "student_affairs", real_name: "学生工作处" },
+];
+
+const formStructure = [
+  {
+    key: "F1",
+    title: "F1 基本素质评分",
+    weight: "10%",
+    scoreKey: "f1_basic_quality",
+    children: [
+      { key: "A1", title: "思想政治表现A1" },
+      { key: "A2", title: "道德品质修养A2" },
+      { key: "A3", title: "学习态度作风A3" },
+      { key: "A4", title: "组织纪律观念A4" },
+      { key: "A5", title: "身心健康素质A5" },
+    ],
+  },
+  {
+    key: "F2",
+    title: "F2 课程学习成绩评分",
+    weight: "65%",
+    scoreKey: "f2_course_learning",
+    children: [
+      { key: "COURSE", title: "课程成绩" },
+    ],
+  },
+  {
+    key: "F3",
+    title: "F3 创新素质与实践能力评分",
+    weight: "25%",
+    scoreKey: "f3_innovation_practice",
+    children: [
+      { key: "B1", title: "职业技能类B1" },
+      { key: "B2", title: "学科竞赛类B2" },
+      { key: "B3", title: "科研学术活动类B3" },
+      { key: "B4", title: "文学艺术创作与宣传报道类B4" },
+      { key: "B5", title: "社会工作类B5" },
+      { key: "B6", title: "社会实践类B6" },
+      { key: "B7", title: "文体艺术活动类B7" },
+      { key: "B8", title: "劳育类B8" },
+    ],
+  },
+];
+
+const settings = {
+  gradeRules: [
+    { grade: "优", min: 85 },
+    { grade: "良", min: 75 },
+    { grade: "合格", min: 60 },
+    { grade: "不合格", min: 0 },
+  ],
+  submitDeadline: "2026-07-25 23:59:59",
+  allowStudentEdit: true,
+  allowReturnEdit: true,
+  requireReviewerComment: false,
+  publishNotice: "请在截止时间前确认智能填表结果，并提交至班级测评小组。",
+};
+
+const batches = [
+  {
+    id: 101,
+    title: "2025-2026学年本科学生综合素质测评",
+    description: "学生上传支撑材料后，由智能填表模块生成综测评价表结果。",
+    start_time: "2026-07-01 08:00:00",
+    end_time: settings.submitDeadline,
+    requirements: "评价表结果由智能填表模块生成，三类评价主体依次评价。",
+    status: "published",
+    created_by: 2,
+    creator_name: "管理员",
+    options: {
+      allowStudentEdit: true,
+      allowReturnEdit: true,
+      requireReviewerComment: false,
+    },
+    created_at: "2026-07-09 09:00:00",
+  },
+];
+
+const evidenceFiles = [
+  { id: 501, name: "思想政治学习记录.pdf", type: "PDF", url: "/uploads/demo_politics.pdf" },
+  { id: 502, name: "专业课程成绩单.pdf", type: "PDF", url: "/uploads/demo_scores.pdf" },
+  { id: 503, name: "互联网+创新创业竞赛获奖证书.pdf", type: "PDF", url: "/uploads/demo_award.pdf" },
+  { id: 504, name: "志愿服务时长证明.jpg", type: "图片", url: "/uploads/demo_service.jpg" },
+  { id: 505, name: "学习委员任职证明.docx", type: "Word", url: "/uploads/demo_position.docx" },
+];
+
+const forms = [
+  {
+    id: 201,
+    batch_id: 101,
+    batch_title: batches[0].title,
+    student_id: 1,
+    student_name: "张同学",
+    student_no: "20240001",
+    college: "信息科学与工程学院",
+    major: "计算机科学与技术",
+    grade: "2024级",
+    class_id: 1,
+    class_name: "计科2401班",
+    from_smart_fill: true,
+    status: "smart_ready",
+    level: "优",
+    manual_level: "",
+    scores: {
+      f1_basic_quality: 18,
+      f2_course_learning: 66,
+      f3_innovation_practice: 11,
+      total: 95,
+    },
+    personal_summary: "该内容由智能填表模块根据学生上传材料和基础信息生成，学生端仅确认与提交。",
+    items: [
+      {
+        id: 301,
+        section: "F1",
+        subKey: "A1",
+        title: "思想政治学习表现良好",
+        reason: "智能填表模块从思想政治学习记录中识别相关信息，匹配至思想政治表现A1。",
+        score: 4,
+        evidence_ids: [501],
+        editable: true,
+      },
+      {
+        id: 302,
+        section: "F1",
+        subKey: "A3",
+        title: "学习态度认真，课程出勤良好",
+        reason: "智能填表模块结合课程记录和学生基础数据，匹配至学习态度作风A3。",
+        score: 4,
+        evidence_ids: [502],
+        editable: true,
+      },
+      {
+        id: 303,
+        section: "F2",
+        subKey: "COURSE",
+        title: "课程学习成绩",
+        reason: "智能填表模块读取成绩单并计算课程学习成绩评分。",
+        score: 66,
+        evidence_ids: [502],
+        editable: true,
+      },
+      {
+        id: 304,
+        section: "F3",
+        subKey: "B2",
+        title: "互联网+创新创业竞赛校级二等奖",
+        reason: "智能填表模块从获奖证书中识别竞赛名称与获奖等级，匹配至学科竞赛类B2。",
+        score: 5,
+        evidence_ids: [503],
+        editable: true,
+      },
+      {
+        id: 305,
+        section: "F3",
+        subKey: "B5",
+        title: "担任学习委员并完成班级服务工作",
+        reason: "智能填表模块从任职证明中识别学生干部经历，匹配至社会工作类B5。",
+        score: 3,
+        evidence_ids: [505],
+        editable: true,
+      },
+      {
+        id: 306,
+        section: "F3",
+        subKey: "B6",
+        title: "志愿服务累计 36 小时",
+        reason: "智能填表模块从志愿服务证明中识别服务时长，匹配至社会实践类B6。",
+        score: 3,
+        evidence_ids: [504],
+        editable: true,
+      },
+    ],
+    review_records: [],
+    created_at: "2026-07-09 09:15:00",
+    updated_at: "2026-07-09 09:15:00",
+  },
+];
+
+const logs = [
+  { id: 901, operator_name: "管理员", action: "发布批次", target: batches[0].title, detail: "管理员发布综测批次", created_at: "2026-07-09 09:00:00" },
+];
+
+function cloneUser(user) {
   if (!user) return null;
   const { password, ...rest } = user;
-  const cls = state.classes.find((c) => c.id === user.class_id);
-  return { ...rest, class_name: cls?.name || '' };
+  return { ...rest, role_name: ROLE_LABEL[user.role] || user.role };
 }
 
-function getUser(id) {
-  return state.users.find((u) => u.id === toInt(id));
+function calculateLevel(score) {
+  const sorted = [...settings.gradeRules].sort((a, b) => b.min - a.min);
+  const found = sorted.find((rule) => Number(score) >= Number(rule.min));
+  return found ? found.grade : "不合格";
 }
 
-function getClass(id) {
-  return state.classes.find((c) => c.id === toInt(id));
+function recalcScores(form) {
+  const f1 = form.items.filter(i => i.section === "F1").reduce((sum, item) => sum + Number(item.score || 0), 0);
+  const f2 = form.items.filter(i => i.section === "F2").reduce((sum, item) => sum + Number(item.score || 0), 0);
+  const f3 = form.items.filter(i => i.section === "F3").reduce((sum, item) => sum + Number(item.score || 0), 0);
+  form.scores.f1_basic_quality = f1;
+  form.scores.f2_course_learning = f2;
+  form.scores.f3_innovation_practice = f3;
+  form.scores.total = f1 + f2 + f3;
+  if (!form.manual_level) form.level = calculateLevel(form.scores.total);
+  return form;
 }
 
-function getBatch(id) {
-  return state.batches.find((b) => b.id === toInt(id));
+function groupedItems(form) {
+  return formStructure.map(section => ({
+    ...section,
+    score: form.scores[section.scoreKey],
+    children: section.children.map(child => ({
+      ...child,
+      items: form.items
+        .filter(item => item.section === section.key && item.subKey === child.key)
+        .map(item => ({
+          ...item,
+          evidence_files: evidenceFiles.filter(file => item.evidence_ids.includes(file.id)),
+        })),
+    })),
+  }));
 }
 
-function getMaterial(id) {
-  return state.materials.find((m) => m.id === toInt(id));
-}
-
-function decorateMaterial(material) {
-  if (!material) return null;
-  const student = getUser(material.student_id);
-  const cls = getClass(student?.class_id);
-  const batch = getBatch(material.batch_id);
-  const attachments = state.attachments.filter((a) => a.material_id === material.id);
-  const review_records = state.reviewRecords
-    .filter((r) => r.material_id === material.id)
-    .map((r) => ({ ...r, reviewer_name: getUser(r.reviewer_id)?.real_name || getUser(r.reviewer_id)?.username || '' }));
+function formView(form) {
+  recalcScores(form);
   return {
-    ...material,
-    student_name: student?.real_name || student?.username || '',
-    username: student?.username || '',
-    class_id: student?.class_id || null,
-    class_name: cls?.name || '',
-    batch_title: batch?.title || '',
-    attachments,
-    review_records,
+    ...clone(form),
+    status_label: STATUS_LABEL[form.status] || form.status,
+    level: form.manual_level || form.level || calculateLevel(form.scores.total),
+    auto_level: calculateLevel(form.scores.total),
+    grouped_items: groupedItems(form),
   };
 }
 
-function canAccessMaterial(user, material) {
-  if (!user || !material) return false;
-  if (user.role === 'teacher') return true;
-  if (user.role === 'student') return material.student_id === user.id;
-  if (user.role === 'class_leader') {
-    const student = getUser(material.student_id);
-    return student?.class_id && student.class_id === user.class_id;
-  }
-  return false;
-}
-
-function log(userId, action, targetType, targetId, detail) {
-  state.operationLogs.unshift({
-    id: nextId('operationLogs'),
-    user_id: userId,
+function addLog(operator, action, target, detail) {
+  logs.unshift({
+    id: nextId++,
+    operator_name: operator?.real_name || ROLE_LABEL[operator?.role] || "系统",
     action,
-    target_type: targetType,
-    target_id: targetId,
+    target,
     detail,
     created_at: now(),
   });
 }
 
-function notify(userId, title, content) {
-  state.notifications.unshift({
-    id: nextId('notifications'),
-    user_id: userId,
-    title,
-    content,
-    is_read: 0,
-    created_at: now(),
-  });
+function getUser(id) {
+  return users.find(user => user.id === Number(id));
+}
+
+function findUser(username) {
+  return users.find(user => user.username === username);
 }
 
 function listBatches() {
-  return [...state.batches].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  return clone(batches);
 }
 
-function createBatch(user, data) {
+function createBatch(data, operator) {
   const batch = {
-    id: nextId('batches'),
-    title: data.title,
-    description: data.description || '',
-    start_time: data.start_time,
-    end_time: data.end_time,
-    status: data.status || 'draft',
-    requirements: data.requirements || '',
-    created_by: user.id,
+    id: nextId++,
+    title: data.title || "未命名综测批次",
+    description: data.description || "",
+    start_time: data.start_time || "",
+    end_time: data.end_time || settings.submitDeadline,
+    requirements: data.requirements || "",
+    status: data.status || "draft",
+    created_by: operator.id,
+    creator_name: operator.real_name || "管理员",
+    options: {
+      allowStudentEdit: data.allowStudentEdit ?? settings.allowStudentEdit,
+      allowReturnEdit: data.allowReturnEdit ?? settings.allowReturnEdit,
+      requireReviewerComment: data.requireReviewerComment ?? settings.requireReviewerComment,
+    },
     created_at: now(),
-    updated_at: now(),
   };
-  state.batches.unshift(batch);
-  log(user.id, 'create_batch', 'batch', batch.id, `创建综测批次：${batch.title}`);
-  return batch;
+  batches.unshift(batch);
+  addLog(operator, "创建批次", batch.title, "管理员创建综测批次");
+  return clone(batch);
 }
 
-function updateBatch(user, id, data) {
-  const batch = getBatch(id);
-  if (!batch) return null;
-  Object.assign(batch, {
-    title: data.title ?? batch.title,
-    description: data.description ?? batch.description,
-    start_time: data.start_time ?? batch.start_time,
-    end_time: data.end_time ?? batch.end_time,
-    requirements: data.requirements ?? batch.requirements,
-    status: data.status ?? batch.status,
-    updated_at: now(),
+function updateBatchStatus(id, status, operator) {
+  const batch = batches.find(b => b.id === Number(id));
+  if (!batch) throw new Error("批次不存在");
+  batch.status = status;
+  addLog(operator, "更新批次状态", batch.title, `批次状态更新为 ${status}`);
+  return clone(batch);
+}
+
+function getSettings() {
+  return clone({ ...settings, formStructure });
+}
+
+function updateSettings(data, operator) {
+  if (Array.isArray(data.gradeRules)) {
+    settings.gradeRules = data.gradeRules
+      .filter(rule => rule.grade !== undefined && rule.min !== undefined)
+      .map(rule => ({ grade: String(rule.grade), min: Number(rule.min) }));
+  }
+  ["submitDeadline", "publishNotice"].forEach(key => {
+    if (data[key] !== undefined) settings[key] = data[key];
   });
-  log(user.id, 'update_batch', 'batch', batch.id, `更新综测批次：${batch.title}`);
-  return batch;
-}
-
-function updateBatchStatus(user, id, status) {
-  return updateBatch(user, id, { status });
-}
-
-function listMaterials(user, filters = {}) {
-  let rows = state.materials.map(decorateMaterial).filter((m) => canAccessMaterial(user, m));
-  if (filters.batch_id) rows = rows.filter((m) => m.batch_id === toInt(filters.batch_id));
-  if (filters.status) rows = rows.filter((m) => m.status === filters.status);
-  if (filters.class_id) rows = rows.filter((m) => m.class_id === toInt(filters.class_id));
-  if (filters.keyword) {
-    const kw = String(filters.keyword).trim();
-    rows = rows.filter((m) => [m.title, m.category, m.student_name, m.class_name].some((v) => String(v || '').includes(kw)));
-  }
-  return rows.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
-}
-
-function createMaterial(user, data) {
-  const batch = getBatch(data.batch_id);
-  if (!batch) throw new Error('综测批次不存在');
-  if (batch.status !== 'published') throw new Error('当前批次未发布，暂不能提交材料');
-  const material = {
-    id: nextId('materials'),
-    batch_id: toInt(data.batch_id),
-    student_id: user.id,
-    title: data.title,
-    category: data.category || '',
-    score: Number(data.score || 0),
-    application_text: data.application_text || '',
-    status: 'draft',
-    submit_time: null,
-    created_at: now(),
-    updated_at: now(),
-  };
-  state.materials.unshift(material);
-  log(user.id, 'create_material', 'material', material.id, `保存材料草稿：${material.title}`);
-  return decorateMaterial(material);
-}
-
-function updateMaterial(user, id, data) {
-  const material = getMaterial(id);
-  if (!material) throw new Error('材料不存在');
-  if (material.student_id !== user.id) throw new Error('只能修改自己的材料');
-  if (!['draft', 'returned_by_class_leader', 'returned_by_teacher'].includes(material.status)) {
-    throw new Error('当前状态不允许修改材料');
-  }
-  Object.assign(material, {
-    title: data.title ?? material.title,
-    category: data.category ?? material.category,
-    score: data.score === undefined ? material.score : Number(data.score || 0),
-    application_text: data.application_text ?? material.application_text,
-    updated_at: now(),
+  ["allowStudentEdit", "allowReturnEdit", "requireReviewerComment"].forEach(key => {
+    if (data[key] !== undefined) settings[key] = !!data[key];
   });
-  log(user.id, 'update_material', 'material', material.id, `修改材料：${material.title}`);
-  return decorateMaterial(material);
+  batches.forEach(batch => {
+    batch.end_time = settings.submitDeadline;
+    batch.options = {
+      allowStudentEdit: settings.allowStudentEdit,
+      allowReturnEdit: settings.allowReturnEdit,
+      requireReviewerComment: settings.requireReviewerComment,
+    };
+  });
+  forms.forEach(form => {
+    if (!form.manual_level) form.level = calculateLevel(form.scores.total);
+  });
+  addLog(operator, "更新系统设置", "综测批次设置", "管理员更新截止时间、分级标准或流程选项");
+  return getSettings();
 }
 
-function submitMaterial(user, id) {
-  const material = getMaterial(id);
-  if (!material) throw new Error('材料不存在');
-  if (material.student_id !== user.id) throw new Error('只能提交自己的材料');
-  if (['approved', 'rejected', 'pending_class_leader', 'pending_teacher'].includes(material.status)) {
-    throw new Error('当前状态不允许重复提交');
-  }
-  material.status = 'pending_class_leader';
-  material.submit_time = now();
-  material.updated_at = now();
-  log(user.id, 'submit_material', 'material', material.id, `正式提交材料：${material.title}`);
-  const leader = state.users.find((u) => u.role === 'class_leader' && u.class_id === user.class_id);
-  if (leader) notify(leader.id, '有新的待初审材料', `${user.real_name || user.username} 提交了“${material.title}”。`);
-  return decorateMaterial(material);
+function getSmartResult(userId) {
+  const form = forms.find(f => f.student_id === Number(userId)) || forms[0];
+  return formView(form);
 }
 
-function addAttachment(user, materialId, file) {
-  const material = getMaterial(materialId);
-  if (!material) throw new Error('材料不存在');
-  if (!canAccessMaterial(user, material)) throw new Error('无权访问该材料');
-  if (user.role === 'student' && material.student_id !== user.id) throw new Error('只能给自己的材料上传附件');
-  if (user.role === 'student' && !['draft', 'returned_by_class_leader', 'returned_by_teacher'].includes(material.status)) {
-    throw new Error('当前材料状态不允许继续上传附件');
-  }
-  const attachment = {
-    id: nextId('attachments'),
-    material_id: material.id,
-    file_name: file.filename,
-    original_name: file.originalname,
-    file_path: file.filename,
-    file_type: file.mimetype,
-    file_size: file.size,
-    created_at: now(),
+function getForm(id) {
+  const form = forms.find(f => f.id === Number(id));
+  if (!form) throw new Error("评价表不存在");
+  return formView(form);
+}
+
+function uploadEvidence(userId, file) {
+  const form = forms.find(f => f.student_id === Number(userId));
+  if (!form) throw new Error("未找到智能填表结果");
+  const saved = {
+    id: nextId++,
+    name: file?.originalname || "新增支撑材料",
+    type: file?.mimetype || "文件",
+    url: file?.filename ? `/uploads/${file.filename}` : "",
   };
-  state.attachments.push(attachment);
-  material.updated_at = now();
-  log(user.id, 'upload_attachment', 'material', material.id, `上传附件：${file.originalname}`);
-  return attachment;
+  evidenceFiles.push(saved);
+  form.items.push({
+    id: nextId++,
+    section: "F3",
+    subKey: "B6",
+    title: `新增支撑材料：${saved.name}`,
+    reason: "本系统只接收智能填表结果，具体识别算法不在本次实现范围内，可在信息管理页修改分类。",
+    score: 0,
+    evidence_ids: [saved.id],
+    editable: true,
+  });
+  form.updated_at = now();
+  recalcScores(form);
+  addLog(getUser(userId), "上传支撑材料", saved.name, "材料进入智能填表结果流转");
+  return formView(form);
 }
 
-function getPendingReviews(user, filters = {}) {
-  const status = user.role === 'class_leader' ? 'pending_class_leader' : 'pending_teacher';
-  return listMaterials(user, { ...filters, status });
+function updateFormItems(userId, payload) {
+  const form = forms.find(f => f.student_id === Number(userId));
+  if (!form) throw new Error("未找到智能填表结果");
+  if (payload.personal_summary !== undefined) form.personal_summary = String(payload.personal_summary);
+  if (Array.isArray(payload.items)) {
+    payload.items.forEach(input => {
+      const item = form.items.find(i => i.id === Number(input.id));
+      if (!item) return;
+      if (input.title !== undefined) item.title = String(input.title);
+      if (input.reason !== undefined) item.reason = String(input.reason);
+      if (input.score !== undefined) item.score = Number(input.score) || 0;
+      if (input.section !== undefined) item.section = String(input.section);
+      if (input.subKey !== undefined) item.subKey = String(input.subKey);
+    });
+  }
+  form.manual_level = "";
+  recalcScores(form);
+  form.updated_at = now();
+  addLog(getUser(userId), "修改智能填表结果", form.student_name, "学生在信息管理页修改加分项目或支撑材料分类");
+  return formView(form);
 }
 
-function reviewMaterial(user, id, action, comment = '') {
-  const material = getMaterial(id);
-  if (!material) throw new Error('材料不存在');
-  if (!canAccessMaterial(user, material)) throw new Error('无权审核该材料');
-  if (!['class_leader', 'teacher'].includes(user.role)) throw new Error('当前角色不能审核材料');
-  if (user.role === 'class_leader' && material.status !== 'pending_class_leader') throw new Error('该材料当前不在班干部初审环节');
-  if (user.role === 'teacher' && material.status !== 'pending_teacher') throw new Error('该材料当前不在老师复核环节');
+function setFormLevel(formId, level, operator) {
+  const form = forms.find(f => f.id === Number(formId));
+  if (!form) throw new Error("评价表不存在");
+  form.manual_level = level || "";
+  form.level = form.manual_level || calculateLevel(form.scores.total);
+  form.updated_at = now();
+  addLog(operator, "调整测评等级", form.student_name, `${ROLE_LABEL[operator.role] || "评价主体"}将等级设置为 ${form.level}`);
+  return formView(form);
+}
 
-  const statusMap = {
-    class_leader: { approve: 'pending_teacher', return: 'returned_by_class_leader', reject: 'rejected' },
-    teacher: { approve: 'approved', return: 'returned_by_teacher', reject: 'rejected' },
+function submitSmartResult(userId) {
+  const form = forms.find(f => f.student_id === Number(userId));
+  if (!form) throw new Error("未找到智能填表结果");
+  form.status = "pending_class_committee";
+  form.updated_at = now();
+  recalcScores(form);
+  addLog(getUser(userId), "提交综测表", form.batch_title, "学生在信息管理页底部提交综测表");
+  return formView(form);
+}
+
+const pendingStatusByRole = {
+  class_committee: "pending_class_committee",
+  counselor: "pending_counselor",
+  student_affairs: "pending_student_affairs",
+};
+
+function canReadForm(user, form) {
+  if (user.role === "student") return form.student_id === user.id;
+  if (user.role === "class_committee") return form.class_id === user.class_id;
+  return ["admin", "counselor", "student_affairs"].includes(user.role);
+}
+
+function listFormsByUser(user) {
+  return forms.filter(form => canReadForm(user, form)).map(formView);
+}
+
+function pendingReviews(user) {
+  const status = pendingStatusByRole[user.role];
+  if (!status) return [];
+  return forms
+    .filter(form => form.status === status)
+    .filter(form => canReadForm(user, form))
+    .map(formView);
+}
+
+function reviewForm(id, reviewer, action, comment = "", level = "") {
+  const form = forms.find(f => f.id === Number(id));
+  if (!form) throw new Error("评价表不存在");
+  const expected = pendingStatusByRole[reviewer.role];
+  if (form.status !== expected) {
+    throw new Error(`当前状态为“${STATUS_LABEL[form.status]}”，不属于${ROLE_LABEL[reviewer.role]}待评价范围`);
+  }
+  if (settings.requireReviewerComment && !comment) throw new Error("请填写评价意见");
+
+  const transitions = {
+    class_committee: { approve: "pending_counselor", return: "returned_by_class_committee", reject: "rejected" },
+    counselor: { approve: "pending_student_affairs", return: "returned_by_counselor", reject: "rejected" },
+    student_affairs: { approve: "approved", return: "returned_by_student_affairs", reject: "rejected" },
   };
-  const nextStatus = statusMap[user.role]?.[action];
-  if (!nextStatus) throw new Error('审核操作无效');
+  const nextStatus = transitions[reviewer.role]?.[action];
+  if (!nextStatus) throw new Error("无效评价操作");
 
-  material.status = nextStatus;
-  material.updated_at = now();
+  if ((reviewer.role === "class_committee" || reviewer.role === "counselor") && action === "approve") {
+    form.manual_level = level || form.manual_level || "";
+    form.level = form.manual_level || calculateLevel(form.scores.total);
+  }
+
   const record = {
-    id: nextId('reviewRecords'),
-    material_id: material.id,
-    reviewer_id: user.id,
-    reviewer_role: user.role,
+    id: nextId++,
+    reviewer_role: reviewer.role,
+    reviewer_name: ROLE_LABEL[reviewer.role],
     action,
+    action_label: action === "approve" ? "通过" : action === "return" ? "退回修改" : "不予认定",
+    level: form.manual_level || form.level,
     comment,
     created_at: now(),
   };
-  state.reviewRecords.unshift(record);
-  const actionLabel = action === 'approve' ? '通过' : action === 'return' ? '退回' : '驳回';
-  log(user.id, 'review_material', 'material', material.id, `${user.role === 'teacher' ? '老师复核' : '班干部初审'}${actionLabel}：${material.title}`);
-  notify(material.student_id, '材料审核结果更新', `“${material.title}”已${actionLabel}${comment ? `，意见：${comment}` : '。'}`);
-  if (user.role === 'class_leader' && action === 'approve') {
-    state.users.filter((u) => u.role === 'teacher').forEach((t) => notify(t.id, '有新的待复核材料', `“${material.title}”已通过班级初审，请老师复核。`));
-  }
-  return decorateMaterial(material);
+  form.review_records.push(record);
+  form.status = nextStatus;
+  form.updated_at = now();
+  addLog(reviewer, `${record.reviewer_name}评价`, form.student_name, `${record.action_label}：${comment || "无意见"}`);
+  return formView(form);
 }
 
-function listNotifications(user) {
-  return state.notifications
-    .filter((n) => n.user_id === user.id)
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-}
-
-function listLogs(user, filters = {}) {
-  let rows = [...state.operationLogs];
-  if (filters.action) rows = rows.filter((l) => l.action === filters.action);
-  return rows
-    .map((l) => ({ ...l, user_name: getUser(l.user_id)?.real_name || getUser(l.user_id)?.username || '' }))
-    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-}
-
-function listClasses() {
-  return state.classes.map((c) => ({
-    ...c,
-    teacher_name: getUser(c.teacher_id)?.real_name || '',
-    leader_name: getUser(c.leader_id)?.real_name || '',
-    student_count: state.users.filter((u) => u.role === 'student' && u.class_id === c.id).length,
-  }));
-}
-
-function listUsers(filters = {}) {
-  let users = state.users.map(publicUser);
-  if (filters.role) users = users.filter((u) => u.role === filters.role);
-  if (filters.class_id) users = users.filter((u) => u.class_id === toInt(filters.class_id));
-  return users;
-}
-
-function setClassLeader(user, classId, leaderId) {
-  const cls = getClass(classId);
-  const leader = getUser(leaderId);
-  if (!cls) throw new Error('班级不存在');
-  if (!leader) throw new Error('用户不存在');
-  leader.role = 'class_leader';
-  leader.class_id = cls.id;
-  leader.updated_at = now();
-  cls.leader_id = leader.id;
-  log(user.id, 'set_class_leader', 'class', cls.id, `设置${leader.real_name || leader.username}为${cls.name}班干部`);
-  return { class: cls, leader: publicUser(leader) };
-}
-
-function statistics(batchId, user) {
-  const batch_id = toInt(batchId || state.batches.find((b) => b.status === 'published')?.id || 1);
-  let students = state.users.filter((u) => u.role === 'student');
-  if (user.role === 'class_leader') students = students.filter((u) => u.class_id === user.class_id);
-  const materials = listMaterials(user, { batch_id });
-  const submittedStudentIds = new Set(materials.filter((m) => m.submit_time).map((m) => m.student_id));
-  const unsubmitted = students
-    .filter((s) => !submittedStudentIds.has(s.id))
-    .map((s) => ({ id: s.id, real_name: s.real_name, username: s.username, class_name: getClass(s.class_id)?.name || '' }));
-  const statusCounts = materials.reduce((acc, m) => {
-    acc[m.status] = (acc[m.status] || 0) + 1;
-    return acc;
-  }, {});
-  const classProgress = listClasses().map((cls) => {
-    const classStudents = students.filter((s) => s.class_id === cls.id);
-    if (user.role === 'class_leader' && cls.id !== user.class_id) return null;
-    const classMaterials = materials.filter((m) => m.class_id === cls.id);
-    const classSubmitted = new Set(classMaterials.filter((m) => m.submit_time).map((m) => m.student_id)).size;
-    return {
-      class_id: cls.id,
-      class_name: cls.name,
-      student_count: classStudents.length,
-      submitted_count: classSubmitted,
-      unsubmitted_count: Math.max(classStudents.length - classSubmitted, 0),
-      pending_count: classMaterials.filter((m) => ['pending_class_leader', 'pending_teacher'].includes(m.status)).length,
-      approved_count: classMaterials.filter((m) => m.status === 'approved').length,
-      returned_count: classMaterials.filter((m) => ['returned_by_class_leader', 'returned_by_teacher'].includes(m.status)).length,
-    };
-  }).filter(Boolean);
+function getStatistics() {
   return {
-    batch_id,
-    total_students: students.length,
-    submitted_students: submittedStudentIds.size,
-    unsubmitted_students: unsubmitted.length,
-    pending_count: materials.filter((m) => ['pending_class_leader', 'pending_teacher'].includes(m.status)).length,
-    approved_count: statusCounts.approved || 0,
-    returned_count: (statusCounts.returned_by_class_leader || 0) + (statusCounts.returned_by_teacher || 0),
-    rejected_count: statusCounts.rejected || 0,
-    status_counts: Object.entries(statusCounts).map(([status, count]) => ({ status, count })),
-    unsubmitted,
-    class_progress: classProgress,
+    total_students: users.filter(u => u.role === "student").length,
+    submitted: forms.filter(f => f.status !== "smart_ready").length,
+    approved: forms.filter(f => f.status === "approved").length,
+    rejected: forms.filter(f => f.status === "rejected").length,
+    returned: forms.filter(f => f.status.startsWith("returned")).length,
+    pending_class_committee: forms.filter(f => f.status === "pending_class_committee").length,
+    pending_counselor: forms.filter(f => f.status === "pending_counselor").length,
+    pending_student_affairs: forms.filter(f => f.status === "pending_student_affairs").length,
+    rows: forms.map(f => ({
+      id: f.id,
+      student_name: f.student_name,
+      student_no: f.student_no,
+      class_name: f.class_name,
+      total_score: f.scores.total,
+      level: f.manual_level || f.level || calculateLevel(f.scores.total),
+      status: f.status,
+      status_label: STATUS_LABEL[f.status],
+    })),
   };
 }
 
-function exportCsv(batchId, user) {
-  const materials = listMaterials(user, { batch_id: batchId });
-  const header = ['批次', '班级', '学生', '材料标题', '类别', '申请分值', '状态', '提交时间', '附件数', '最后审核意见'];
-  const rows = materials.map((m) => {
-    const last = m.review_records?.[0];
-    return [
-      m.batch_title,
-      m.class_name,
-      m.student_name,
-      m.title,
-      m.category,
-      m.score,
-      m.status,
-      m.submit_time || '',
-      m.attachments.length,
-      last?.comment || '',
-    ];
-  });
-  const escapeCsv = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  return [header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\n');
+function exportCsv() {
+  const rows = [
+    ["学生姓名", "学号", "班级", "F1基本素质", "F2课程学习", "F3创新实践", "综合分", "等级", "当前状态"],
+    ...forms.map(f => [
+      f.student_name,
+      f.student_no,
+      f.class_name,
+      f.scores.f1_basic_quality,
+      f.scores.f2_course_learning,
+      f.scores.f3_innovation_practice,
+      f.scores.total,
+      f.manual_level || f.level || calculateLevel(f.scores.total),
+      STATUS_LABEL[f.status],
+    ]),
+  ];
+  return "\ufeff" + rows.map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
 }
 
 module.exports = {
-  state,
-  publicUser,
+  ROLE_LABEL,
+  STATUS_LABEL,
+  formStructure,
+  cloneUser,
+  findUser,
   getUser,
-  getBatch,
-  getMaterial,
-  decorateMaterial,
-  canAccessMaterial,
   listBatches,
   createBatch,
-  updateBatch,
   updateBatchStatus,
-  listMaterials,
-  createMaterial,
-  updateMaterial,
-  submitMaterial,
-  addAttachment,
-  getPendingReviews,
-  reviewMaterial,
-  listNotifications,
-  listLogs,
-  listClasses,
-  listUsers,
-  setClassLeader,
-  statistics,
+  getSettings,
+  updateSettings,
+  getSmartResult,
+  getForm,
+  uploadEvidence,
+  updateFormItems,
+  setFormLevel,
+  submitSmartResult,
+  listFormsByUser,
+  pendingReviews,
+  reviewForm,
+  getStatistics,
   exportCsv,
-  notify,
-  log,
-  now,
+  logs: () => clone(logs),
 };

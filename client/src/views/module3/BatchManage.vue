@@ -1,135 +1,162 @@
 <template>
-  <div class="batch-manage">
+  <div class="stub-page">
     <div class="page-header">
-      <div>
-        <h2>综测批次管理</h2>
-        <p class="page-desc">老师可创建、发布、关闭和归档综测批次，并设置提交时间、说明和材料要求</p>
-      </div>
-      <button class="btn-primary" @click="openCreate"><VIcon icon="mdi:plus" />新建批次</button>
+      <h2>管理员批次与规则设置</h2>
+      <p class="page-desc">发布批次、设置截止时间、分级标准和流程选项</p>
     </div>
 
-    <section class="form-card glass-card" v-if="showForm">
-      <div class="panel-header">
-        <h3><VIcon icon="mdi:layers-plus" />{{ form.id ? '编辑批次' : '新建综测批次' }}</h3>
-        <button class="btn-text" @click="closeForm">关闭</button>
-      </div>
+    <div class="stub-card">
+      <h3>发布批次</h3>
       <div class="form-grid">
-        <label>批次名称<input v-model="form.title" placeholder="如：2025-2026学年综合测评" /></label>
-        <label>状态
-          <select v-model="form.status">
-            <option value="draft">草稿</option>
-            <option value="published">发布</option>
-            <option value="closed">关闭</option>
-            <option value="archived">归档</option>
-          </select>
+        <input v-model="form.title" placeholder="批次名称" />
+        <input v-model="form.start_time" placeholder="开始时间，例如 2026-07-01 08:00:00" />
+        <input v-model="form.end_time" placeholder="截止时间，例如 2026-07-25 23:59:59" />
+        <select v-model="form.status">
+          <option value="draft">草稿</option>
+          <option value="published">发布</option>
+          <option value="closed">关闭</option>
+          <option value="archived">归档</option>
+        </select>
+        <textarea v-model="form.description" placeholder="批次说明"></textarea>
+        <textarea v-model="form.requirements" placeholder="材料要求"></textarea>
+      </div>
+      <button class="btn-primary" @click="handleCreate">创建/发布批次</button>
+    </div>
+
+    <div class="stub-card" v-if="settings">
+      <h3>截止时间与流程选项</h3>
+      <div class="form-grid">
+        <input v-model="settings.submitDeadline" placeholder="提交截止时间" />
+        <input v-model="settings.publishNotice" placeholder="发布通知说明" />
+        <label class="check-row">
+          <input type="checkbox" v-model="settings.allowStudentEdit" /> 允许学生修改智能填表结果
         </label>
-        <label>开始时间<input v-model="form.start_time" type="datetime-local" /></label>
-        <label>截止时间<input v-model="form.end_time" type="datetime-local" /></label>
-        <label class="span-2">批次说明<textarea v-model="form.description" rows="3" placeholder="说明本次综测范围、对象、流程"></textarea></label>
-        <label class="span-2">材料要求<textarea v-model="form.requirements" rows="4" placeholder="填写加分申请、附件清晰度、证明材料格式等要求"></textarea></label>
+        <label class="check-row">
+          <input type="checkbox" v-model="settings.allowReturnEdit" /> 允许退回后重新提交
+        </label>
+        <label class="check-row">
+          <input type="checkbox" v-model="settings.requireReviewerComment" /> 评价时必须填写意见
+        </label>
       </div>
-      <div class="form-actions">
-        <button class="btn-outline" @click="closeForm">取消</button>
-        <button class="btn-primary" @click="saveBatch">保存</button>
+
+      <h3>等级规则</h3>
+      <p class="hint">默认：85以上为优，75以上为良，60以上为合格，60以下为不合格。管理员可修改。</p>
+      <div class="grade-rules">
+        <div class="grade-row" v-for="rule in settings.gradeRules" :key="rule.grade">
+          <span>{{ rule.grade }}</span>
+          <input type="number" v-model.number="rule.min" />
+          <small>分及以上</small>
+        </div>
       </div>
-    </section>
 
-    <section class="batch-list glass-card">
-      <div class="panel-header"><h3><VIcon icon="mdi:layers-outline" />批次列表</h3><span class="panel-count">{{ batches.length }} 个</span></div>
-      <article class="batch-row" v-for="b in batches" :key="b.id">
-        <div class="batch-main">
-          <div class="batch-title"><strong>{{ b.title }}</strong><span class="status-tag" :style="batchStyle(b.status)">{{ BATCH_STATUS_MAP[b.status]?.label || b.status }}</span></div>
-          <p>{{ b.description || '暂无说明' }}</p>
-          <div class="meta-line"><span>开始：{{ b.start_time }}</span><span>截止：{{ b.end_time }}</span></div>
-          <div class="requirements">{{ b.requirements || '暂无材料要求' }}</div>
-        </div>
-        <div class="row-actions">
-          <button class="btn-outline small" @click="editBatch(b)">编辑</button>
-          <button class="btn-outline small" v-if="b.status !== 'published'" @click="changeStatus(b, 'published')">发布</button>
-          <button class="btn-outline small" v-if="b.status === 'published'" @click="changeStatus(b, 'closed')">关闭</button>
-          <button class="btn-outline small" v-if="b.status !== 'archived'" @click="changeStatus(b, 'archived')">归档</button>
-        </div>
-      </article>
-    </section>
+      <button class="btn-primary" @click="saveSettings">保存设置</button>
+    </div>
 
-    <section class="class-card glass-card">
-      <div class="panel-header"><h3><VIcon icon="mdi:account-group-outline" />班级与班干部</h3></div>
-      <article class="class-row" v-for="c in classes" :key="c.id">
+    <div class="stub-card">
+      <h3>批次列表</h3>
+      <div class="batch-row" v-for="batch in batches" :key="batch.id">
         <div>
-          <strong>{{ c.name }}</strong>
-          <p>{{ c.grade }} · {{ c.major }} · {{ c.student_count }} 名学生 · 班干部：{{ c.leader_name || '未设置' }}</p>
+          <strong>{{ batch.title }}</strong>
+          <p>{{ batch.description }}</p>
+          <small>{{ batch.start_time }} 至 {{ batch.end_time }} · {{ statusText(batch.status) }}</small>
         </div>
-      </article>
-    </section>
+        <div class="actions">
+          <button @click="setStatus(batch.id, 'published')">发布</button>
+          <button @click="setStatus(batch.id, 'closed')">关闭</button>
+          <button @click="setStatus(batch.id, 'archived')">归档</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
-import { BATCH_STATUS_MAP } from '../../utils/constants';
-import { createBatch, getBatches, getClasses, updateBatch, updateBatchStatus } from '../../api/module3';
+import { onMounted, ref } from 'vue';
+import { createBatch, getBatches, getSettings, updateBatchStatus, updateSettings } from '../../api/module3';
 
 const batches = ref([]);
-const classes = ref([]);
-const showForm = ref(false);
-const form = reactive({ id: '', title: '', description: '', start_time: '', end_time: '', status: 'draft', requirements: '' });
+const settings = ref(null);
+const form = ref({
+  title: '新学年本科学生综合素质测评',
+  start_time: '2026-07-01 08:00:00',
+  end_time: '2026-07-25 23:59:59',
+  status: 'published',
+  description: '管理员发布的综测批次',
+  requirements: '学生上传支撑材料后，由智能填表结果进入三方评价流程',
+});
 
-function toInputDate(v) { return v ? String(v).replace(' ', 'T').slice(0, 16) : ''; }
-function toServerDate(v) { return v ? String(v).replace('T', ' ') + ':00'.slice(String(v).length > 16 ? 3 : 0) : ''; }
-function batchStyle(status) { const m = BATCH_STATUS_MAP[status]; return m ? { background: m.bg, color: m.color } : {}; }
-function resetForm() { Object.assign(form, { id: '', title: '', description: '', start_time: '', end_time: '', status: 'draft', requirements: '' }); }
-function openCreate() { resetForm(); showForm.value = true; }
-function closeForm() { showForm.value = false; resetForm(); }
-function editBatch(b) {
-  Object.assign(form, { ...b, start_time: toInputDate(b.start_time), end_time: toInputDate(b.end_time) });
-  showForm.value = true;
+function statusText(status) {
+  return ({ draft: '草稿', published: '已发布', closed: '已关闭', archived: '已归档' }[status] || status);
 }
+
 async function load() {
-  const [bRes, cRes] = await Promise.all([getBatches(), getClasses()]);
-  if (bRes.code === 200) batches.value = bRes.data || [];
-  if (cRes.code === 200) classes.value = cRes.data || [];
+  const [batchRes, settingRes] = await Promise.all([getBatches(), getSettings()]);
+  if (batchRes.code === 200) batches.value = batchRes.data;
+  if (settingRes.code === 200) settings.value = settingRes.data;
 }
-async function saveBatch() {
-  if (!form.title || !form.start_time || !form.end_time) return alert('请填写批次名称、开始时间和截止时间');
-  const payload = { ...form, start_time: toServerDate(form.start_time), end_time: toServerDate(form.end_time) };
-  const res = form.id ? await updateBatch(form.id, payload) : await createBatch(payload);
-  alert(res.msg || '保存完成');
-  if (res.code === 200) { closeForm(); await load(); }
+
+async function handleCreate() {
+  const res = await createBatch(form.value);
+  if (res.code === 200) {
+    alert('批次已创建');
+    await load();
+  } else {
+    alert(res.msg);
+  }
 }
-async function changeStatus(b, status) {
-  const res = await updateBatchStatus(b.id, { status });
-  alert(res.msg || '状态已更新');
-  await load();
+
+async function setStatus(id, status) {
+  const res = await updateBatchStatus(id, { status });
+  if (res.code === 200) await load();
+  else alert(res.msg);
+}
+
+async function saveSettings() {
+  const res = await updateSettings(settings.value);
+  if (res.code === 200) {
+    settings.value = res.data;
+    alert('设置已保存');
+    await load();
+  } else {
+    alert(res.msg);
+  }
 }
 
 onMounted(load);
 </script>
 
 <style scoped>
-.batch-manage { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
-.page-header, .panel-header, .batch-title, .meta-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stub-page { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.form-card, .batch-list, .class-card { border-radius: var(--radius-xl); padding: 24px; }
-.panel-header { margin-bottom: 16px; }
-.panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: var(--font-weight-semibold); }
-.panel-count, .meta-line, .class-row p { font-size: 12px; color: var(--color-text-secondary); }
-.form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
-.span-2 { grid-column: span 2; }
-input, select, textarea { border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px 12px; background: var(--color-white); color: var(--color-text); outline: none; }
-textarea { resize: vertical; }
-.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
-.btn-primary, .btn-outline, .btn-text { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: var(--radius-full); font-size: 14px; font-weight: var(--font-weight-medium); cursor: pointer; transition: all var(--duration-fast) var(--easing-spring); }
-.btn-primary { border: none; background: var(--color-primary-gradient); color: #fff; box-shadow: var(--shadow-level-1); }
-.btn-outline { border: 1px solid var(--color-border); background: var(--color-white); color: var(--color-text); }
-.btn-text { border: none; background: transparent; color: var(--color-primary); padding: 6px 10px; }
-.small { padding: 7px 12px; font-size: 12px; }
-.batch-row, .class-row { display: flex; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-white); margin-bottom: 10px; }
-.batch-main { flex: 1; }
-.batch-main p { margin: 8px 0; color: var(--color-text-secondary); font-size: 14px; }
-.requirements { margin-top: 10px; padding: 10px; border-radius: var(--radius-md); background: var(--color-gray-bg); color: var(--color-text-secondary); font-size: 13px; }
-.status-tag { font-size: 12px; padding: 3px 10px; border-radius: var(--radius-full); font-weight: var(--font-weight-medium); }
-.row-actions { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-@media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } .span-2 { grid-column: span 1; } .batch-row, .class-row { flex-direction: column; } }
+.stub-card {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 24px; background: var(--color-surface);
+  border-radius: var(--radius-xl); border: 1px solid var(--color-border);
+}
+.stub-card h3 { font-size: 16px; font-weight: var(--font-weight-semibold); }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+input, select, textarea { min-height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); }
+textarea { grid-column: span 2; min-height: 80px; resize: vertical; }
+.check-row { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 14px; }
+.check-row input { width: auto; min-height: auto; }
+.hint { color: var(--color-text-secondary); font-size: 13px; }
+.grade-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.grade-row { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: var(--radius-md); background: var(--color-bg); }
+.grade-row input { width: 70px; }
+.grade-row span { font-weight: var(--font-weight-semibold); }
+.grade-row small { color: var(--color-text-secondary); }
+.btn-primary, .actions button {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 36px; padding: 0 14px; border: none; border-radius: var(--radius-full);
+  background: var(--gradient-primary); color: white; cursor: pointer;
+}
+.batch-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); }
+.batch-row p, .batch-row small { color: var(--color-text-secondary); margin-top: 4px; }
+.actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.actions button { background: var(--color-surface); color: var(--color-text-primary); border: 1px solid var(--color-border); }
+@media (max-width: 768px) {
+  .form-grid, .batch-row, .grade-rules { grid-template-columns: 1fr; flex-direction: column; }
+  textarea { grid-column: span 1; }
+}
 </style>

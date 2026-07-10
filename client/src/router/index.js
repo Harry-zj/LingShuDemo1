@@ -13,8 +13,9 @@ const routes = [
   { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告" } },
   /* 模块三 */
   { path: "/module3/student", name: "StudentDashboard", component: () => import("../views/module3/StudentDashboard.vue"), meta: { layout: "main", title: "我的综测" } },
-  { path: "/module3/class-leader", name: "ClassLeaderDesk", component: () => import("../views/module3/ClassLeaderDesk.vue"), meta: { layout: "main", title: "班级初审" } },
-  { path: "/module3/teacher", name: "TeacherConsole", component: () => import("../views/module3/TeacherConsole.vue"), meta: { layout: "main", title: "总控中心" } },
+  { path: "/module3/class-leader", name: "ClassLeaderDesk", component: () => import("../views/module3/ClassLeaderDesk.vue"), meta: { layout: "main", title: "评价学生列表" } },
+  { path: "/module3/teacher", name: "TeacherConsole", component: () => import("../views/module3/TeacherConsole.vue"), meta: { layout: "main", title: "统计总览" } },
+  { path: "/module3/review-detail/:id", name: "ReviewDetail", component: () => import("../views/module3/ReviewDetail.vue"), meta: { layout: "main", title: "材料审核详情" } },
   { path: "/module3/batch-manage", name: "BatchManage", component: () => import("../views/module3/BatchManage.vue"), meta: { layout: "main", title: "批次管理" } },
 ];
 const router = createRouter({ history: createWebHistory(), routes });

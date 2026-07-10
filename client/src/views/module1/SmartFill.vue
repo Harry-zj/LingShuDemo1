@@ -3,180 +3,115 @@
     <div class="top-bar">
       <div class="top-bar-left">
         <h2>智能填表</h2>
-        <p class="top-bar-desc">上传材料，AI 自动识别并匹配填表</p>
+        <p class="top-bar-desc">上传材料后刷新智能填表结果；正式提交请到“信息管理”页面底部完成</p>
       </div>
       <div class="actions">
         <button class="btn-upload" @click="triggerUpload">
           <VIcon icon="mdi:upload-outline" />
-          上传材料
+          上传支撑材料
         </button>
         <input type="file" ref="fileInput" multiple hidden @change="handleUpload" />
-        <button class="btn-ai" @click="handleAiMatch" :disabled="!materials.length">
+        <button class="btn-ai" @click="handleAiMatch">
           <VIcon icon="mdi:lightning-bolt-outline" />
-          AI 智能匹配
+          刷新智能填表结果
         </button>
       </div>
     </div>
+
     <div class="workspace">
       <section class="panel glass-panel material-panel">
         <div class="panel-header">
-          <h3><VIcon icon="mdi:archive-outline" />材料库</h3>
-          <span class="panel-count">{{ materials.length }} 项</span>
+          <h3><VIcon icon="mdi:file-document-check-outline" />智能填表预览</h3>
+          <span class="panel-count">{{ form?.status_label || '未加载' }}</span>
         </div>
-        <div class="material-grid">
-          <div class="material-card" v-for="(item, index) in materials" :key="item.id"
-            :style="{ animationDelay: (index * 0.06) + 's' }">
-            <div class="card-top">
-              <VIcon icon="mdi:file-document-outline" class="file-icon" />
-              <span class="card-label">{{ getLabel(item) }}</span>
-            </div>
-            <span class="card-badge" :style="getBadgeStyle(item.status)">{{ getStatusLabel(item.status) }}</span>
-          </div>
-          <div class="material-card empty-state" v-if="materials.length === 0">
-            <VIcon icon="mdi:inbox-outline" class="empty-icon" />
-            <p>暂无材料</p>
-            <span>点击上方「上传材料」按钮添加</span>
-          </div>
+
+        <div class="score-grid" v-if="form">
+          <div class="score-card"><span>F1 基本素质</span><strong>{{ form.scores.f1_basic_quality }}</strong></div>
+          <div class="score-card"><span>F2 课程学习</span><strong>{{ form.scores.f2_course_learning }}</strong></div>
+          <div class="score-card"><span>F3 创新实践</span><strong>{{ form.scores.f3_innovation_practice }}</strong></div>
+          <div class="score-card total"><span>综合分 / 等级</span><strong>{{ form.scores.total }} / {{ form.level }}</strong></div>
         </div>
-      </section>
-      <section class="panel glass-panel preview-panel">
-        <div class="panel-header">
-          <h3><VIcon icon="mdi:table-eye" />填报预览</h3>
+
+        <div class="notice-card" v-if="form">
+          智能填表结果会同步到“信息管理”页面。请在那里按 F1、F2、F3 分类检查支撑材料并提交。
         </div>
-        <div class="preview-placeholder" v-if="!aiPreview">
-          <VIcon icon="mdi:table-large" class="placeholder-icon" />
-          <p>AI 完成匹配后，表格填写结果将在这里实时显示</p>
-        </div>
-        <div class="preview-result" v-else>
-          <p>识别类别：{{ aiPreview.category }}</p>
-          <p>建议分值：{{ aiPreview.suggested_score }}</p>
-          <p>置信度：{{ Math.round(aiPreview.confidence * 100) }}%</p>
-          <ul><li v-for="tip in aiPreview.tips" :key="tip">{{ tip }}</li></ul>
-        </div>
+
+        <button class="btn-ai submit-btn" @click="$router.push('/module3/student')">
+          <VIcon icon="mdi:arrow-right" />
+          前往信息管理检查并提交
+        </button>
       </section>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
-import { getMaterials, uploadFile, aiMatch, createMaterial } from '../../api/module1'
-import { getBatches } from '../../api/module3'
-import { STATUS_MAP } from '../../utils/constants'
-const materials = ref([])
-const batches = ref([])
-const fileInput = ref(null)
-const aiPreview = ref(null)
-const activeBatch = computed(() => batches.value.find((b) => b.status === 'published'))
-function getLabel(item) { return item.ai_label || item.title || '未标注' }
-function getStatusLabel(s) { return STATUS_MAP[s]?.label || s }
-function getBadgeStyle(s) { const m = STATUS_MAP[s]; return m ? { background: m.bg, color: m.color } : {} }
-async function loadMaterials() {
-  const [mRes, bRes] = await Promise.all([getMaterials(), getBatches()])
-  if (mRes.code === 200) materials.value = mRes.data || []
-  if (bRes.code === 200) batches.value = bRes.data || []
+import { onMounted, ref } from 'vue';
+import { aiMatch, getSmartResult, uploadFile } from '../../api/module1';
+
+const fileInput = ref(null);
+const form = ref(null);
+
+function triggerUpload() {
+  fileInput.value?.click();
 }
-function triggerUpload() { fileInput.value?.click() }
+
+async function loadSmartResult() {
+  const res = await getSmartResult();
+  if (res.code === 200) form.value = res.data;
+}
+
 async function handleUpload(e) {
-  const files = Array.from(e.target.files || [])
-  if (!files.length) return
-  if (!activeBatch.value) return alert('暂无已发布综测批次，无法上传材料')
+  const files = Array.from(e.target.files || []);
   for (const file of files) {
-    const created = await createMaterial({
-      batch_id: activeBatch.value.id,
-      title: file.name.replace(/\.[^.]+$/, ''),
-      category: '待识别',
-      score: 0,
-      application_text: '由智能填表页上传生成的材料草稿'
-    })
-    if (created.code !== 200) { alert(created.msg); continue }
-    const fd = new FormData()
-    fd.append('file', file)
-    fd.append('material_id', created.data.id)
-    await uploadFile(fd)
+    const data = new FormData();
+    data.append('file', file);
+    const res = await uploadFile(data);
+    if (res.code === 200) form.value = res.data.form;
+    else alert(res.msg);
   }
-  e.target.value = ''
-  loadMaterials()
+  e.target.value = '';
 }
+
 async function handleAiMatch() {
-  const res = await aiMatch({ material_id: materials.value[0]?.id })
-  if (res.code === 200) aiPreview.value = res.data
-  alert(res.msg || 'AI匹配完成')
+  const res = await aiMatch({});
+  if (res.code === 200) {
+    form.value = res.data;
+    alert('已刷新智能填表结果');
+  } else {
+    alert(res.msg);
+  }
 }
-onMounted(loadMaterials)
+
+onMounted(loadSmartResult);
 </script>
 
 <style scoped>
-.smart-fill { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
-.top-bar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
-.top-bar-left h2 { font-size: 22px; font-weight: var(--font-weight-semibold); color: var(--color-text); }
+.smart-fill { display: flex; flex-direction: column; gap: 24px; }
+.top-bar { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.top-bar-left h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .top-bar-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-
-.actions { display: flex; gap: 10px; }
+.actions { display: flex; gap: 12px; }
 .btn-upload, .btn-ai {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 10px 20px; border-radius: var(--radius-full);
-  font-size: 14px; font-weight: var(--font-weight-medium);
-  cursor: pointer; transition: all var(--duration-fast) var(--easing-spring);
+  display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 18px;
+  border-radius: var(--radius-full); border: none; cursor: pointer; font-weight: var(--font-weight-medium);
 }
-.btn-upload { border: 1px solid var(--color-border); background: var(--color-white); color: var(--color-text); }
-.btn-upload:hover { border-color: var(--color-primary); color: var(--color-primary); box-shadow: var(--shadow-level-2); transform: translateY(-1px); }
-.btn-ai { border: none; background: var(--color-primary-gradient); color: white; box-shadow: var(--shadow-level-1); }
-.btn-ai:hover:not(:disabled) { box-shadow: var(--shadow-elevated); transform: translateY(-1px); }
-.btn-ai:active:not(:disabled) { transform: translateY(0) scale(0.98); }
-.btn-ai:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.workspace { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; }
-
-/* ---- 玻璃质感面板 ---- */
-.glass-panel {
-  background: var(--glass-bg);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-xl);
-  padding: 24px;
-  box-shadow: var(--glass-shadow);
-  transition: all var(--duration-normal) var(--easing-standard);
-  animation: fadeInUp 0.5s var(--easing-spring) both;
+.btn-upload { background: var(--color-surface); color: var(--color-text-primary); border: 1px solid var(--color-border); }
+.btn-ai { background: var(--gradient-primary); color: white; box-shadow: 0 4px 16px rgba(95, 99, 242, 0.3); }
+.workspace { display: grid; grid-template-columns: 1fr; gap: 24px; }
+.panel { padding: 20px; border-radius: var(--radius-xl); }
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: var(--font-weight-semibold); }
+.panel-count { font-size: 13px; color: var(--color-text-secondary); }
+.score-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.score-card { padding: 14px; border-radius: var(--radius-lg); background: var(--color-surface); border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 6px; }
+.score-card span { font-size: 13px; color: var(--color-text-secondary); }
+.score-card strong { font-size: 24px; }
+.score-card.total strong { color: var(--color-primary); }
+.notice-card { padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); color: var(--color-text-secondary); line-height: 1.7; }
+.submit-btn { margin-top: 18px; }
+@media (max-width: 768px) {
+  .top-bar { flex-direction: column; }
+  .score-grid { grid-template-columns: repeat(2, 1fr); }
 }
-.glass-panel:nth-child(2) { animation-delay: 0.1s; }
-.glass-panel:hover { box-shadow: var(--glass-shadow-hover); }
-
-.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.panel-header h3 { font-size: 16px; font-weight: var(--font-weight-semibold); color: var(--color-text); display: flex; align-items: center; gap: 8px; }
-.panel-header h3 VIcon { font-size: 20px; color: var(--color-primary); }
-.panel-count { font-size: 13px; color: var(--color-text-secondary); background: var(--color-gray-bg); padding: 2px 10px; border-radius: var(--radius-full); }
-
-.material-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
-.material-card {
-  padding: 16px; border-radius: var(--radius-md);
-  border: 1px solid var(--color-border); display: flex; flex-direction: column; gap: 10px;
-  opacity: 0; animation: fadeInUp 0.4s var(--easing-spring) forwards;
-  transition: all var(--duration-fast) var(--easing-spring); cursor: default;
-}
-.material-card:hover { border-color: transparent; box-shadow: var(--shadow-level-2); transform: translateY(-2px); }
-.card-top { display: flex; align-items: flex-start; gap: 8px; }
-.file-icon { font-size: 18px; color: var(--color-primary); flex-shrink: 0; margin-top: 1px; }
-.card-label { font-size: 14px; color: var(--color-text); line-height: var(--line-height-normal); word-break: break-all; }
-.card-badge { font-size: 11px; padding: 2px 8px; border-radius: var(--radius-sm); align-self: flex-start; font-weight: var(--font-weight-medium); }
-
-.empty-state { text-align: center; padding: 32px 16px; border-style: dashed; display: flex; flex-direction: column; align-items: center; gap: 8px; opacity: 1 !important; animation: none !important; }
-.empty-icon { font-size: 36px; color: var(--color-text-tertiary); margin-bottom: 4px; }
-.empty-state p { font-size: 14px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
-.empty-state span { font-size: 12px; color: var(--color-text-tertiary); }
-
-.preview-placeholder {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; height: 300px;
-  border: 2px dashed var(--color-border); border-radius: var(--radius-lg);
-  color: var(--color-gray); transition: all var(--duration-normal) var(--easing-standard);
-}
-.preview-placeholder:hover { border-color: var(--color-primary-light); background: var(--gradient-primary-subtle); }
-.placeholder-icon { font-size: 48px; color: var(--color-text-tertiary); }
-.preview-result { display: flex; flex-direction: column; gap: 10px; padding: 20px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-white); color: var(--color-text-secondary); }
-.preview-result p { font-size: 14px; }
-.preview-result ul { padding-left: 18px; font-size: 13px; }
-
-@media (max-width: 768px) { .workspace { grid-template-columns: 1fr; } .top-bar { flex-direction: column; } }
 </style>
