@@ -1,0 +1,174 @@
+-- ============================================================
+-- 灵枢 · 综测核心引擎 · 数据库初始化脚本
+-- 使用：mysql -u root -p < server/db/init.sql
+-- 说明：app启动时也会自动执行此脚本建库建表
+-- ============================================================
+
+CREATE DATABASE IF NOT EXISTS lingshu_zongce CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE lingshu_zongce;
+
+-- ============================================================
+-- 一、用户表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  role ENUM('student','class_leader','teacher') NOT NULL DEFAULT 'student',
+  real_name VARCHAR(50) DEFAULT '',
+  class_id INT DEFAULT NULL,
+  phone VARCHAR(20) DEFAULT '',
+  avatar VARCHAR(255) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 二、规则来源表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rule_sources (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  source_type ENUM('file','text') NOT NULL,
+  file_name VARCHAR(255) DEFAULT '',
+  file_path VARCHAR(500) DEFAULT '',
+  original_text LONGTEXT,
+  status ENUM('pending','parsed') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 三、规则项表（★核心★ scoring/limit/conflict）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS rule_items (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  source_id INT DEFAULT NULL,
+  category VARCHAR(50) DEFAULT NULL,
+  description TEXT NOT NULL,
+  level VARCHAR(20) DEFAULT NULL,
+  score DECIMAL(5,2) DEFAULT NULL,
+  rule_type ENUM('scoring','limit','conflict') NOT NULL DEFAULT 'scoring',
+  limit_value DECIMAL(5,2) DEFAULT NULL,
+  scope VARCHAR(50) DEFAULT NULL,
+  strategy VARCHAR(50) DEFAULT NULL,
+  max_times INT DEFAULT 1,
+  conflict_group VARCHAR(100) DEFAULT NULL,
+  proof_required JSON DEFAULT NULL,
+  status ENUM('pending_confirm','confirmed') DEFAULT 'pending_confirm',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 四、材料表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS materials (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  title VARCHAR(200) DEFAULT '',
+  category VARCHAR(50) DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 五、附件表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS attachments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  material_id INT NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  file_size INT DEFAULT 0,
+  file_type VARCHAR(50) DEFAULT '',
+  ai_label VARCHAR(100) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 六、材料识别表（★核心★）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS material_recognitions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  material_id INT NOT NULL,
+  category VARCHAR(50) DEFAULT '',
+  explanation TEXT,
+  matched_rule_ids JSON DEFAULT NULL,
+  confidence DECIMAL(5,4) DEFAULT NULL,
+  confirm_status ENUM('pending','confirmed','dismissed') DEFAULT 'pending',
+  raw_ai_response JSON DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 七、评定结果表（★ 通用 FillData.evaluation 格式 ★）
+-- ============================================================
+-- dimension_scores 采用 dimensions 数组，兼容任何综测体系
+-- 结构: { dimensions: [{ id, name, weight, score, raw_score, max_score, detail_text, items: [...] }] }
+CREATE TABLE IF NOT EXISTS evaluation_results (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  total_score DECIMAL(6,2) DEFAULT 0.00,
+  grade VARCHAR(10) DEFAULT NULL,
+  formula TEXT DEFAULT NULL,
+  dimension_scores JSON DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 八、填表模板表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS fill_templates (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  name VARCHAR(200) NOT NULL,
+  file_path VARCHAR(500) NOT NULL,
+  template_type VARCHAR(20) DEFAULT 'docx',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 九、模板字段映射表（★ 核心 ★ 占位符 → FillData 数据路径）
+-- ============================================================
+DROP TABLE IF EXISTS fill_fields;
+CREATE TABLE IF NOT EXISTS fill_template_mappings (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  template_id INT NOT NULL,
+  placeholder VARCHAR(100) NOT NULL,
+  field_label VARCHAR(100) DEFAULT '',
+  data_path VARCHAR(300) NOT NULL,
+  field_type ENUM('text','number','loop','table') DEFAULT 'text',
+  format VARCHAR(50) DEFAULT NULL,
+  sort_order INT DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 十、AI任务追踪表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS ai_tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  target_type VARCHAR(50) NOT NULL,
+  target_id INT NOT NULL,
+  status ENUM('pending','processing','completed','failed') DEFAULT 'pending',
+  result JSON DEFAULT NULL,
+  error_msg TEXT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMP NULL DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 十一、填表结果表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS fill_results (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  template_id INT NOT NULL,
+  result_path VARCHAR(500) NOT NULL,
+  original_name VARCHAR(300) DEFAULT '',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

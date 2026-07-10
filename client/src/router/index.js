@@ -3,10 +3,10 @@ const routes = [
   { path: "/login", name: "Login", component: () => import("../views/auth/Login.vue"), meta: { layout: "auth" } },
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
-  /* 模块一 */
-  { path: "/module1/smart-fill", name: "SmartFill", component: () => import("../views/module1/SmartFill.vue"), meta: { layout: "main", title: "智能填表" } },
-  { path: "/module1/batch-fill", name: "BatchFill", component: () => import("../views/module1/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
-  { path: "/module1/chat-fill", name: "ChatFill", component: () => import("../views/module1/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
+  /* 综测核心 */
+  { path: "/zongce/smart-fill", name: "SmartFill", component: () => import("../views/zongce/SmartFill.vue"), meta: { layout: "main", title: "智能填表" } },
+  { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
+  { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
   /* 模块二 */
   { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "评定结果" } },
   { path: "/module2/profile", name: "PersonalProfile", component: () => import("../views/module2/PersonalProfile.vue"), meta: { layout: "main", title: "个人画像" } },

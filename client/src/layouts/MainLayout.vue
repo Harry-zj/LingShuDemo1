@@ -74,7 +74,7 @@ const navItems = computed(() => {
   }
   return [
     { to: '/home', icon: 'mdi:home-outline', text: '首页' },
-    { to: '/module1/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
+    { to: '/zongce/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
     { to: '/module2/evaluation', icon: 'mdi:chart-pie-outline', text: '个性评定' },
     { to: '/module3/student', icon: 'mdi:account-group-outline', text: '信息管理' }
   ];

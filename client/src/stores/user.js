@@ -7,7 +7,7 @@ export const useUserStore = defineStore("user", {
   },
   getters: {
     isLoggedIn: (s) => !!s.token,
-    role: (s) => s.user?.role || "",
+    userRole: (s) => s.user?.role || "",
   },
   actions: {
     setAuth(token, user) {

@@ -15,7 +15,7 @@
         <p class="hub-subtitle">五维综测 · 智能中枢</p>
         <p class="hub-desc">基于多模态语义对齐的高校综测智能填写与决策平台</p>
         <div class="hub-actions">
-          <button class="btn-primary" @click="goTo('/module1/smart-fill')">
+          <button class="btn-primary" @click="goTo('/zongce/smart-fill')">
             <VIcon icon="mdi:lightning-bolt" /> 开始填表
           </button>
           <button class="btn-hollow" @click="goTo('/module2/evaluation')">
@@ -86,7 +86,7 @@ const stats = [
 ];
 
 const modules = [
-  { title: '智能填表', desc: 'AI自动解析材料与规则，精准匹配填入表格', path: '/module1/smart-fill', icon: 'mdi:auto-fix', iconBg: 'rgba(79,70,229,0.08)', meridianColor: '#4F46E5', tag: 'AI核心' },
+  { title: '智能填表', desc: 'AI自动解析材料与规则，精准匹配填入表格', path: '/zongce/smart-fill', icon: 'mdi:auto-fix', iconBg: 'rgba(79,70,229,0.08)', meridianColor: '#4F46E5', tag: 'AI核心' },
   { title: '批量填表', desc: '一键批量生成多人文档，告别重复劳动', path: '/module1/batch-fill', icon: 'mdi:file-multiple-outline', iconBg: 'rgba(5,150,105,0.08)', meridianColor: '#059669', tag: '提效' },
   { title: '对话填表', desc: 'AI引导式提问，边聊边填', path: '/module1/chat-fill', icon: 'mdi:chat-processing-outline', iconBg: 'rgba(124,58,237,0.08)', meridianColor: '#7C3AED', tag: '智能' },
   { title: '个性评定', desc: '五维评分·雷达图·班级对比', path: '/module2/evaluation', icon: 'mdi:chart-radar', iconBg: 'rgba(217,119,6,0.08)', meridianColor: '#D97706', tag: '分析' },
