@@ -21,17 +21,35 @@ async function seedDevData(conn) {
     try { await conn.execute(mapSQL, m); } catch (e) {}
   }
 
-  // ---- 评分结果（张三，与 fillService MOCK_DATA 一致） ----
-  const evalData = require("./seed-evaluation.json");
+  // ---- 个性评定结果（张三，三学年数据，适配 module2 查询） ----
+  const year1Data = require("./seed-evaluation-year1.json");
+  const year2Data = require("./seed-evaluation-year2.json");
+  const year3Data = require("./seed-evaluation-year3.json");
   await conn.execute(
-    "INSERT IGNORE INTO evaluation_results (id, user_id, total_score, grade, formula, dimension_scores) VALUES (1, 2, 82.64, '优', 'F1*10%+F2*65%+F3*25%', ?)",
-    [JSON.stringify(evalData)]
+    "INSERT IGNORE INTO evaluation_results (id, user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (10, 2, 103, 73.55, '良', 'F1*10%+F2*65%+F3*25%', ?)",
+    [JSON.stringify(year1Data)]
+  );
+  await conn.execute(
+    "INSERT IGNORE INTO evaluation_results (id, user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (11, 2, 102, 76.45, '良', 'F1*10%+F2*65%+F3*25%', ?)",
+    [JSON.stringify(year2Data)]
+  );
+  await conn.execute(
+    "INSERT IGNORE INTO evaluation_results (id, user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (12, 2, 101, 81.50, '良', 'F1*10%+F2*65%+F3*25%', ?)",
+    [JSON.stringify(year3Data)]
   );
 
   // ---- 评估批次 ----
   await conn.execute(
     "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (101, '2025-2026学年本科学生综合素质测评', '学生上传支撑材料后，由智能填表模块生成综测评价表结果。', '2026-07-01 08:00:00', '2026-07-25 23:59:59', '评价表结果由智能填表模块生成，三类评价主体依次评价。', 'published', 2, '张三', ?)",
     [JSON.stringify({ allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false })]
+  );
+  await conn.execute(
+    "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (102, '2024-2025学年本科学生综合素质测评', '历史批次——大二学年综测评定', '2025-07-01 08:00:00', '2025-07-25 23:59:59', '', 'published', 2, '张三', ?)",
+    [JSON.stringify({})]
+  );
+  await conn.execute(
+    "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (103, '2023-2024学年本科学生综合素质测评', '历史批次——大一学年综测评定', '2024-07-01 08:00:00', '2024-07-25 23:59:59', '', 'published', 2, '张三', ?)",
+    [JSON.stringify({})]
   );
 
   // ---- 评估表单（张三，scores结构与MOCK_DATA对齐） ----
@@ -80,7 +98,25 @@ async function seedDevData(conn) {
     [JSON.stringify({ submitDeadline: '2026-07-25 23:59:59', allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false, publishNotice: '请在截止时间前确认智能填表结果，并提交至班级测评小组。' })]
   );
 
-  console.log("[DB] 种子完成: 用户(zhangsan) 映射(" + maps.length + "条) 评分(1条) 表单(1条) 条目(14条)");
+  // ---- 个性评定配置（权重 & 等级阈值） ----
+  const formulaFWeights = { F1: 0.10, F2: 0.65, F3: 0.25 };
+  const gradeLevels = [
+    { min: 90, label: "优秀", color: "#059669", bg: "#ECFDF5" },
+    { min: 80, label: "良好", color: "#4F46E5", bg: "#EEF2FF" },
+    { min: 70, label: "中等", color: "#D97706", bg: "#FFFBEB" },
+    { min: 60, label: "合格", color: "#DC2626", bg: "#FEF2F2" },
+    { min: 0,  label: "待提升", color: "#9CA3AF", bg: "#F3F4F6" }
+  ];
+  await conn.execute(
+    "INSERT IGNORE INTO evaluation_config (config_key, config_value, description) VALUES ('formula_f', ?, '综测总分权重 F=F1*w1+F2*w2+F3*w3')",
+    [JSON.stringify(formulaFWeights)]
+  );
+  await conn.execute(
+    "INSERT IGNORE INTO evaluation_config (config_key, config_value, description) VALUES ('grade_levels', ?, '等级阈值配置')",
+    [JSON.stringify(gradeLevels)]
+  );
+
+  console.log("[DB] 种子完成: 用户(zhangsan) 映射(" + maps.length + "条) 评定(3学年) 批次(3个) 配置(2项) 表单(1条) 条目(14条)");
 }
 
 module.exports = { seedDevData };

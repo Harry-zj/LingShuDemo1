@@ -48,6 +48,16 @@ async function initDatabase() {
 
     console.log("[DB] 建表完成，开始种子数据...");
 
+    // 迁移：evaluation_results 表结构升级（兼容旧表）
+    const migrations = [
+      "ALTER TABLE evaluation_results ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id",
+      "ALTER TABLE evaluation_results DROP INDEX uk_user",
+      "ALTER TABLE evaluation_results ADD UNIQUE KEY uk_user_batch (user_id, batch_id)",
+    ];
+    for (const sql of migrations) {
+      try { await conn.query(sql); } catch (_) { /* 列/索引已存在则跳过 */ }
+    }
+
     // 种子数据（INSERT IGNORE 幂等安全，只含张三测试用户）
     await seedDevData(conn);
 

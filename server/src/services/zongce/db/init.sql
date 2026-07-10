@@ -113,16 +113,30 @@ CREATE TABLE IF NOT EXISTS material_recognitions (
 -- ============================================================
 -- dimension_scores 采用 dimensions 数组，兼容任何综测体系
 -- 结构: { dimensions: [{ id, name, weight, score, raw_score, max_score, detail_text, items: [...] }] }
+-- 个性评定结果表（每个用户每批次一条记录，支持多学年历史）
+-- dimension_scores JSON: { aScores:{}, bScores:{}, scores:{}, classAvg:{}, rank, totalStudents, majorRank, majorTotal }
 CREATE TABLE IF NOT EXISTS evaluation_results (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   total_score DECIMAL(6,2) DEFAULT 0.00,
   grade VARCHAR(10) DEFAULT NULL,
   formula TEXT DEFAULT NULL,
   dimension_scores JSON DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_user (user_id)
+  UNIQUE KEY uk_user_batch (user_id, batch_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ============================================================
+-- 七之二、个性评定配置表（权重 & 等级阈值，支持管理员动态调整）
+-- ============================================================
+CREATE TABLE IF NOT EXISTS evaluation_config (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  config_key VARCHAR(50) NOT NULL UNIQUE,
+  config_value JSON DEFAULT NULL,
+  description VARCHAR(200) DEFAULT '',
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
