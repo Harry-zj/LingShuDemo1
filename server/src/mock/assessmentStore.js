@@ -238,6 +238,25 @@ function recalcScores(form) {
   return form;
 }
 
+function canStudentEditForm(form) {
+  if (!form) return false;
+  if (form.status === "smart_ready") return !!settings.allowStudentEdit;
+  if (form.status && form.status.startsWith("returned")) return !!settings.allowReturnEdit;
+  return false;
+}
+
+function getStudentReadonlyReason(form) {
+  if (canStudentEditForm(form)) return "";
+  if (form.status === "smart_ready" && !settings.allowStudentEdit) return "当前批次未开放学生修改";
+  if (form.status && form.status.startsWith("returned") && !settings.allowReturnEdit) return "当前批次未开放退回后修改";
+  if (form.status === "pending_class_committee") return "已提交给班级测评小组，待退回后才可继续修改";
+  if (form.status === "pending_counselor") return "班级测评小组已通过，正在等待辅导员评价";
+  if (form.status === "pending_student_affairs") return "辅导员已通过，正在等待学生工作处评价";
+  if (form.status === "approved") return "学生工作处已认定通过，当前不可修改";
+  if (form.status === "rejected") return "当前结果已不予认定，当前不可修改";
+  return "当前状态不可修改";
+}
+
 function groupedItems(form) {
   return formStructure.map(section => ({
     ...section,
@@ -261,6 +280,9 @@ function formView(form) {
     status_label: STATUS_LABEL[form.status] || form.status,
     level: form.manual_level || form.level || calculateLevel(form.scores.total),
     auto_level: calculateLevel(form.scores.total),
+    can_student_edit: canStudentEditForm(form),
+    can_student_submit: canStudentEditForm(form),
+    readonly_reason: getStudentReadonlyReason(form),
     grouped_items: groupedItems(form),
   };
 }
@@ -390,16 +412,28 @@ function uploadEvidence(userId, file) {
 function updateFormItems(userId, payload) {
   const form = forms.find(f => f.student_id === Number(userId));
   if (!form) throw new Error("未找到智能填表结果");
+  if (!canStudentEditForm(form)) throw new Error(getStudentReadonlyReason(form));
   if (payload.personal_summary !== undefined) form.personal_summary = String(payload.personal_summary);
   if (Array.isArray(payload.items)) {
-    payload.items.forEach(input => {
-      const item = form.items.find(i => i.id === Number(input.id));
-      if (!item) return;
-      if (input.title !== undefined) item.title = String(input.title);
-      if (input.reason !== undefined) item.reason = String(input.reason);
-      if (input.score !== undefined) item.score = Number(input.score) || 0;
-      if (input.section !== undefined) item.section = String(input.section);
-      if (input.subKey !== undefined) item.subKey = String(input.subKey);
+    const oldItems = clone(form.items);
+    form.items = payload.items.map(input => {
+      const oldItem = oldItems.find(i => i.id === Number(input.id));
+      const section = String(input.section || oldItem?.section || "F3");
+      const validSection = formStructure.find(s => s.key === section) || formStructure[2];
+      const subKey = String(input.subKey || oldItem?.subKey || validSection.children[0]?.key || "");
+      const validChild = validSection.children.find(child => child.key === subKey) || validSection.children[0];
+      return {
+        id: oldItem?.id || nextId++,
+        section: validSection.key,
+        subKey: validChild?.key || "",
+        title: String(input.title ?? oldItem?.title ?? "新增加分项目"),
+        reason: String(input.reason ?? oldItem?.reason ?? ""),
+        score: Number(input.score) || 0,
+        evidence_ids: Array.isArray(input.evidence_ids)
+          ? input.evidence_ids.map(Number).filter(Boolean)
+          : (oldItem?.evidence_ids || []),
+        editable: input.editable !== undefined ? !!input.editable : true,
+      };
     });
   }
   form.manual_level = "";
@@ -422,6 +456,8 @@ function setFormLevel(formId, level, operator) {
 function submitSmartResult(userId) {
   const form = forms.find(f => f.student_id === Number(userId));
   if (!form) throw new Error("未找到智能填表结果");
+  if (!canStudentEditForm(form)) throw new Error(getStudentReadonlyReason(form));
+  if (!form.items.length) throw new Error("请至少保留一项综测内容后再提交");
   form.status = "pending_class_committee";
   form.updated_at = now();
   recalcScores(form);
