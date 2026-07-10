@@ -1,0 +1,65 @@
+{
+  "dimensions": [
+    {
+      "id": "F1_basic",
+      "name": "基本素质F1",
+      "weight": 0.10,
+      "score": 9.8,
+      "raw_score": 98,
+      "max_score": 100,
+      "detail_text": "思想政治表现良好；道德品质良好，寝室卫生1次不合格扣2分；学习态度端正；严格遵守校纪校规；积极参加体育锻炼，体测达标",
+      "items": [
+        { "index":1, "label":"思想政治表现A1", "score":20, "max_score":20, "detail_text":"思想政治表现良好，全勤参加政治学习及形势与政策课", "evidences":[], "sub_items":[] },
+        { "index":2, "label":"道德品质修养A2", "score":18, "max_score":20, "detail_text":"道德品质良好，寝室卫生1次不合格扣2分", "evidences":[], "sub_items":[] },
+        { "index":3, "label":"学习态度作风A3", "score":20, "max_score":20, "detail_text":"学习态度端正，无旷课迟到早退记录", "evidences":[], "sub_items":[] },
+        { "index":4, "label":"组织纪律观念A4", "score":20, "max_score":20, "detail_text":"严格遵守校纪校规，无任何违纪处分", "evidences":[], "sub_items":[] },
+        { "index":5, "label":"身心健康素质A5", "score":20, "max_score":20, "detail_text":"积极参加体育锻炼和班级活动，体测达标", "evidences":[], "sub_items":[] }
+      ]
+    },
+    {
+      "id": "F2_course",
+      "name": "课程学习成绩F2",
+      "weight": 0.65,
+      "score": 58.64,
+      "raw_score": 90.21,
+      "max_score": 100,
+      "detail_text": "9门课程加权平均分90.21",
+      "items": [
+        {
+          "index":1, "label":"课程学习成绩", "score":90.21, "max_score":100,
+          "detail_text":"9门课程加权平均分90.21", "evidences":[],
+          "sub_items": [
+            { "name":"高等数学（上）", "credit":5, "score":92 },
+            { "name":"大学英语（三）", "credit":4, "score":88 },
+            { "name":"C语言程序设计", "credit":4, "score":95 },
+            { "name":"大学物理（上）", "credit":3, "score":85 },
+            { "name":"思想道德与法治", "credit":2, "score":90 },
+            { "name":"数据结构", "credit":4, "score":91 },
+            { "name":"线性代数", "credit":3, "score":87 },
+            { "name":"马克思主义原理", "credit":2, "score":86 },
+            { "name":"体育（1）", "credit":1, "score":90 }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "F3_innovation",
+      "name": "创新素质与实践能力F3",
+      "weight": 0.25,
+      "score": 14.2,
+      "raw_score": 56.8,
+      "max_score": 100,
+      "detail_text": "",
+      "items": [
+        { "index":1, "label":"职业技能类B1", "score":8.0, "max_score":30, "detail_text":"CET-6通过(+4分)，国家计算机二级证书(+4分)", "evidences":[], "sub_items":[{"name":"CET-6 通过","score":"4.0"},{"name":"国家计算机二级证书","score":"4.0"}] },
+        { "index":2, "label":"科技学术类B2", "score":18.0, "max_score":30, "detail_text":"全国大学生数学建模竞赛省级二等奖(+8分)，SCI二区论文第二作者(+10分)", "evidences":[], "sub_items":[{"name":"全国大学生数学建模竞赛二等奖（省级）","score":"8.0"},{"name":"SCI二区论文发表（第二作者）","score":"10.0"}] },
+        { "index":3, "label":"社会工作类B3", "score":6.0, "max_score":30, "detail_text":"院学生会学习部副部长(+4分)，班级团支书(+2分)", "evidences":[], "sub_items":[{"name":"院学生会学习部副部长","score":"4.0"},{"name":"班级团支书","score":"2.0"}] },
+        { "index":4, "label":"宣传报道类B4", "score":3.0, "max_score":30, "detail_text":"校报发表新闻稿2篇(+3分)", "evidences":[], "sub_items":[{"name":"校报发表新闻稿2篇","score":"3.0"}] },
+        { "index":5, "label":"文学艺术创作类B5", "score":0, "max_score":30, "detail_text":"本学年无相关成果", "evidences":[], "sub_items":[] },
+        { "index":6, "label":"文艺与体育竞赛类B6", "score":8.0, "max_score":30, "detail_text":"校运会100米第二名(+5分)，校园歌手大赛一等奖(+3分)", "evidences":[], "sub_items":[{"name":"校运会100米第二名","score":"5.0"},{"name":"校园歌手大赛一等奖","score":"3.0"}] },
+        { "index":7, "label":"其他实践活动类B7", "score":7.5, "max_score":30, "detail_text":"青马小组组长(+3分)，阳光长跑两学期完成(+3分)，单词打卡270天以上(+1.5分)", "evidences":[], "sub_items":[{"name":"青马小组组长","score":"3.0"},{"name":"阳光长跑两学期均完成","score":"3.0"},{"name":"英语单词/听力打卡270天以上","score":"1.5"}] },
+        { "index":8, "label":"劳育类B8", "score":6.3, "max_score":30, "detail_text":"暑期社会实践优秀团队(+3分)，校级优秀寝室(+1分)，教务办值班6次(+1.8分)，社区劳动2次(+0.5分)", "evidences":[], "sub_items":[{"name":"暑期社会实践优秀团队","score":"3.0"},{"name":"优秀寝室（校级）","score":"1.0"},{"name":"教务办值班（6次×0.3分）","score":"1.8"},{"name":"社区劳动活动（2次）","score":"0.5"}] }
+      ]
+    }
+  ]
+}

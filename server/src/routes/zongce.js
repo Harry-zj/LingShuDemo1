@@ -41,5 +41,7 @@ router.post("/templates/upload",  auth, upload.single("file"), fillCtrl.uploadTe
 router.get("/templates",         auth, fillCtrl.getTemplates);
 router.post("/fill/:templateId", auth, fillCtrl.doFill);
 router.get("/fill/:id/download", auth, fillCtrl.downloadFill);
+router.get("/mock-data",         auth, fillCtrl.getMockData);
+
 
 module.exports = router;

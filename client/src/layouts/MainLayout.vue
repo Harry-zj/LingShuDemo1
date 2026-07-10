@@ -19,7 +19,7 @@
           <VIcon icon="mdi:home-outline" class="nav-icon" />
           <span class="nav-text">首页</span>
         </router-link>
-        <router-link to="/module1/smart-fill" class="nav-item" active-class="active">
+        <router-link to="/zongce/smart-fill" class="nav-item" active-class="active">
           <VIcon icon="mdi:file-document-edit-outline" class="nav-icon" />
           <span class="nav-text">智能填表</span>
         </router-link>

@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 require("dotenv").config();
 
+const { seedDevData } = require("../services/zongce/db/seed");
+
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
@@ -49,6 +51,9 @@ async function initDatabase() {
       "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",
       "ALTER TABLE rule_items ADD COLUMN scope VARCHAR(50) DEFAULT NULL AFTER limit_value",
       "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
+      "ALTER TABLE fill_templates ADD COLUMN template_type VARCHAR(20) DEFAULT 'docx' AFTER file_path",
+      "ALTER TABLE evaluation_results ADD COLUMN grade VARCHAR(10) DEFAULT NULL AFTER total_score",
+      "ALTER TABLE evaluation_results ADD COLUMN formula TEXT DEFAULT NULL AFTER grade",
     ];
     for (const s of migrations) {
       try { await conn.execute(s); } catch (e) {
@@ -65,6 +70,9 @@ async function initDatabase() {
         [pwd]
       );
     } catch (e) { /* 忽略 */ }
+
+    // ★ 种子数据（INSERT IGNORE 幂等安全）
+    await seedDevData(conn);
 
     console.log("[DB] lingshu_zongce 初始化完成");
   } catch (err) {

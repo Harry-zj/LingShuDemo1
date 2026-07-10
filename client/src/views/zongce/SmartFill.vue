@@ -255,7 +255,30 @@ async function doFill(tplId) {
   if (res.code === 200) alert(res.msg)
   else alert(res.msg)
 }
-function downloadFill() { alert('下载功能待实现') }
+function downloadFill(id) {
+  // 通过 blob 下载文件
+  api.downloadFill(id).then(blob => {
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    // 从响应头中提取文件名，或使用默认名
+    a.download = '综测登记表_已填写.docx'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }).catch(e => {
+    // blob 响应的错误需要特殊处理
+    if (e.response?.data instanceof Blob) {
+      e.response.data.text().then(t => {
+        try { const j = JSON.parse(t); alert(j.msg || '下载失败') }
+        catch (_) { alert('下载失败，请先执行填表') }
+      })
+    } else {
+      alert('下载失败：' + (e.response?.data?.msg || e.message))
+    }
+  })
+}
 </script>
 
 <style scoped>

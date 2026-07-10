@@ -79,3 +79,6 @@ export const doFill = (templateId) =>
 
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });
+
+export const getMockData = () =>
+  request.get("/zongce/mock-data");
