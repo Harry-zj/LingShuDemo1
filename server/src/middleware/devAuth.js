@@ -6,10 +6,10 @@
  */
 module.exports = (req, res, next) => {
   req.user = {
-    id: 2,
-    name: '张三',
-    username: 'zhangsan',
-    role: 'student',
+    id: 1,
+    name: '管理员',
+    username: 'admin',
+    role: 'admin',
   };
   next();
 };

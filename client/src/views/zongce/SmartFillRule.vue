@@ -217,10 +217,10 @@ function confirmAll() {
 }
 .upload-zone:hover { border-color: var(--color-primary); }
 .upload-icon { font-size: 32px; }
-.hint { font-size: 12px; color: #999; }
+.hint { font-size: 12px; color: var(--color-text-tertiary); }
 
 .progress-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.progress-bar { flex: 1; height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+.progress-bar { flex: 1; height: 8px; background: var(--color-bg); border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--color-primary); border-radius: 4px; transition: width 0.3s; }
 .progress-text { font-size: 13px; color: var(--color-primary); white-space: nowrap; }
 .upload-right { display: flex; flex-direction: column; gap: 8px; }
@@ -240,8 +240,8 @@ function confirmAll() {
 .rule-summary { }
 .rule-table-wrap { overflow-x: auto; }
 .rule-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.rule-table th { text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--color-border); color: #666; font-weight: 500; white-space: nowrap; }
-.rule-table td { padding: 8px 6px; border-bottom: 1px solid #f0f0f0; }
+.rule-table th { text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--color-border); color: var(--color-text-secondary); font-weight: 500; white-space: nowrap; }
+.rule-table td { padding: 8px 6px; border-bottom: 1px solid var(--color-border); }
 .rule-table tr.dimmed { opacity: 0.35; }
 .desc-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -250,7 +250,7 @@ function confirmAll() {
 .btn { padding: 8px 20px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: var(--color-primary); color: #fff; }
-.btn-text { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: #fff; cursor: pointer; font-size: 12px; font-family: inherit; }
+.btn-text { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); cursor: pointer; font-size: 12px; font-family: inherit; }
 .btn-text.primary { color: var(--color-primary); border-color: var(--color-primary); }
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .badge { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-tag); background: #FEF7E0; color: #E37400; }
@@ -260,16 +260,16 @@ function confirmAll() {
 .rule-group { border: 1px solid var(--color-border); border-radius: var(--radius-sm); margin-bottom: 10px; overflow: hidden; }
 .group-header {
   display: flex; align-items: center; gap: 10px; padding: 12px 16px;
-  background: #fafafa; cursor: pointer; user-select: none;
+  background: var(--color-surface-variant); cursor: pointer; user-select: none;
 }
-.group-header:hover { background: #f0f0f0; }
-.group-arrow { font-size: 12px; color: #999; width: 16px; }
+.group-header:hover { background: var(--color-surface-variant); }
+.group-arrow { font-size: 12px; color: var(--color-text-tertiary); width: 16px; }
 .group-name { font-weight: 600; font-size: 15px; }
-.group-count { font-size: 13px; color: #999; margin-right: auto; }
+.group-count { font-size: 13px; color: var(--color-text-tertiary); margin-right: auto; }
 .group-body { padding: 0 16px 12px; }
 .sub-group { margin-top: 12px; }
 .sub-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.sub-label { font-size: 13px; font-weight: 500; color: #666; }
-.sub-count { font-size: 12px; color: #999; }
+.sub-label { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); }
+.sub-count { font-size: 12px; color: var(--color-text-tertiary); }
 .btn-text.sm { padding: 2px 10px; font-size: 12px; }
 </style>

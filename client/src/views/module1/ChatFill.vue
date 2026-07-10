@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="stub-page">
     <div class="page-header">
       <h2>对话式填表</h2>
@@ -32,11 +32,11 @@
 }
 .stub-icon-wrapper {
   width: 72px; height: 72px; border-radius: 50%;
-  background: rgba(156,39,176,0.1);
+  background: var(--color-wuxing-fire);
   display: flex; align-items: center; justify-content: center;
   margin-bottom: 8px;
 }
-.stub-icon { font-size: 36px; color: #9C27B0; }
+.stub-icon { font-size: 36px; color: var(--color-meiyu); }
 .stub-card h3 { font-size: 18px; font-weight: var(--font-weight-semibold); color: var(--color-text); }
 .stub-card > p { font-size: 14px; color: var(--color-text-secondary); }
 .skeleton-preview { width: 100%; max-width: 400px; margin-top: 16px; }

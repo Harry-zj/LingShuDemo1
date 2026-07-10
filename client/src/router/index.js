@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { useUserStore } from "../stores/user";
 const routes = [
   { path: "/login", name: "Login", component: () => import("../views/auth/Login.vue"), meta: { layout: "auth" } },
   { path: "/register", name: "Register", component: () => import("../views/auth/Register.vue"), meta: { layout: "auth" } },
@@ -14,10 +15,22 @@ const routes = [
   { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告" } },
   /* 模块三 */
   { path: "/module3/student", name: "StudentDashboard", component: () => import("../views/module3/StudentDashboard.vue"), meta: { layout: "main", title: "我的综测" } },
-  { path: "/module3/class-leader", name: "ClassLeaderDesk", component: () => import("../views/module3/ClassLeaderDesk.vue"), meta: { layout: "main", title: "评价学生列表" } },
-  { path: "/module3/teacher", name: "TeacherConsole", component: () => import("../views/module3/TeacherConsole.vue"), meta: { layout: "main", title: "统计总览" } },
-  { path: "/module3/review-detail/:id", name: "ReviewDetail", component: () => import("../views/module3/ReviewDetail.vue"), meta: { layout: "main", title: "材料审核详情" } },
-  { path: "/module3/batch-manage", name: "BatchManage", component: () => import("../views/module3/BatchManage.vue"), meta: { layout: "main", title: "批次管理" } },
+  { path: "/module3/class-leader", name: "ClassLeaderDesk", component: () => import("../views/module3/ClassLeaderDesk.vue"), meta: { layout: "main", title: "评价学生列表", roles: ["admin", "class_committee", "counselor", "student_affairs"] } },
+  { path: "/module3/teacher", name: "TeacherConsole", component: () => import("../views/module3/TeacherConsole.vue"), meta: { layout: "main", title: "统计总览", roles: ["admin", "class_committee", "counselor", "student_affairs"] } },
+  { path: "/module3/review-detail/:id", name: "ReviewDetail", component: () => import("../views/module3/ReviewDetail.vue"), meta: { layout: "main", title: "材料审核详情", roles: ["admin", "class_committee", "counselor", "student_affairs"] } },
+  { path: "/module3/batch-manage", name: "BatchManage", component: () => import("../views/module3/BatchManage.vue"), meta: { layout: "main", title: "批次管理", roles: ["admin"] } },
 ];
 const router = createRouter({ history: createWebHistory(), routes });
+
+// 路由守卫：检查页面级角色权限
+router.beforeEach((to, from, next) => {
+  const store = useUserStore();
+  const requiredRoles = to.meta.roles;
+  if (requiredRoles && !requiredRoles.includes(store.userRole)) {
+    next({ name: "Home" });
+  } else {
+    next();
+  }
+});
+
 export default router;

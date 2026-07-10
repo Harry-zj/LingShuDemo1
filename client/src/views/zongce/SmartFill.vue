@@ -288,18 +288,18 @@ function downloadFill(id) {
 .status-bar { display: flex; gap: 16px; }
 .status-item {
   flex: 1; text-align: center; padding: 14px;
-  background: var(--color-white); border-radius: var(--radius-md); border: 1px solid var(--color-border);
+  background: var(--color-surface); border-radius: var(--radius-md); border: 1px solid var(--color-border);
 }
 .status-item.ready { border-color: var(--color-primary); }
-.status-num { display: block; font-size: 28px; font-weight: 700; color: var(--color-gray); }
+.status-num { display: block; font-size: 28px; font-weight: 700; color: var(--color-text-secondary); }
 .status-item.ready .status-num { color: var(--color-primary); }
-.status-label { font-size: 13px; color: #999; margin-top: 4px; display: block; }
+.status-label { font-size: 13px; color: var(--color-text-tertiary); margin-top: 4px; display: block; }
 
 .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 768px) { .card-grid { grid-template-columns: 1fr; } }
 
 .func-card {
-  background: var(--color-white); border: 2px solid var(--color-border);
+  background: var(--color-surface); border: 2px solid var(--color-border);
   border-radius: var(--radius-card); padding: 24px; display: flex; gap: 16px;
   cursor: pointer; transition: all 0.2s;
 }
@@ -308,20 +308,20 @@ function downloadFill(id) {
 .func-card.locked { opacity: 0.5; cursor: not-allowed; }
 .card-icon { font-size: 32px; flex-shrink: 0; }
 .card-content h3 { font-size: 16px; margin: 0 0 6px; }
-.card-content p { font-size: 13px; color: #666; margin: 0 0 10px; line-height: 1.5; }
+.card-content p { font-size: 13px; color: var(--color-text-secondary); margin: 0 0 10px; line-height: 1.5; }
 .card-status { font-size: 13px; }
 .card-status.done { color: #34A853; }
 .card-status.ready { color: var(--color-primary); }
-.card-status.locked { color: #999; }
+.card-status.locked { color: var(--color-text-tertiary); }
 
 .section-panel {
-  background: var(--color-white); border: 1px solid var(--color-border);
+  background: var(--color-surface); border: 1px solid var(--color-border);
   border-radius: var(--radius-card); padding: 24px;
 }
 .section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
 .section-header h3 { font-size: 18px; margin: 0; }
 .btn-back {
   padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-btn);
-  background: #fff; cursor: pointer; font-size: 13px; font-family: inherit;
+  background: var(--color-bg); cursor: pointer; font-size: 13px; font-family: inherit; color: var(--color-text);
 }
 </style>

@@ -137,43 +137,43 @@ async function doFinalFill(){
 
 <style scoped>
 .chat-page{max-width:1100px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
-.page-title{font-size:24px;margin:0}.page-desc{font-size:14px;color:#666;margin:0}
-.card{background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:24px;display:flex;flex-direction:column;gap:16px}
+.page-title{font-size:24px;margin:0}.page-desc{font-size:14px;color: var(--color-text-secondary);margin:0}
+.card{background: var(--color-surface);border-radius:10px;border: 1px solid var(--color-border);padding:24px;display:flex;flex-direction:column;gap:16px}
 .upload-card{max-width:500px;margin:40px auto;align-items:center}
-.upload-zone{border:2px dashed #ddd;border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
-.upload-zone:hover{border-color:#4F46E5;background:#fafaff}
-.upload-icon{font-size:40px}.upload-zone strong{font-size:15px;color:#333}.upload-zone p{font-size:12px;color:#999;margin:0}
+.upload-zone{border: 2px dashed var(--color-border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:.2s;display:flex;flex-direction:column;align-items:center;gap:8px;width:100%}
+.upload-zone:hover{border-color:#4F46E5;background: var(--color-surface-variant)}
+.upload-icon{font-size:40px}.upload-zone strong{font-size:15px;color: var(--color-text)}.upload-zone p{font-size:12px;color: var(--color-text-tertiary);margin:0}
 .main-layout{display:grid;grid-template-columns:240px 1fr;gap:20px;min-height:500px}
-.field-sidebar{background:#fff;border-radius:10px;border:1px solid #e0e0e0;padding:16px}
-.field-sidebar h4{font-size:14px;margin:0 0 8px;color:#333}
+.field-sidebar{background: var(--color-surface);border-radius:10px;border: 1px solid var(--color-border);padding:16px}
+.field-sidebar h4{font-size:14px;margin:0 0 8px;color: var(--color-text)}
 .field-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:13px;transition:.15s}
-.field-item:hover{background:#f5f5f5}.field-item.active{background:#eef2ff;color:#4F46E5}.field-item.done{opacity:.7}
+.field-item:hover{background: var(--color-surface-variant)}.field-item.active{background:#eef2ff;color:#4F46E5}.field-item.done{opacity:.7}
 .field-icon{font-size:16px}.field-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.field-done{color:#34A853}
-.analyzing-hint{font-size:12px;color:#999;text-align:center;padding:20px}
-.chat-area{background:#fff;border-radius:10px;border:1px solid #e0e0e0;display:flex;flex-direction:column;overflow:hidden}
-.chat-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#999;gap:12px}
+.analyzing-hint{font-size:12px;color: var(--color-text-tertiary);text-align:center;padding:20px}
+.chat-area{background: var(--color-surface);border-radius:10px;border: 1px solid var(--color-border);display:flex;flex-direction:column;overflow:hidden}
+.chat-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color: var(--color-text-tertiary);gap:12px}
 .pl-icon{font-size:48px}
 .chat-content{display:flex;flex-direction:column;height:100%;min-height:450px}
-.chat-header{padding:12px 16px;border-bottom:1px solid #f0f0f0;font-size:14px}
+.chat-header{padding:12px 16px;border-bottom: 1px solid var(--color-border);font-size:14px}
 .messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;max-height:400px}
 .msg{display:flex;gap:10px;max-width:85%}.msg.user{align-self:flex-end;flex-direction:row-reverse}.msg.assistant{align-self:flex-start}
-.msg-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background:#f0f0f0;flex-shrink:0}
+.msg-avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;background: var(--color-surface-variant);flex-shrink:0}
 .msg.user .msg-avatar{background:#eef2ff}
 .msg-bubble{padding:10px 14px;border-radius:12px;font-size:14px;line-height:1.6}
-.msg.user .msg-bubble{background:#4F46E5;color:#fff}.msg.assistant .msg-bubble{background:#f5f5f5;color:#333}
+.msg.user .msg-bubble{background:#4F46E5;color:#fff}.msg.assistant .msg-bubble{background: var(--color-surface-variant);color: var(--color-text)}
 .cursor{animation:blink 1s infinite;color:#4F46E5}@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-.input-area{border-top:1px solid #f0f0f0;padding:12px 16px}
+.input-area{border-top: 1px solid var(--color-border);padding:12px 16px}
 .review-bar{display:flex;flex-direction:column;gap:8px}
 .modify-row{display:flex;gap:8px}
-.modify-input{flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:13px;font-family:inherit}
+.modify-input{flex:1;padding:8px 12px;border: 1px solid var(--color-border);border-radius:6px;font-size:13px;font-family:inherit}
 .input-row{display:flex;gap:8px;align-items:flex-end}
-.chat-input{flex:1;padding:8px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;resize:none;font-family:inherit}
-.streaming-hint{font-size:12px;color:#999;text-align:center;padding:8px}
+.chat-input{flex:1;padding:8px 12px;border: 1px solid var(--color-border);border-radius:6px;font-size:14px;resize:none;font-family:inherit}
+.streaming-hint{font-size:12px;color: var(--color-text-tertiary);text-align:center;padding:8px}
 .fill-bar{display:flex;justify-content:center;padding:8px 0}
 .btn{padding:10px 24px;border:none;border-radius:6px;cursor:pointer;font-size:15px;display:inline-flex;align-items:center;gap:8px;font-family:inherit}
 .btn:disabled{opacity:.6;cursor:not-allowed}.btn.primary{background:#4F46E5;color:#fff}.btn.success{background:#34A853;color:#fff}
-.btn.outline{background:#fff;color:#4F46E5;border:1px solid #4F46E5}.btn.large{padding:12px 32px;font-size:16px}
-.error-msg{padding:10px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;color:#D93025;font-size:13px}
+.btn.outline{background: var(--color-surface);color:#4F46E5;border:1px solid #4F46E5}.btn.large{padding:12px 32px;font-size:16px}
+.error-msg{padding:10px 16px;background: var(--color-error-bg);border:1px solid #fecaca;border-radius:6px;color:#D93025;font-size:13px}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 @media(max-width:768px){.main-layout{grid-template-columns:1fr}}

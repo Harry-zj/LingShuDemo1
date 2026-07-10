@@ -82,9 +82,13 @@ function percent(value) {
 }
 
 async function load() {
-  const [batchRes, statRes] = await Promise.all([getBatches(), getStatistics({ batch_id: currentBatch.value })]);
-  if (batchRes.code === 200) batches.value = batchRes.data;
-  if (statRes.code === 200) stats.value = statRes.data;
+  try {
+    const [batchRes, statRes] = await Promise.all([getBatches(), getStatistics({ batch_id: currentBatch.value })]);
+    if (batchRes.code === 200) batches.value = batchRes.data;
+    if (statRes.code === 200) stats.value = statRes.data;
+  } catch (e) {
+    console.error('加载数据失败:', e.response?.data?.msg || e.message);
+  }
 }
 
 async function handleExport() {
