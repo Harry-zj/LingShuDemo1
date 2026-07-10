@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 import { useUserStore } from "../stores/user";
 const request = axios.create({ baseURL: "/api", timeout: 15000 });
 request.interceptors.request.use((config) => {

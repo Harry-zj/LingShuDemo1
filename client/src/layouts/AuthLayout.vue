@@ -1,5 +1,8 @@
-﻿<template>
+<template>
   <div class="auth-layout">
+    <div class="auth-theme-toggle">
+      <ThemeToggle />
+    </div>
     <!-- 多层动态光斑：模拟星云呼吸感 -->
     <div class="bg-atmosphere">
       <div class="orb orb-1"></div>
@@ -15,6 +18,10 @@
   </div>
 </template>
 
+<script setup>
+import ThemeToggle from '../components/ThemeToggle.vue';
+</script>
+
 <style scoped>
 .auth-layout {
   min-height: 100vh;
@@ -26,6 +33,13 @@
   animation: gradient-shift 12s var(--easing-standard) infinite;
   position: relative;
   overflow: hidden;
+}
+
+.auth-theme-toggle {
+  position: fixed;
+  top: 22px;
+  right: 24px;
+  z-index: 20;
 }
 
 /* ═══════ 光斑系统 ═══════ */
@@ -78,6 +92,10 @@
   background: radial-gradient(circle, rgba(79,70,229,0.2) 0%, transparent 65%);
   bottom: 10%; right: 25%;
   animation: orbDrift3 18s ease-in-out infinite 3s reverse;
+}
+
+@media (max-width: 520px) {
+  .auth-theme-toggle { top: 14px; right: 14px; }
 }
 
 /* 内容区 */

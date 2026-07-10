@@ -1,9 +1,19 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>灵枢 - 高校综测智能填写与决策平台</title>
+  <script>
+    (() => {
+      let savedTheme = null;
+      try { savedTheme = localStorage.getItem('lingshu-theme'); } catch {}
+      const theme = savedTheme === 'light' ? 'light' : 'dark';
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    })();
+  </script>
+  <link rel="icon" href="/favicon.ico" />
 
   <!-- Google Fonts: Noto Sans SC + Material Symbols -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
