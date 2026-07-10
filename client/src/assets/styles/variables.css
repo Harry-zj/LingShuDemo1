@@ -1,46 +1,150 @@
-:root {
-  /* Google Material You 色彩体系 */
-  --color-primary: #1A73E8;
-  --color-primary-light: #E8F0FE;
-  --color-bg: #F8F9FA;
-  --color-white: #FFFFFF;
-  --color-border: #DADCE0;
-  --color-error: #D93025;
-  --color-error-bg: #FCE8E6;
-  --color-success: #34A853;
-  --color-success-bg: #E6F4EA;
-  --color-warning: #E37400;
-  --color-warning-bg: #FEF7E0;
-  --color-gray: #9AA0A6;
-  --color-gray-bg: #F1F3F4;
-  --color-text: #202124;
-  --color-text-secondary: #5F6368;
-  /* 维度色 */
-  --color-zhiyu: #1A73E8;
-  --color-deyu: #EA8600;
-  --color-tiyu: #34A853;
-  --color-meiyu: #9C27B0;
-  --color-laoyu: #FF6D00;
-  /* 间距系统 8dp网格 */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  /* 圆角 */
-  --radius-card: 24px;
-  --radius-btn: 100px;
-  --radius-tag: 8px;
-  --radius-sm: 12px;
-  --radius-md: 16px;
-  /* 字号 */
-  --font-title: 20px;
-  --font-body: 16px;
-  --font-caption: 12px;
-  --font-number: 32px;
-  --font-table: 14px;
-  /* 阴影 */
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.08);
-  --shadow-nav: 0 2px 8px rgba(0,0,0,0.1);
-  --shadow-modal: 0 8px 30px rgba(0,0,0,0.2);
+﻿:root {
+  /* ═══════ 灵枢·五维 品牌色系 ═══════ */
+  --color-primary: #4F46E5;
+  --color-primary-hover: #4338CA;
+  --color-primary-light: #EEF2FF;
+  --color-primary-gradient: linear-gradient(135deg, #4F46E5 0%, #6366F1 40%, #818CF8 80%, #A5B4FC 100%);
+  --color-primary-gradient-bright: linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%);
+
+  --color-accent: #8B5CF6;
+  --color-accent-light: #F5F3FF;
+  --color-glow: #A78BFA;
+  --color-cyan-accent: #06B6D4;
+
+  /* ═══════ 五维·五行色（传统×现代） ═══════ */
+  --color-zhiyu: #4F46E5;         /* 智育·水（深蓝） */
+  --color-deyu: #D97706;          /* 德育·土（金黄） */
+  --color-tiyu: #059669;          /* 体育·木（翠绿） */
+  --color-meiyu: #7C3AED;         /* 美育·火（紫） */
+  --color-laoyu: #EA580C;         /* 劳育·金（橙） */
+  --color-wuxing-water: rgba(79,70,229,0.12);
+  --color-wuxing-earth: rgba(217,119,6,0.12);
+  --color-wuxing-wood: rgba(5,150,105,0.12);
+  --color-wuxing-fire: rgba(124,58,237,0.12);
+  --color-wuxing-metal: rgba(234,88,12,0.12);
+
+  /* ═══════ 经络视觉专用色 ═══════ */
+  --meridian-line: rgba(99,102,241,0.15);
+  --meridian-line-active: rgba(99,102,241,0.5);
+  --meridian-glow: 0 0 20px rgba(99,102,241,0.12);
+  --meridian-node: rgba(99,102,241,0.08);
+  --meridian-node-active: rgba(99,102,241,0.2);
+
+  /* ═══════ 背景 ═══════ */
+  --color-bg: #F5F3FF;
+  --color-surface: #FFFFFF;
+  --color-surface-variant: #F1F0F9;
+  --color-border: rgba(15, 10, 30, 0.08);
+  --color-border-focus: #4F46E5;
+
+  /* ═══════ 玻璃质感 ═══════ */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-blur: blur(20px);
+  --glass-shadow: 0 4px 30px rgba(15, 10, 30, 0.04), 0 0 0 1px rgba(255, 255, 255, 0.5);
+  --glass-shadow-hover: 0 8px 40px rgba(15, 10, 30, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.15);
+  --glass-nav-bg: rgba(255, 255, 255, 0.78);
+
+  /* ═══════ 语义色 ═══════ */
+  --color-error: #DC2626; --color-error-bg: #FEF2F2;
+  --color-success: #059669; --color-success-bg: #ECFDF5;
+  --color-warning: #D97706; --color-warning-bg: #FFFBEB;
+  --color-gray: #9CA3AF; --color-gray-bg: #F3F4F6;
+
+  /* ═══════ 文字 ═══════ */
+  --color-text: rgba(8, 6, 20, 0.87);
+  --color-text-secondary: rgba(8, 6, 20, 0.56);
+  --color-text-tertiary: rgba(8, 6, 20, 0.32);
+  --color-text-inverse: #FFFFFF;
+
+  /* ═══════ 氛围 ═══════ */
+  --gradient-hero: linear-gradient(135deg, #EEF2FF 0%, #F5F3FF 30%, #F8FAFC 60%, #F0F4FF 100%);
+  --gradient-atmosphere: linear-gradient(180deg, rgba(99,102,241,0.04) 0%, rgba(139,92,246,0.03) 30%, transparent 70%);
+
+  /* ═══════ 间距/圆角/阴影/字体（略，同前） ═══════ */
+  --spacing-xs: 4px; --spacing-sm: 8px; --spacing-md: 16px; --spacing-lg: 24px; --spacing-xl: 32px; --spacing-2xl: 48px; --spacing-3xl: 64px;
+  --radius-xs: 4px; --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 24px; --radius-full: 100px;
+  --shadow-level-0: none;
+  --shadow-level-1: 0 1px 3px rgba(8,6,20,0.04), 0 1px 2px rgba(8,6,20,0.03);
+  --shadow-level-2: 0 2px 8px rgba(8,6,20,0.06), 0 1px 3px rgba(8,6,20,0.04);
+  --shadow-level-3: 0 4px 16px rgba(8,6,20,0.08), 0 2px 6px rgba(8,6,20,0.05);
+  --shadow-level-4: 0 8px 32px rgba(8,6,20,0.10), 0 4px 10px rgba(8,6,20,0.06);
+  --shadow-level-5: 0 16px 48px rgba(8,6,20,0.14), 0 8px 20px rgba(8,6,20,0.08);
+  --shadow-elevated: 0 8px 32px rgba(79,70,229,0.18), 0 2px 8px rgba(79,70,229,0.08);
+  --font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --font-scale-h1: 32px; --font-scale-h2: 24px; --font-scale-h3: 20px; --font-scale-body: 16px; --font-scale-body-sm: 14px; --font-scale-caption: 12px;
+  --font-weight-regular: 400; --font-weight-medium: 500; --font-weight-semibold: 600; --font-weight-bold: 700;
+  --line-height-tight: 1.3; --line-height-normal: 1.5; --line-height-relaxed: 1.7; --line-height-loose: 1.8;
+  --duration-instant: 0.1s; --duration-fast: 0.2s; --duration-normal: 0.3s; --duration-slow: 0.5s; --duration-slower: 0.8s; --duration-breathe: 3s;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --easing-accelerate: cubic-bezier(0.4, 0, 1, 1);
+  --easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --easing-breathe: cubic-bezier(0.4, 0, 0.6, 1);
 }
+
+/* ════════════════════════════════════════════
+   经络流 Meridian Flow — 关键帧
+   ════════════════════════════════════════════ */
+
+/* 能量沿经络流动 */
+@keyframes meridianFlow {
+  0% { stroke-dashoffset: 1000; }
+  100% { stroke-dashoffset: 0; }
+}
+
+@keyframes meridianPulse {
+  0%, 100% { r: 4; opacity: 0.6; }
+  50% { r: 8; opacity: 0.2; }
+}
+
+@keyframes nodeGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.15); }
+  50% { box-shadow: 0 0 0 12px rgba(99,102,241,0); }
+}
+
+@keyframes hubPulse {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.15); opacity: 0.5; }
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.02); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes orbDrift1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20%  { transform: translate(40px, -60px) scale(1.15); }
+  40%  { transform: translate(-30px, 30px) scale(0.92); }
+  60%  { transform: translate(50px, 15px) scale(1.08); }
+  80%  { transform: translate(-20px, -40px) scale(0.96); }
+}
+
+@keyframes orbDrift2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(-50px, 20px) scale(1.1); }
+  50%  { transform: translate(30px, -35px) scale(0.9); }
+  75%  { transform: translate(-40px, -10px) scale(1.05); }
+}
+
+@keyframes orbDrift3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  30%  { transform: translate(20px, -50px) scale(1.12); }
+  60%  { transform: translate(-25px, 40px) scale(0.85); }
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes skeleton-loading { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+@keyframes glowPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.3); } }
