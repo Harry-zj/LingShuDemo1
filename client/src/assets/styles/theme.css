@@ -231,12 +231,14 @@ html[data-theme='light'] body .user-menu:hover {
   background: #fffaf2 !important;
 }
 html[data-theme='light'] body .user-avatar {
-  color: #fffaf2 !important;
-  background: linear-gradient(135deg, #748779, #53675a) !important;
-  box-shadow: 0 8px 18px rgba(76, 96, 82, 0.17) !important;
+  color: #30352f !important;
+  background: #fffaf2 !important;
+  box-shadow: inset 0 0 0 1px rgba(91, 82, 65, 0.14) !important;
 }
 html[data-theme='light'] body .user-name,
 html[data-theme='light'] body .dropdown-icon { color: #555c55 !important; }
+html[data-theme='light'] body .user-menu:hover .user-name,
+html[data-theme='light'] body .user-menu:hover .dropdown-icon { color: #30352f !important; }
 html[data-theme='light'] body .dropdown-menu {
   color: var(--color-text) !important;
   background: rgba(255, 251, 244, 0.96) !important;

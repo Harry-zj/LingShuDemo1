@@ -118,11 +118,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import SmartFillRule from './SmartFillRule.vue'
-import SmartFillMaterial from './SmartFillMaterial.vue'
-import SmartFillScore from './SmartFillScore.vue'
-import SmartFillForm from './SmartFillForm.vue'
+import { ref, computed, onMounted, defineAsyncComponent } from 'vue'
+
+const SmartFillRule = defineAsyncComponent(() => import('./SmartFillRule.vue'))
+const SmartFillMaterial = defineAsyncComponent(() => import('./SmartFillMaterial.vue'))
+const SmartFillScore = defineAsyncComponent(() => import('./SmartFillScore.vue'))
+const SmartFillForm = defineAsyncComponent(() => import('./SmartFillForm.vue'))
 import * as api from '../../api/zongce'
 
 const activeCard = ref(null)
@@ -131,10 +132,14 @@ const sectionTitle = computed(() => ({
 }[activeCard.value] || ''))
 
 function openCard(name) {
-  if (name === 'rule') { activeCard.value = 'rule'; return }
+  if (name === 'rule') {
+    activeCard.value = 'rule'
+    return
+  }
   if (!ruleReady.value) return
   if (name === 'form' && totalScore.value === null) return
   activeCard.value = name
+  if (name === 'form' && !templatesLoaded.value) refreshTemplates()
 }
 
 // ========== 共享状态 ==========
@@ -144,6 +149,7 @@ const materials = ref([])
 const evaluation = ref(null)
 const templates = ref([])
 const fillResults = ref([])
+const templatesLoaded = ref(false)
 
 const confirmedRuleCount = computed(() => ruleItems.value.filter(r => r.status === 'confirmed').length)
 const ruleReady = computed(() => confirmedRuleCount.value > 0)
@@ -169,10 +175,13 @@ async function refreshEval() {
 }
 async function refreshTemplates() {
   const r = await api.getTemplates();
-  if (r.code === 200) templates.value = r.data || [];
+  if (r.code === 200) {
+    templates.value = r.data || [];
+    templatesLoaded.value = true;
+  }
 }
 onMounted(async () => {
-  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]);
+  await Promise.all([refreshRules(), refreshMaterials(), refreshEval()]);
 });
 
 // ========== 规则 ==========

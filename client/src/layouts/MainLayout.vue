@@ -31,7 +31,7 @@
           <span class="nav-text">个性评定</span>
         </router-link>
 
-        <router-link to="/module3/student" class="nav-item" active-class="active">
+        <router-link :to="managementHome" class="nav-item" active-class="active">
           <VIcon icon="mdi:account-group-outline" class="nav-icon" />
           <span class="nav-text">信息管理</span>
         </router-link>
@@ -44,12 +44,12 @@
           @click="showUserMenu = !showUserMenu"
           v-click-outside="() => showUserMenu = false"
         >
-          <div class="user-avatar">
-            {{ (userStore.user?.real_name || userStore.user?.username)?.[0] }}
+          <div class="user-avatar" aria-hidden="true">
+            <VIcon icon="mdi:account-circle-outline" />
           </div>
 
-          <span class="user-name">
-            {{ userStore.user?.real_name || userStore.user?.username }}
+          <span class="user-name" :title="displayName">
+            {{ displayName }}
           </span>
 
           <VIcon
@@ -92,7 +92,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useRouter } from 'vue-router';
 import ThemeToggle from '../components/ThemeToggle.vue';
@@ -100,6 +100,22 @@ import ThemeToggle from '../components/ThemeToggle.vue';
 const userStore = useUserStore();
 const router = useRouter();
 const showUserMenu = ref(false);
+
+const displayName = computed(() => (
+  userStore.user?.real_name || userStore.user?.username || '用户'
+));
+
+const MANAGEMENT_HOME_BY_ROLE = {
+  student: '/module3/student',
+  admin: '/module3/batch-manage',
+  class_committee: '/module3/class-leader',
+  counselor: '/module3/class-leader',
+  student_affairs: '/module3/teacher',
+};
+
+const managementHome = computed(() => (
+  MANAGEMENT_HOME_BY_ROLE[userStore.userRole] || '/module3/student'
+));
 
 function goHome() {
   router.push('/home');
@@ -348,10 +364,11 @@ function handleLogout() {
 
 /* 用户菜单 */
 .user-menu {
-  display: flex;
+  min-width: 0;
+  display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 15px 6px 6px;
+  padding: 5px 14px 5px 5px;
   border-radius: 999px;
   cursor: pointer;
   position: relative;
@@ -366,21 +383,36 @@ function handleLogout() {
 .user-avatar {
   width: 38px;
   height: 38px;
+  flex: 0 0 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%);
-  color: white;
+  background: #f8fafc;
+  color: #111827;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.22);
+  font-size: 25px;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.72),
+    0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+.user-avatar svg {
+  display: block;
 }
 
 .user-name {
-  font-size: 16px;
+  min-width: 0;
+  max-width: 108px;
+  display: inline-block;
+  overflow: hidden;
   color: var(--color-text, #1e293b);
+  font-size: 16px;
   font-weight: 700;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  word-break: keep-all;
+  writing-mode: horizontal-tb;
 }
 
 .dropdown-icon {

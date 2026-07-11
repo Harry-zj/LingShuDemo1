@@ -22,12 +22,17 @@
 
 
         <p>
-          基于 AI 语义匹配、材料智能识别、五维画像分析与三端协同管理，
+          基于 AI 语义匹配、材料智能识别、五维画像分析与闭环流程管理，
           将综合测评流程连接成一条清晰、高效、可追踪的智慧经络。
         </p>
 
         <div class="hero-actions">
-          <button class="primary-btn" @click="goTo('/zongce/smart-fill')">
+          <button
+            class="primary-btn"
+            @mouseenter="preloadSmartFill"
+            @focus="preloadSmartFill"
+            @click="goTo('/zongce/smart-fill')"
+          >
             <VIcon icon="mdi:lightning-bolt" />
             开始智能填表
           </button>
@@ -48,8 +53,8 @@
             <span>智能画像</span>
           </div>
           <div class="stat-card">
-            <strong>三端</strong>
-            <span>协同管理</span>
+            <strong>闭环</strong>
+            <span>流程追踪</span>
           </div>
         </div>
       </div>
@@ -88,7 +93,7 @@
           <h2>经络式智能工作流</h2>
         </div>
         <p>
-          从材料上传、AI 匹配、五维评定到报告生成，让原本分散的综测流程形成一个完整闭环。
+          从材料上传、智能填表、信息管理、五维评定到报告生成，把综测流程重新编排成清晰顺畅的经络式闭环。
         </p>
       </div>
 
@@ -99,6 +104,8 @@
           class="module-card"
           :class="{ large: item.large, wide: item.wide }"
           :style="{ '--theme-color': item.color }"
+          @mouseenter="item.path === '/zongce/smart-fill' && preloadSmartFill()"
+          @focusin="item.path === '/zongce/smart-fill' && preloadSmartFill()"
           @click="goTo(item.path)"
         >
           <div class="card-light"></div>
@@ -123,47 +130,44 @@
       </div>
     </section>
 
-    <!-- 三端协同 -->
-    <section class="collab-section">
-      <div class="collab-left">
-        <span>Three-side Collaboration</span>
-        <h2>学生、班干部、老师三端协同</h2>
-        <p>
-          支持材料提交、班级初审、老师总控、统计导出，形成可追踪、可解释、可沉淀的综测管理闭环。
-        </p>
-      </div>
-
-      <div class="collab-right">
-        <div class="collab-card">
-          <VIcon icon="mdi:account-school-outline" />
-          <strong>学生端</strong>
-          <span>材料上传与状态追踪</span>
-        </div>
-
-        <div class="collab-card">
-          <VIcon icon="mdi:account-tie-outline" />
-          <strong>班干部端</strong>
-          <span>班级材料初审</span>
-        </div>
-
-        <div class="collab-card">
-          <VIcon icon="mdi:view-dashboard-outline" />
-          <strong>老师端</strong>
-          <span>批次管理与统计导出</span>
-        </div>
-      </div>
-    </section>
   </div>
 </template>
 
 <script setup>
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import { useUserStore } from '../stores/user';
 
 const router = useRouter();
+const userStore = useUserStore();
+
+let smartFillPreloadPromise;
+
+function preloadSmartFill() {
+  smartFillPreloadPromise ||= import('./zongce/SmartFill.vue');
+}
 
 function goTo(path) {
+  if (path === '/zongce/smart-fill') preloadSmartFill();
   router.push(path);
 }
+
+onMounted(() => {
+  const scheduleIdle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 300));
+  scheduleIdle(preloadSmartFill);
+});
+
+const MANAGEMENT_HOME_BY_ROLE = {
+  student: '/module3/student',
+  admin: '/module3/batch-manage',
+  class_committee: '/module3/class-leader',
+  counselor: '/module3/class-leader',
+  student_affairs: '/module3/teacher',
+};
+
+const managementHome = computed(() => (
+  MANAGEMENT_HOME_BY_ROLE[userStore.userRole] || '/module3/student'
+));
 
 const dimensions = [
   {
@@ -198,82 +202,58 @@ const dimensions = [
   }
 ];
 
-const modules = [
+const modules = computed(() => [
   {
     title: '智能填表',
     desc: 'AI 自动识别材料内容，匹配综测规则和表单字段，是整个平台的核心入口。',
     path: '/zongce/smart-fill',
     icon: 'mdi:auto-fix',
     color: '#4F46E5',
-    tag: '',
     stage: 'Material → Form',
     large: true
   },
   {
+    title: '信息管理',
+    desc: '按登录身份进入对应管理台，材料状态、班级初审、批次管理与老师总控统一收口。',
+    path: managementHome.value,
+    icon: 'mdi:account-group-outline',
+    color: '#F59E0B',
+    stage: 'Manage → Review',
+    large: true
+  },
+  {
     title: '批量填表',
-    desc: '批量处理多人材料，减少重复录入。',
+    desc: '批量处理多人材料，减少重复录入，适合班级或批次集中填报。',
     path: '/zongce/batch-fill',
     icon: 'mdi:file-multiple-outline',
     color: '#059669',
-    tag: '效率',
     stage: 'Batch'
   },
   {
     title: '对话填表',
-    desc: '用自然语言补充材料信息。',
+    desc: '用自然语言补充材料信息，让缺失字段通过问答方式快速完善。',
     path: '/zongce/chat-fill',
     icon: 'mdi:chat-processing-outline',
     color: '#7C3AED',
-    tag: '交互',
     stage: 'Chat'
   },
   {
     title: '评定结果',
-    desc: '查看五维评分、画像分析与评定结果。',
+    desc: '查看五维评分、画像分析与评定结果，快速定位优势和待提升项。',
     path: '/module2/evaluation',
     icon: 'mdi:chart-box-outline',
     color: '#D97706',
-    tag: '分析',
     stage: 'Evaluate'
   },
   {
     title: '评定报告',
-    desc: '生成智能评语、改进建议与综测报告。',
+    desc: '生成智能评语、改进建议与综测报告，形成可导出的最终成果。',
     path: '/module2/report',
     icon: 'mdi:file-chart-outline',
     color: '#06B6D4',
-    tag: '输出',
     stage: 'Report'
   },
-  {
-    title: '学生端',
-    desc: '学生进行材料提交和状态追踪。',
-    path: '/module3/student',
-    icon: 'mdi:account-school-outline',
-    color: '#4F46E5',
-    tag: '学生',
-    stage: 'Student'
-  },
-  {
-    title: '班干部端',
-    desc: '班干部完成班级材料初审。',
-    path: '/module3/class-leader',
-    icon: 'mdi:account-tie-outline',
-    color: '#EA580C',
-    tag: '班干',
-    stage: 'Review'
-  },
-  {
-    title: '老师总控',
-    desc: '老师进行批次管理、统计分析和结果导出。',
-    path: '/module3/teacher',
-    icon: 'mdi:view-dashboard-outline',
-    color: '#059669',
-    tag: '管理',
-    stage: 'Console',
-    wide: true
-  }
-];
+]);
 </script>
 
 <style scoped>
@@ -665,13 +645,15 @@ const modules = [
 
 .module-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: 190px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  grid-auto-rows: 168px;
   gap: 18px;
+  align-items: stretch;
 }
 
 .module-card {
   position: relative;
+  grid-column: span 2;
   padding: 22px;
   display: flex;
   flex-direction: column;
@@ -726,13 +708,13 @@ const modules = [
 }
 
 .module-card.large {
-  grid-column: span 2;
+  grid-column: span 4;
   grid-row: span 2;
   padding: 30px;
 }
 
 .module-card.wide {
-  grid-column: span 2;
+  grid-column: span 4;
 }
 
 .card-top,
@@ -786,6 +768,18 @@ const modules = [
   letter-spacing: -0.04em;
 }
 
+.module-card:nth-child(1) {
+  background:
+    radial-gradient(circle at 88% 14%, rgba(79, 70, 229, 0.18), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.48));
+}
+
+.module-card:nth-child(2) {
+  background:
+    radial-gradient(circle at 88% 14%, rgba(245, 158, 11, 0.2), transparent 36%),
+    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.48));
+}
+
 .card-main p {
   margin-top: 9px;
   color: var(--color-text-secondary, #64748b);
@@ -815,81 +809,6 @@ const modules = [
   transform: translate(3px, -3px);
 }
 
-/* 三端协同 */
-.collab-section {
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
-  gap: 26px;
-  align-items: stretch;
-  padding: 30px;
-  border-radius: 34px;
-  background:
-    radial-gradient(circle at 10% 30%, rgba(79, 70, 229, 0.13), transparent 30%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.44));
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow: 0 24px 90px rgba(79, 70, 229, 0.1);
-  backdrop-filter: blur(22px);
-}
-
-.collab-left span {
-  color: var(--color-primary, #4f46e5);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.collab-left h2 {
-  margin-top: 9px;
-  font-size: clamp(24px, 2.3vw, 34px);
-  line-height: 1.2;
-  letter-spacing: -0.035em;
-}
-
-.collab-left p {
-  margin-top: 14px;
-  color: var(--color-text-secondary, #64748b);
-  font-size: 14px;
-  line-height: 1.85;
-}
-
-.collab-right {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.collab-card {
-  min-height: 168px;
-  padding: 20px;
-  border-radius: 26px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.collab-card svg {
-  width: 46px;
-  height: 46px;
-  padding: 10px;
-  border-radius: 17px;
-  color: var(--color-primary, #4f46e5);
-  background: rgba(79, 70, 229, 0.1);
-}
-
-.collab-card strong {
-  margin-top: 14px;
-  color: var(--color-text, #1e293b);
-}
-
-.collab-card span {
-  margin-top: 5px;
-  color: var(--color-text-secondary, #64748b);
-  font-size: 12px;
-}
-
 /* 动画 */
 @keyframes rotateSlow {
   to {
@@ -915,17 +834,20 @@ const modules = [
   }
 
   .module-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-auto-rows: 168px;
+  }
+
+  .module-card {
+    grid-column: span 2;
   }
 
   .module-card.large,
   .module-card.wide {
     grid-column: span 2;
+    grid-row: span 2;
   }
 
-  .collab-section {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (max-width: 720px) {
@@ -996,8 +918,5 @@ const modules = [
     font-size: 24px;
   }
 
-  .collab-right {
-    grid-template-columns: 1fr;
-  }
 }
 </style>
