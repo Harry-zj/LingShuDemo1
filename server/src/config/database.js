@@ -49,7 +49,15 @@ async function initDatabase() {
       "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",
       "ALTER TABLE rule_items ADD COLUMN scope VARCHAR(50) DEFAULT NULL AFTER limit_value",
       "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
+      "ALTER TABLE rule_sources ADD COLUMN file_hash CHAR(64) DEFAULT NULL",
+      "ALTER TABLE rule_sources ADD COLUMN is_frozen TINYINT(1) DEFAULT 0",
     ];
+    // rule_set_documents 列名迁移（兼容旧表 source_document_id）
+    try {
+      await conn.execute("ALTER TABLE rule_set_documents CHANGE source_document_id rule_source_id INT NOT NULL");
+    } catch (e) {
+      if (e.errno !== 1054 && e.errno !== 1060) console.warn("[DB] 迁移 rule_set_documents:", e.message);
+    }
     for (const s of migrations) {
       try { await conn.execute(s); } catch (e) {
         if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
