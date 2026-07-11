@@ -60,32 +60,43 @@ const userStore = useUserStore();
 
 const navItems = computed(() => {
   const role = userStore.role;
+  const isMember = !!userStore.user?.is_assessment_member;
   if (role === 'admin') {
     return [
-      { to: '/module3/batch-manage', icon: 'mdi:cog-outline', text: '批次设置' },
-      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '统计总览' }
+      { to: '/module3/batch-manage', icon: 'mdi:cog-outline', text: '批次管理' },
+      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
     ];
   }
-  if (['class_committee', 'counselor', 'student_affairs'].includes(role)) {
+  if (role === 'counselor') {
     return [
-      { to: '/module3/class-leader', icon: 'mdi:account-search-outline', text: '待评价学生' },
-      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '统计总览' }
+      { to: '/module3/counselor', icon: 'mdi:account-supervisor-outline', text: '辅导员工作台' },
+      { to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '待评价' },
+      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
     ];
   }
-  return [
+  if (role === 'student_affairs') {
+    return [
+      { to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '待评价' },
+      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
+    ];
+  }
+  const items = [
     { to: '/home', icon: 'mdi:home-outline', text: '首页' },
-    { to: '/zongce/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
+    { to: '/module1/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
     { to: '/module2/evaluation', icon: 'mdi:chart-pie-outline', text: '个性评定' },
     { to: '/module3/student', icon: 'mdi:account-group-outline', text: '信息管理' }
   ];
+  if (isMember) items.push({ to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '我的待评' });
+  return items;
 });
 
 const router = useRouter();
 const showUserMenu = ref(false);
 function goHome() {
   if (userStore.role === 'admin') router.push('/module3/batch-manage');
-  else if (['class_committee', 'counselor', 'student_affairs'].includes(userStore.role)) router.push('/module3/class-leader');
-  else router.push('/home');
+  else if (userStore.role === 'counselor') router.push('/module3/counselor');
+  else if (userStore.role === 'student_affairs') router.push('/module3/teacher');
+  else router.push('/module3/student');
 }
 function handleLogout() { showUserMenu.value = false; userStore.logout(); router.push('/login'); }
 </script>

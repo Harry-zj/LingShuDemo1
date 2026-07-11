@@ -7,12 +7,12 @@
       </div>
 
       <div class="student-grid">
-        <span>姓名：{{ form.student_name }}</span>
         <span>学号：{{ form.student_no }}</span>
+        <span>姓名：{{ form.student_name }}</span>
         <span>学院：{{ form.college }}</span>
-        <span>专业：{{ form.major }}</span>
-        <span>年级：{{ form.grade }}</span>
         <span>班级：{{ form.class_name }}</span>
+        <span>年级：{{ form.enrollment_grade || form.grade }}</span>
+        <span>专业：{{ form.major }}</span>
       </div>
 
       <div class="summary-card">
@@ -81,7 +81,7 @@
           <div class="sub-head">
             <div class="sub-title">{{ child.title }}</div>
             <button v-if="editable" class="mini-btn" @click="addItem(section.key, child.key)">
-              <VIcon icon="mdi:plus" />新增本目录项目
+              <VIcon icon="mdi:plus" />新增项目
             </button>
           </div>
 
@@ -132,9 +132,6 @@
 
           <div v-else class="empty-sub">
             <span>该子目录暂无加分项目或支撑材料</span>
-            <button v-if="editable" class="mini-btn" @click="addItem(section.key, child.key)">
-              <VIcon icon="mdi:plus" />新增项目
-            </button>
           </div>
         </div>
       </div>

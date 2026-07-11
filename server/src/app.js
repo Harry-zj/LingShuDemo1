@@ -13,7 +13,6 @@ app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 // 路由
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/module1", require("./routes/module1"));
-app.use("/api/zongce", require("./routes/zongce"));
 app.use("/api/module2", require("./routes/module2"));
 app.use("/api/module3", require("./routes/module3"));
 // 健康检查

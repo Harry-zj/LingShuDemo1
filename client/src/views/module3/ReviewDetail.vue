@@ -2,11 +2,22 @@
   <div class="review-detail">
     <div class="page-header">
       <button class="btn-outline" @click="$router.push('/module3/class-leader')">
-        <VIcon icon="mdi:arrow-left" />返回学生列表
+        <VIcon icon="mdi:arrow-left" />返回待评列表
       </button>
       <div>
-        <h2>材料审核详情</h2>
-        <p class="page-desc">先核查综测表，再按 F1/F2/F3 分类检查支撑材料</p>
+        <h2>综测表评价详情</h2>
+        <p class="page-desc">只能查看和处理分配给当前账号的待评表单</p>
+      </div>
+    </div>
+
+    <div class="assignment-card glass-card" v-if="visibleTasks.length">
+      <div class="panel-header">
+        <h3><VIcon icon="mdi:account-switch-outline" />我的评测分配信息</h3>
+      </div>
+      <div class="task-list">
+        <span v-for="task in visibleTasks" :key="task.id">
+          {{ task.target_class_name }} → {{ task.reviewer_class_name }}：{{ task.reviewer_name }}（{{ task.status === 'pending' ? '待评' : '已处理' }}）
+        </span>
       </div>
     </div>
 
@@ -23,7 +34,7 @@
         <div class="level-options">
           <button v-for="g in levels" :key="g" :class="{ active: level === g }" @click="level = g">{{ g }}</button>
         </div>
-        <p class="level-tip">默认按分数自动确认：85以上为优，75以上为良，60以上为合格，60以下为不合格；也可以手动修改。</p>
+        <p class="level-tip">默认按分数自动确认，也可以在评价时手动调整。</p>
       </div>
 
       <textarea v-model="comment" placeholder="填写评价意见"></textarea>
@@ -63,8 +74,15 @@ const form = ref(null);
 const comment = ref('');
 const level = ref('');
 const levels = ['优', '良', '合格', '不合格'];
-const currentRoleName = computed(() => ROLE_LABEL[userStore.role] || '评价人员');
-const canAdjustLevel = computed(() => ['class_committee', 'counselor'].includes(userStore.role));
+const currentRoleName = computed(() => userStore.user?.is_assessment_member ? '综测成员' : (ROLE_LABEL[userStore.role] || '评价人员'));
+const canAdjustLevel = computed(() => (userStore.role === 'student' && userStore.user?.is_assessment_member) || userStore.role === 'counselor');
+const visibleTasks = computed(() => {
+  const tasks = form.value?.review_tasks || [];
+  if (userStore.role === 'student' && form.value?.student_id !== userStore.user?.id) {
+    return tasks.filter(task => Number(task.reviewer_id) === Number(userStore.user?.id));
+  }
+  return tasks;
+});
 
 async function load() {
   const res = await getFormDetail(route.params.id);
@@ -100,25 +118,25 @@ onMounted(load);
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
 .btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
-.review-box { padding: 20px; border-radius: var(--radius-xl); }
+.assignment-card, .review-box { padding: 20px; border-radius: var(--radius-xl); }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .panel-count { font-size: 13px; color: var(--color-text-secondary); }
+.task-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.task-list span { padding: 6px 10px; border-radius: var(--radius-full); background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
 .level-row { padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); margin-bottom: 14px; }
 .level-row label { display: block; font-weight: var(--font-weight-semibold); margin-bottom: 10px; }
 .level-options { display: flex; gap: 10px; flex-wrap: wrap; }
-.level-options button { padding: 8px 18px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
-.level-options button.active { background: var(--gradient-primary); color: white; border-color: transparent; }
-.level-tip { margin-top: 8px; color: var(--color-text-secondary); font-size: 12px; }
-textarea { width: 100%; min-height: 90px; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 10px; resize: vertical; background: var(--color-bg); color: var(--color-text-primary); }
-.actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-.actions button { display: inline-flex; align-items: center; gap: 6px; padding: 10px 16px; border: none; border-radius: var(--radius-full); cursor: pointer; color: white; }
-.btn-pass { background: #34A853; }
-.btn-return { background: #E37400; }
-.btn-reject { background: #D93025; }
+.level-options button { height: 34px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
+.level-options button.active { color: white; background: var(--gradient-primary); border: none; }
+.level-tip { margin-top: 10px; color: var(--color-text-secondary); font-size: 12px; }
+textarea { width: 100%; min-height: 96px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); color: var(--color-text-primary); padding: 12px; resize: vertical; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.actions button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: var(--radius-full); border: none; color: white; cursor: pointer; }
+.btn-pass { background: #34a853; }
+.btn-return { background: #f59e0b; }
+.btn-reject { background: #ef4444; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px; color: var(--color-text-tertiary); }
 .empty-state .v-icon { font-size: 40px; }
-@media (max-width: 768px) {
-  .page-header { flex-direction: column; align-items: flex-start; }
-}
+@media (max-width: 768px) { .page-header { flex-direction: column; align-items: stretch; } }
 </style>

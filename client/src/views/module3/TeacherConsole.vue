@@ -2,7 +2,7 @@
   <div class="teacher-console">
     <div class="page-header">
       <h2>统计总览</h2>
-      <p class="page-desc">查看三方评价进度、统计结果并导出汇总表</p>
+      <p class="page-desc">查看批次、评测任务和综测进度状态，并导出汇总表</p>
     </div>
 
     <div class="filter-bar">
@@ -41,13 +41,15 @@
       </div>
       <table>
         <thead>
-          <tr><th>学生</th><th>学号</th><th>班级</th><th>综合分</th><th>等级</th><th>当前状态</th></tr>
+          <tr><th>批次</th><th>学生</th><th>学号</th><th>班级</th><th>评测人</th><th>综合分</th><th>等级</th><th>当前状态</th></tr>
         </thead>
         <tbody>
           <tr v-for="row in stats.rows" :key="row.id">
+            <td>{{ row.batch_title }}</td>
             <td>{{ row.student_name }}</td>
             <td>{{ row.student_no }}</td>
             <td>{{ row.class_name }}</td>
+            <td>{{ row.reviewer_names }}</td>
             <td>{{ row.total_score }}</td>
             <td>{{ row.level }}</td>
             <td>{{ row.status_label }}</td>
@@ -70,9 +72,9 @@ const currentBatch = ref('');
 
 const progressRows = computed(() => stats.value ? [
   { label: '已提交', value: stats.value.submitted },
-  { label: '待班级测评小组', value: stats.value.pending_class_committee },
+  { label: '待综测成员', value: stats.value.pending_class_committee },
   { label: '待辅导员', value: stats.value.pending_counselor },
-  { label: '待学生工作处', value: stats.value.pending_student_affairs },
+  { label: '待学工办', value: stats.value.pending_student_affairs },
   { label: '已认定通过', value: stats.value.approved },
 ] : []);
 

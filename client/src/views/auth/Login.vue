@@ -7,8 +7,24 @@
     </div>
     <div class="login-card glass-card">
       <h2 class="login-title">欢迎回来</h2>
-      <p class="login-subtitle">请登录您的账号</p>
+      <p class="login-subtitle">请先选择身份，再登录账号</p>
       <form @submit.prevent="handleLogin" class="login-form">
+        <div class="field-group">
+          <label class="field-label">登录身份</label>
+          <div class="role-grid">
+            <button
+              v-for="item in roles"
+              :key="item.value"
+              type="button"
+              class="role-card"
+              :class="{ active: form.role === item.value }"
+              @click="form.role = item.value"
+            >
+              <VIcon :icon="item.icon" />
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+        </div>
         <div class="field-group">
           <label class="field-label">用户名</label>
           <div class="input-wrapper" :class="{ focused: focusField === 'username', filled: form.username }">
@@ -23,12 +39,12 @@
             <input v-model="form.password" type="password" placeholder="请输入密码" required @focus="focusField = 'password'" @blur="focusField = ''" />
           </div>
         </div>
-        <button type="submit" class="btn-login" :disabled="loading">
+        <button type="submit" class="btn-login" :disabled="loading || !form.role">
           <span v-if="!loading">登录</span>
           <span v-else class="btn-loading"><VIcon icon="mdi:loading" class="spin" />登录中...</span>
         </button>
       </form>
-      <p class="login-tip">测试账号：student、admin、classgroup、counselor、affairs / 123456</p>
+      <p class="login-tip">测试账号：student、student2、member1、member2、testinfo1、testinfo2、counselor、affairs、admin / 123456。综测成员不再是登录角色，请选择“学生”登录。</p>
     </div>
   </div>
 </template>
@@ -40,10 +56,20 @@ import { useUserStore } from '../../stores/user';
 import { useRouter } from 'vue-router';
 const userStore = useUserStore();
 const router = useRouter();
-const form = ref({ username: '', password: '' });
+const roles = [
+  { value: 'student', label: '学生', icon: 'mdi:account-school-outline' },
+  { value: 'counselor', label: '辅导员', icon: 'mdi:account-tie-outline' },
+  { value: 'student_affairs', label: '学工办', icon: 'mdi:office-building-outline' },
+  { value: 'admin', label: '管理员', icon: 'mdi:shield-account-outline' },
+];
+const form = ref({ username: '', password: '', role: '' });
 const loading = ref(false);
 const focusField = ref('');
 async function handleLogin() {
+  if (!form.value.role) {
+    alert('请先选择登录身份');
+    return;
+  }
   loading.value = true;
   try {
     const res = await login(form.value);
@@ -51,8 +77,9 @@ async function handleLogin() {
       userStore.setAuth(res.data.token, res.data.user);
       const role = res.data.user.role;
       if (role === 'admin') router.push('/module3/batch-manage');
-      else if (['class_committee', 'counselor', 'student_affairs'].includes(role)) router.push('/module3/class-leader');
-      else router.push('/home');
+      else if (role === 'counselor') router.push('/module3/counselor');
+      else if (role === 'student_affairs') router.push('/module3/teacher');
+      else router.push('/module3/student');
     }
     else { alert(res.msg); }
   } catch (e) { alert('登录失败，请检查网络连接'); }
@@ -63,7 +90,7 @@ async function handleLogin() {
 <style scoped>
 .login-wrapper {
   display: flex; flex-direction: column; align-items: center;
-  gap: 32px; width: 100%; max-width: 420px;
+  gap: 32px; width: 100%; max-width: 460px;
   animation: fadeInUp 0.6s var(--easing-spring);
 }
 .login-brand { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
@@ -81,16 +108,22 @@ async function handleLogin() {
   border-radius: var(--radius-xl);
   animation: scaleIn 0.5s var(--easing-spring) 0.1s both;
 }
-/* 覆盖 glass-card 的 hover 效果 */
-.login-card.glass-card:hover {
-  transform: translateY(-2px);
-}
+.login-card.glass-card:hover { transform: translateY(-2px); }
 .login-title { font-size: 22px; font-weight: var(--font-weight-semibold); color: var(--color-text); margin-bottom: 4px; }
 .login-subtitle { font-size: 14px; color: var(--color-text-secondary); margin-bottom: 28px; }
 .login-form { display: flex; flex-direction: column; gap: 20px; }
 .field-group { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 13px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); padding-left: 4px; }
-
+.role-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.role-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-height: 72px; border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer;
+  transition: all var(--duration-fast) var(--easing-standard);
+}
+.role-card .v-icon { font-size: 22px; }
+.role-card span { font-size: 13px; }
+.role-card.active { color: var(--color-primary); border-color: var(--color-primary); background: rgba(99,102,241,0.08); box-shadow: 0 0 0 3px rgba(79,70,229,0.10); }
 .input-wrapper {
   display: flex; align-items: center; gap: 10px;
   padding: 0 14px;
@@ -109,7 +142,6 @@ async function handleLogin() {
   background: transparent; font-size: 15px; color: var(--color-text); outline: none;
 }
 .input-wrapper input::placeholder { color: var(--color-text-tertiary); }
-
 .btn-login {
   width: 100%; padding: 14px;
   background: var(--color-primary-gradient-bright); color: white;
@@ -121,11 +153,9 @@ async function handleLogin() {
   box-shadow: 0 4px 20px rgba(99,102,241,0.3);
 }
 .btn-login:hover:not(:disabled) { box-shadow: 0 8px 32px rgba(99,102,241,0.4); transform: translateY(-1px); }
-.btn-login:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .btn-login:disabled { opacity: 0.7; cursor: not-allowed; }
 .btn-loading { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .spin { animation: spin 0.8s linear infinite; font-size: 18px; }
-.login-tip { margin-top: 20px; font-size: 12px; color: var(--color-text-tertiary); text-align: center; }
-
-@media (max-width: 480px) { .login-card { padding: 32px 24px; } }
+.login-tip { margin-top: 20px; font-size: 12px; color: var(--color-text-tertiary); text-align: center; line-height: 1.6; }
+@media (max-width: 480px) { .login-card { padding: 32px 24px; } .role-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>

@@ -15,7 +15,7 @@
         <p class="hub-subtitle">五维综测 · 智能中枢</p>
         <p class="hub-desc">基于多模态语义对齐的高校综测智能填写与决策平台</p>
         <div class="hub-actions">
-          <button class="btn-primary" @click="goTo('/zongce/smart-fill')">
+          <button class="btn-primary" @click="goTo('/module1/smart-fill')">
             <VIcon icon="mdi:lightning-bolt" /> 开始填表
           </button>
           <button class="btn-hollow" @click="goTo('/module2/evaluation')">
@@ -86,13 +86,13 @@ const stats = [
 ];
 
 const modules = [
-  { title: '智能填表', desc: 'AI自动解析材料与规则，精准匹配填入表格', path: '/zongce/smart-fill', icon: 'mdi:auto-fix', iconBg: 'rgba(79,70,229,0.08)', meridianColor: '#4F46E5', tag: 'AI核心' },
+  { title: '智能填表', desc: 'AI自动解析材料与规则，精准匹配填入表格', path: '/module1/smart-fill', icon: 'mdi:auto-fix', iconBg: 'rgba(79,70,229,0.08)', meridianColor: '#4F46E5', tag: 'AI核心' },
   { title: '批量填表', desc: '一键批量生成多人文档，告别重复劳动', path: '/module1/batch-fill', icon: 'mdi:file-multiple-outline', iconBg: 'rgba(5,150,105,0.08)', meridianColor: '#059669', tag: '提效' },
   { title: '对话填表', desc: 'AI引导式提问，边聊边填', path: '/module1/chat-fill', icon: 'mdi:chat-processing-outline', iconBg: 'rgba(124,58,237,0.08)', meridianColor: '#7C3AED', tag: '智能' },
   { title: '个性评定', desc: '五维评分·雷达图·班级对比', path: '/module2/evaluation', icon: 'mdi:chart-radar', iconBg: 'rgba(217,119,6,0.08)', meridianColor: '#D97706', tag: '分析' },
   { title: '评定报告', desc: '智能评语·改进建议·PDF导出', path: '/module2/report', icon: 'mdi:file-document-text-outline', iconBg: 'rgba(6,182,212,0.08)', meridianColor: '#06B6D4', tag: '输出' },
   { title: '我的综测', desc: '学生端：材料提交·状态追踪', path: '/module3/student', icon: 'mdi:account-school-outline', iconBg: 'rgba(79,70,229,0.08)', meridianColor: '#4F46E5', tag: '学生' },
-  { title: '班级初审', desc: '班干部端：本班材料审核', path: '/module3/class-leader', icon: 'mdi:account-tie-outline', iconBg: 'rgba(234,88,12,0.08)', meridianColor: '#EA580C', tag: '班干' },
+  { title: '综测待评', desc: '综测成员：仅处理分配给自己的跨班待评表单', path: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', iconBg: 'rgba(234,88,12,0.08)', meridianColor: '#EA580C', tag: '待评' },
   { title: '总控中心', desc: '老师端：批次管理·统计导出', path: '/module3/teacher', icon: 'mdi:view-dashboard-outline', iconBg: 'rgba(5,150,105,0.08)', meridianColor: '#059669', tag: '管理' },
 ];
 </script>
