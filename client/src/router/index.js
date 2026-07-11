@@ -1,6 +1,8 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { useUserStore } from "../stores/user";
 const routes = [
   { path: "/login", name: "Login", component: () => import("../views/auth/Login.vue"), meta: { layout: "auth" } },
+  { path: "/register", name: "Register", component: () => import("../views/auth/Register.vue"), meta: { layout: "auth" } },
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
   /* 模块一 */
@@ -20,4 +22,16 @@ const routes = [
   { path: "/module3/batch-manage", name: "BatchManage", component: () => import("../views/module3/BatchManage.vue"), meta: { layout: "main", title: "批次管理" } },
 ];
 const router = createRouter({ history: createWebHistory(), routes });
+
+// 路由守卫：检查页面级角色权限
+router.beforeEach((to, from, next) => {
+  const store = useUserStore();
+  const requiredRoles = to.meta.roles;
+  if (requiredRoles && !requiredRoles.includes(store.userRole)) {
+    next({ name: "Home" });
+  } else {
+    next();
+  }
+});
+
 export default router;

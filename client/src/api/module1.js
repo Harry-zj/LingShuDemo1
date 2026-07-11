@@ -7,5 +7,5 @@ export const createMaterial = (d) => request.post("/module1/materials", d);
 export const submitMaterial = (id, d) => request.put(`/module1/materials/${id}/submit`, d);
 export const uploadFile = (d) => request.post("/module1/upload", d, { headers: { "Content-Type": "multipart/form-data" } });
 export const aiMatch = (d) => request.post("/module1/ai-match", d);
-export const batchFill = (d) => request.post("/module1/batch-fill", d);
+export const batchFill = (d) => request.post("/zongce/batch-fill", d);
 export const chatFill = (d) => request.post("/module1/chat-fill", d);

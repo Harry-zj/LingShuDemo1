@@ -73,10 +73,14 @@ const pending = ref([]);
 const stats = ref(null);
 
 async function load() {
-  const pendingRes = await getPendingReviews();
-  if (pendingRes.code === 200) pending.value = pendingRes.data || [];
-  const statRes = await getStatistics();
-  if (statRes.code === 200) stats.value = statRes.data;
+  try {
+    const pendingRes = await getPendingReviews();
+    if (pendingRes.code === 200) pending.value = pendingRes.data;
+    const statRes = await getStatistics();
+    if (statRes.code === 200) stats.value = statRes.data;
+  } catch (e) {
+    console.error('加载数据失败:', e.response?.data?.msg || e.message);
+  }
 }
 
 function goDetail(id) {
