@@ -1,12 +1,14 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useUserStore } from "../stores/user";
+const smartFillView = () => import("../views/zongce/SmartFill.vue");
+
 const routes = [
   { path: "/login", name: "Login", component: () => import("../views/auth/Login.vue"), meta: { layout: "auth" } },
   { path: "/register", name: "Register", component: () => import("../views/auth/Register.vue"), meta: { layout: "auth" } },
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
   /* 综测核心 */
-  { path: "/zongce/smart-fill", name: "SmartFill", component: () => import("../views/zongce/SmartFill.vue"), meta: { layout: "main", title: "智能填表" } },
+  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表" } },
   { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
   { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
   /* 模块二 */

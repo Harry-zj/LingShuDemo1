@@ -1,6 +1,7 @@
 <template>
   <div class="radar-chart-container" ref="chartRef"></div>
 </template>
+
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from "vue"
 import * as echarts from "echarts"
@@ -16,6 +17,43 @@ const props = defineProps({
 
 const chartRef = ref(null)
 let chart = null
+let themeObserver = null
+
+function getThemeColors() {
+  const isLight = document.documentElement.dataset.theme === "light"
+
+  if (isLight) {
+    return {
+      axisName: "rgba(48, 53, 47, 0.82)",
+      axisLine: "rgba(71, 76, 68, 0.38)",
+      splitLine: "rgba(71, 76, 68, 0.17)",
+      splitArea: [
+        "rgba(102, 123, 109, 0.07)",
+        "rgba(102, 123, 109, 0.025)",
+      ],
+      area: "rgba(79, 70, 229, 0.16)",
+      pointBorder: "#fffaf2",
+      tooltipBg: "rgba(255, 250, 242, 0.96)",
+      tooltipBorder: "rgba(74, 69, 58, 0.14)",
+      tooltipText: "#30352f",
+    }
+  }
+
+  return {
+    axisName: "rgba(246, 242, 232, 0.9)",
+    axisLine: "rgba(255, 255, 255, 0.46)",
+    splitLine: "rgba(255, 255, 255, 0.16)",
+    splitArea: [
+      "rgba(99, 102, 241, 0.16)",
+      "rgba(255, 255, 255, 0.025)",
+    ],
+    area: "rgba(79, 70, 229, 0.26)",
+    pointBorder: "rgba(255, 255, 255, 0.92)",
+    tooltipBg: "rgba(18, 20, 28, 0.96)",
+    tooltipBorder: "rgba(255, 255, 255, 0.12)",
+    tooltipText: "#f8f5ef",
+  }
+}
 
 function buildOption() {
   const indicator = props.dimensions.map(d => {
@@ -72,7 +110,19 @@ function buildOption() {
   }
 
   return {
-    tooltip: { trigger: "item" },
+    animationDuration: 500,
+
+    tooltip: {
+      trigger: "item",
+      backgroundColor: theme.tooltipBg,
+      borderColor: theme.tooltipBorder,
+      borderWidth: 1,
+      textStyle: {
+        color: theme.tooltipText,
+        fontSize: 13,
+      },
+    },
+
     radar: {
       center: ["50%", "52%"],
       radius: props.activeDimension ? "58%" : "65%",
@@ -81,11 +131,17 @@ function buildOption() {
       splitLine: { lineStyle: { color: "rgba(15,10,30,0.06)" } },
       axisLine: { lineStyle: { color: "rgba(15,10,30,0.08)" } },
     },
+
     series: [
       // 主面积
       {
         type: "radar",
-        data: [{ value: values, name: "得分" }],
+        data: [
+          {
+            value: values,
+            name: "得分",
+          },
+        ],
         symbol: "none",
         silent: true,
         areaStyle: { color: "rgba(79,70,229,0.10)" },
@@ -98,14 +154,23 @@ function buildOption() {
   }
 }
 
+function renderChart() {
+  if (!chart) return
+  chart.setOption(buildOption(), true)
+}
+
 function initChart() {
   if (!chartRef.value) return
+
   chart = echarts.init(chartRef.value)
-  chart.setOption(buildOption())
+  renderChart()
+
   window.addEventListener("resize", handleResize)
 }
 
-function handleResize() { chart?.resize() }
+function handleResize() {
+  chart?.resize()
+}
 
 watch(() => [props.data, props.dimensions, props.activeDimension], () => {
   if (chart) chart.setOption(buildOption(), true)
@@ -114,6 +179,11 @@ watch(() => [props.data, props.dimensions, props.activeDimension], () => {
 onMounted(initChart)
 onUnmounted(() => { window.removeEventListener("resize", handleResize); chart?.dispose() })
 </script>
+
 <style scoped>
-.radar-chart-container { width: 100%; height: 100%; min-height: 280px; }
+.radar-chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+}
 </style>

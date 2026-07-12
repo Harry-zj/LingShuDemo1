@@ -77,6 +77,7 @@ function openCard(name) {
   if (name === 'f1' || name === 'f2') { if (!ruleReady.value) { alert('请先发布规则集'); return }; activeCard.value = name; return }
   if (name === 'form' && confirmedRecCount.value === 0) { alert('暂无已确认的识别结果，请先在材料识别中完成 AI 识别并逐条确认后再使用自动填表'); return }
   activeCard.value = name
+  if (name === 'form' && !templatesLoaded.value) refreshTemplates()
 }
 
 // ========== 共享状态 ==========
@@ -112,7 +113,10 @@ async function refreshEval() {
 }
 async function refreshTemplates() {
   const r = await api.getTemplates();
-  if (r.code === 200) templates.value = r.data || [];
+  if (r.code === 200) {
+    templates.value = r.data || [];
+    templatesLoaded.value = true;
+  }
 }
 onMounted(async () => {
   await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]); if (templates.value.length > 0) { const latest = templates.value[0]; uploadedTemplate.value = { id: latest.id, name: latest.name, size: 0 }; }

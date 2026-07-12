@@ -13,7 +13,7 @@
         <VIcon :icon="isLight ? 'mdi:white-balance-sunny' : 'mdi:moon-waning-crescent'" />
       </span>
     </span>
-    <span class="toggle-label">{{ isLight ? '米白' : '深色' }}</span>
+    <span class="toggle-label">主题</span>
   </button>
 </template>
 
