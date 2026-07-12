@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="smart-fill">
     <div class="top-bar">
       <div class="top-bar-left">

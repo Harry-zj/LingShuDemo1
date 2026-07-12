@@ -16,24 +16,9 @@
       </div>
 
       <nav class="nav-menu">
-        <router-link to="/home" class="nav-item" active-class="active">
-          <VIcon icon="mdi:home-outline" class="nav-icon" />
-          <span class="nav-text">首页</span>
-        </router-link>
-
-        <router-link to="/zongce/smart-fill" class="nav-item" active-class="active">
-          <VIcon icon="mdi:file-document-edit-outline" class="nav-icon" />
-          <span class="nav-text">智能填表</span>
-        </router-link>
-
-        <router-link to="/module2/evaluation" class="nav-item" active-class="active">
-          <VIcon icon="mdi:chart-pie-outline" class="nav-icon" />
-          <span class="nav-text">个性评定</span>
-        </router-link>
-
-        <router-link to="/module3/student" class="nav-item" active-class="active">
-          <VIcon icon="mdi:account-group-outline" class="nav-icon" />
-          <span class="nav-text">信息管理</span>
+        <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="nav-item" active-class="active">
+          <VIcon :icon="item.icon" class="nav-icon" />
+          <span class="nav-text">{{ item.text }}</span>
         </router-link>
       </nav>
 
@@ -60,7 +45,7 @@
 
           <transition name="fade">
             <div class="dropdown-menu glass-card" v-if="showUserMenu">
-              <div class="dropdown-item">
+              <div class="dropdown-item" @click.stop="goProfile">
                 <VIcon icon="mdi:account-outline" />
                 <span>个人中心</span>
               </div>
@@ -92,53 +77,60 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useUserStore } from '../stores/user';
 import { useRouter } from 'vue-router';
 import ThemeToggle from '../components/ThemeToggle.vue';
 
 const userStore = useUserStore();
+const router = useRouter();
+const showUserMenu = ref(false);
 
 const navItems = computed(() => {
-  const role = userStore.role;
+  const role = userStore.userRole;
   const isMember = !!userStore.user?.is_assessment_member;
   if (role === 'admin') {
     return [
-      { to: '/module3/batch-manage', icon: 'mdi:cog-outline', text: '批次管理' },
-      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
+      { to: '/module3/admin', icon: 'mdi:view-dashboard-outline', text: '管理员工作台' },
+      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
     ];
   }
   if (role === 'counselor') {
     return [
-      { to: '/module3/counselor', icon: 'mdi:account-supervisor-outline', text: '辅导员工作台' },
+      { to: '/module3/counselor', icon: 'mdi:view-dashboard-outline', text: '模块三工作台' },
       { to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '待评价' },
-      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
+      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
     ];
   }
   if (role === 'student_affairs') {
     return [
-      { to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '待评价' },
-      { to: '/module3/teacher', icon: 'mdi:chart-timeline-variant', text: '进度监控' }
+      { to: '/module3/student-affairs', icon: 'mdi:view-dashboard-outline', text: '模块三工作台' },
+      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
     ];
   }
+  const profileComplete = userStore.user?.profile_complete !== false;
   const items = [
     { to: '/home', icon: 'mdi:home-outline', text: '首页' },
-    { to: '/module1/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
+    { to: '/zongce/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
     { to: '/module2/evaluation', icon: 'mdi:chart-pie-outline', text: '个性评定' },
-    { to: '/module3/student', icon: 'mdi:account-group-outline', text: '信息管理' }
+    ...(profileComplete ? [{ to: '/module3/student', icon: 'mdi:view-dashboard-outline', text: '综测评价' }] : []),
   ];
   if (isMember) items.push({ to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '我的待评' });
+  items.push({ to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' });
   return items;
 });
 
-const router = useRouter();
-const showUserMenu = ref(false);
+function goProfile() {
+  showUserMenu.value = false;
+  router.push('/module3/profile');
+}
 
 function goHome() {
-  if (userStore.role === 'admin') router.push('/module3/batch-manage');
-  else if (userStore.role === 'counselor') router.push('/module3/counselor');
-  else if (userStore.role === 'student_affairs') router.push('/module3/teacher');
-  else router.push('/module3/student');
+  const role = userStore.userRole;
+  if (role === 'admin') router.push('/module3/admin');
+  else if (role === 'counselor') router.push('/module3/counselor');
+  else if (role === 'student_affairs') router.push('/module3/student-affairs');
+  else router.push('/home');
 }
 
 function handleLogout() {

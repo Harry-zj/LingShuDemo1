@@ -6,7 +6,7 @@
         <span class="panel-count">{{ form.status_label }}</span>
       </div>
 
-      <div class="student-grid">
+      <div class="student-grid" v-if="showStudentInfo">
         <span>学号：{{ form.student_no }}</span>
         <span>姓名：{{ form.student_name }}</span>
         <span>学院：{{ form.college }}</span>
@@ -71,7 +71,7 @@
       </div>
 
       <div v-if="editable" class="edit-tip">
-        可以逐项修改项目名称、计分理由、分值、分类和子目录；也可以在任一子目录下新增或删除项目。
+        可以逐项修改项目名称、计分理由、分值、分类和子目录，也可以新增项目并为每个项目手动添加支撑材料。
       </div>
 
       <div class="section-block" v-for="section in localGrouped" :key="section.key">
@@ -119,13 +119,79 @@
               <template v-else>
                 <div class="item-title">{{ item.title }} <span>+{{ item.score }}分</span></div>
                 <p class="item-reason">{{ item.reason }}</p>
+                <div class="item-review-result" v-if="item.reviews?.length">
+                  <div v-for="review in item.reviews" :key="review.id">
+                    <strong>{{ review.reviewer_role === 'assessment_member' ? '评价小组' : review.reviewer_role === 'counselor' ? '辅导员' : '学生工作处' }}</strong>
+                    <span>{{ review.action === 'approve' ? '符合' : review.action === 'return' ? '需修改' : '不符合' }} · 复核分值 {{ review.reviewed_score }}</span>
+                    <p>{{ review.reason || '未填写逐项评测理由' }}</p>
+                  </div>
+                </div>
               </template>
 
-              <div class="evidence-list">
-                <span v-for="file in item.evidence_files" :key="file.id">
-                  <VIcon icon="mdi:paperclip" />{{ file.name }}
-                </span>
-                <span v-if="!item.evidence_files?.length">暂无支撑材料</span>
+              <div class="evidence-editor" v-if="editable">
+                <div class="evidence-editor-head">
+                  <div>
+                    <strong>支撑材料</strong>
+                    <small>支持图片、PDF、Word、Excel；单个项目最多 10 个文件。</small>
+                  </div>
+                  <label class="evidence-upload-btn" :class="{ disabled: uploadingEvidence[item.id] }">
+                    <input
+                      type="file"
+                      multiple
+                      accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx"
+                      :disabled="uploadingEvidence[item.id]"
+                      @change="handleEvidenceUpload(item, $event)"
+                    />
+                    <VIcon :icon="uploadingEvidence[item.id] ? 'mdi:loading' : 'mdi:paperclip-plus'" :class="{ spin: uploadingEvidence[item.id] }" />
+                    {{ uploadingEvidence[item.id] ? '上传中...' : '添加支撑材料' }}
+                  </label>
+                </div>
+                <p class="evidence-notice" v-if="evidenceNotices[item.id]">{{ evidenceNotices[item.id] }}</p>
+              </div>
+
+              <div class="evidence-list" :class="{ editable: editable }">
+                <div class="evidence-chip" v-for="file in item.evidence_files" :key="file.id">
+                  <a v-if="file.url" :href="file.url" target="_blank" rel="noopener noreferrer" :title="file.name">
+                    <VIcon icon="mdi:paperclip" />
+                    <span>{{ file.name }}</span>
+                    <small v-if="file.size">{{ formatFileSize(file.size) }}</small>
+                  </a>
+                  <span v-else class="evidence-file-name">
+                    <VIcon icon="mdi:paperclip" />{{ file.name }}
+                  </span>
+                  <button v-if="editable" type="button" class="evidence-remove" title="从当前项目移除" @click="removeEvidence(item, file)">
+                    <VIcon icon="mdi:close" />
+                  </button>
+                </div>
+                <span class="evidence-empty" v-if="!item.evidence_files?.length">暂无支撑材料</span>
+              </div>
+
+              <div class="item-objection" v-if="!editable && objectionMode">
+                <template v-if="item.objection">
+                  <strong>学生异议（{{ item.objection.status === 'pending' ? '待复评' : '已处理' }}）</strong>
+                  <p>异议理由：{{ item.objection.reason }}</p>
+                  <p v-if="item.objection.resolution">处理说明：{{ item.objection.resolution }}</p>
+                </template>
+                <template v-else-if="!objectionSubmitted">
+                  <label class="objection-check" :class="{ disabled: !canRaiseObjection }">
+                    <input
+                      type="checkbox"
+                      :checked="!!objectionSelections[item.id]"
+                      :disabled="!canRaiseObjection"
+                      @change="toggleObjection(item.id, $event.target.checked)"
+                    />
+                    <span>标记有异议</span>
+                  </label>
+                  <textarea
+                    v-if="objectionSelections[item.id]"
+                    class="objection-reason"
+                    :value="objectionReasons[item.id] || ''"
+                    placeholder="请填写该项异议理由（必填）"
+                    @input="updateObjectionReason(item.id, $event.target.value)"
+                  ></textarea>
+                  <small v-else-if="!canRaiseObjection">当前不在可提交异议的时间范围内</small>
+                </template>
+                <span v-else class="objection-not-selected">本次异议申请未包含该项</span>
               </div>
             </div>
           </div>
@@ -140,15 +206,26 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, reactive } from 'vue';
+import { uploadStudentSupportMaterials } from '../../api/module3';
 import { FORM_STRUCTURE } from '../../utils/constants';
 
 const props = defineProps({
   form: { type: Object, required: true },
-  editable: { type: Boolean, default: false }
+  editable: { type: Boolean, default: false },
+  objectionMode: { type: Boolean, default: false },
+  canRaiseObjection: { type: Boolean, default: false },
+  objectionSubmitted: { type: Boolean, default: false },
+  objectionSelections: { type: Object, default: () => ({}) },
+  objectionReasons: { type: Object, default: () => ({}) },
+  showStudentInfo: { type: Boolean, default: true },
 });
 
+const emit = defineEmits(['update-objection-selection', 'update-objection-reason']);
+
 const structure = FORM_STRUCTURE;
+const uploadingEvidence = reactive({});
+const evidenceNotices = reactive({});
 
 const localGrouped = computed(() => {
   if (!props.editable) return props.form.grouped_items || [];
@@ -169,6 +246,71 @@ const localGrouped = computed(() => {
     }))
   }));
 });
+
+
+function formatFileSize(size) {
+  const bytes = Number(size || 0);
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function handleEvidenceUpload(item, event) {
+  const input = event?.target;
+  const files = Array.from(input?.files || []);
+  if (input) input.value = '';
+  if (!files.length) return;
+
+  item.evidence_files = Array.isArray(item.evidence_files) ? item.evidence_files : [];
+  item.evidence_ids = Array.isArray(item.evidence_ids) ? item.evidence_ids : item.evidence_files.map(file => file.id).filter(Boolean);
+  const remaining = Math.max(0, 10 - item.evidence_files.length);
+  if (!remaining) {
+    evidenceNotices[item.id] = '每个综测项目最多添加 10 个支撑材料。';
+    return;
+  }
+  if (files.length > remaining) {
+    evidenceNotices[item.id] = `当前还可以添加 ${remaining} 个支撑材料，请重新选择。`;
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('batch_id', props.form.batch_id);
+  files.forEach(file => formData.append('files', file));
+  uploadingEvidence[item.id] = true;
+  evidenceNotices[item.id] = '';
+  try {
+    const res = await uploadStudentSupportMaterials(formData);
+    if (res.code !== 200) throw new Error(res.msg || '支撑材料上传失败');
+    const uploaded = Array.isArray(res.data?.files) ? res.data.files : [];
+    const knownIds = new Set(item.evidence_ids.map(Number));
+    for (const file of uploaded) {
+      if (knownIds.has(Number(file.id))) continue;
+      item.evidence_files.push(file);
+      item.evidence_ids.push(Number(file.id));
+      knownIds.add(Number(file.id));
+    }
+    evidenceNotices[item.id] = `已添加 ${uploaded.length} 个支撑材料，请点击页面底部“保存修改”完成项目绑定。`;
+  } catch (error) {
+    evidenceNotices[item.id] = error?.response?.data?.msg || error?.message || '支撑材料上传失败';
+  } finally {
+    uploadingEvidence[item.id] = false;
+  }
+}
+
+function removeEvidence(item, file) {
+  item.evidence_files = (item.evidence_files || []).filter(current => Number(current.id) !== Number(file.id));
+  item.evidence_ids = (item.evidence_ids || []).filter(id => Number(id) !== Number(file.id));
+  evidenceNotices[item.id] = '已从当前项目移除该支撑材料，请保存修改。';
+}
+
+function toggleObjection(itemId, selected) {
+  emit('update-objection-selection', { itemId, selected });
+}
+
+function updateObjectionReason(itemId, reason) {
+  emit('update-objection-reason', { itemId, reason });
+}
 
 function childrenOf(sectionKey) {
   return structure.find(s => s.key === sectionKey)?.children || [];
@@ -233,8 +375,29 @@ function removeItem(item) {
 .item-title { font-weight: var(--font-weight-semibold); }
 .item-title span { color: var(--color-primary); }
 .item-reason { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin-top: 6px; }
+.item-review-result, .item-objection { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px; border-radius: var(--radius-md); background: var(--color-bg); font-size: 12px; }
+.item-review-result > div { display: grid; gap: 4px; }
+.item-review-result span, .item-review-result p, .item-objection p { color: var(--color-text-secondary); line-height: 1.5; }
+.item-objection { background: rgba(245,158,11,.10); }
+
+.evidence-editor { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--color-border); }
+.evidence-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.evidence-editor-head > div { display: flex; flex-direction: column; gap: 3px; }
+.evidence-editor-head strong { font-size: 13px; }
+.evidence-editor-head small, .evidence-notice { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.5; }
+.evidence-notice { margin-top: 8px; color: var(--color-primary); }
+.evidence-upload-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-primary); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.evidence-upload-btn input { display: none; }
+.evidence-upload-btn.disabled { opacity: .55; cursor: not-allowed; }
 .evidence-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.evidence-list span { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: var(--radius-full); background: var(--color-bg); font-size: 12px; }
+.evidence-chip { display: inline-flex; align-items: center; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-bg); overflow: hidden; }
+.evidence-chip a, .evidence-file-name { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 5px 9px; color: var(--color-text-secondary); font-size: 12px; text-decoration: none; }
+.evidence-chip a:hover { color: var(--color-primary); }
+.evidence-chip a span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evidence-chip a small { color: var(--color-text-tertiary); }
+.evidence-remove { display: inline-flex; align-items: center; justify-content: center; width: 27px; height: 27px; border: 0; border-left: 1px solid var(--color-border); background: transparent; color: var(--color-text-tertiary); cursor: pointer; }
+.evidence-remove:hover { color: #ef4444; background: rgba(239,68,68,.08); }
+.evidence-empty { color: var(--color-text-tertiary); font-size: 12px; }
 .empty-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-tertiary); font-size: 13px; }
 .item-input, .item-textarea, .edit-row input, .edit-row select {
   border: 1px solid var(--color-border); border-radius: var(--radius-md);
@@ -249,6 +412,16 @@ function removeItem(item) {
 @media (max-width: 768px) {
   .student-grid, .edit-row { grid-template-columns: 1fr; }
   .score-table { font-size: 12px; }
-  .sub-head, .empty-sub { flex-direction: column; align-items: stretch; }
+  .sub-head, .empty-sub, .evidence-editor-head { flex-direction: column; align-items: stretch; }
+  .evidence-upload-btn { width: fit-content; }
 }
+
+.item-objection { margin-top: 12px; padding: 12px; border-radius: var(--radius-lg); background: color-mix(in srgb, #f59e0b 9%, var(--color-surface)); border: 1px solid color-mix(in srgb, #f59e0b 25%, var(--color-border)); }
+.item-objection strong { color: #d97706; font-size: 13px; }
+.item-objection p { margin-top: 6px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
+.objection-check { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-primary); font-size: 13px; font-weight: 600; cursor: pointer; }
+.objection-check.disabled { color: var(--color-text-tertiary); cursor: not-allowed; }
+.objection-check input { width: 16px; height: 16px; accent-color: var(--color-primary); }
+.objection-reason { width: 100%; min-height: 82px; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-primary); resize: vertical; }
+.item-objection small, .objection-not-selected { display: block; margin-top: 7px; color: var(--color-text-tertiary); font-size: 12px; }
 </style>

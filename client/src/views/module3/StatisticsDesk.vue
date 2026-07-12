@@ -13,7 +13,7 @@
       <div><span>已提交</span><strong>{{ stats.submitted }}</strong></div>
       <div><span>未提交</span><strong>{{ stats.unsubmitted }}</strong></div>
       <div><span>已认定通过</span><strong>{{ stats.approved }}</strong></div>
-      <div><span>待班级测评小组</span><strong>{{ stats.pending_class_committee }}</strong></div>
+      <div><span>待综测成员</span><strong>{{ stats.pending_class_committee }}</strong></div>
       <div><span>待辅导员</span><strong>{{ stats.pending_counselor }}</strong></div>
       <div><span>待学生工作处</span><strong>{{ stats.pending_student_affairs }}</strong></div>
       <div><span>退回/不予认定</span><strong>{{ stats.returned + stats.rejected }}</strong></div>

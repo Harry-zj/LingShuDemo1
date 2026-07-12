@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
   username VARCHAR(50) NOT NULL UNIQUE,
   password VARCHAR(255) NOT NULL,
   role ENUM('student','class_leader','teacher','class_committee','counselor','student_affairs','admin') NOT NULL DEFAULT 'student',
+  is_assessment_member TINYINT(1) NOT NULL DEFAULT 0,
   real_name VARCHAR(50) DEFAULT '',
   student_no VARCHAR(20) DEFAULT NULL,
   class_id INT DEFAULT NULL,
@@ -199,7 +200,10 @@ CREATE TABLE IF NOT EXISTS fill_results (
 -- ============================================================
 CREATE TABLE IF NOT EXISTS assessment_batches (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  school_year VARCHAR(20) NOT NULL DEFAULT '',
   title VARCHAR(200) NOT NULL,
+  college VARCHAR(100) NOT NULL DEFAULT '',
+  grade VARCHAR(20) NOT NULL DEFAULT '',
   description TEXT,
   start_time DATETIME DEFAULT NULL,
   end_time DATETIME DEFAULT NULL,
@@ -209,7 +213,8 @@ CREATE TABLE IF NOT EXISTS assessment_batches (
   creator_name VARCHAR(50) DEFAULT '',
   options JSON DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_batch_scope (college, grade, school_year)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -228,13 +233,17 @@ CREATE TABLE IF NOT EXISTS assessment_forms (
   class_id INT DEFAULT NULL,
   class_name VARCHAR(100) DEFAULT '',
   from_smart_fill TINYINT(1) DEFAULT 1,
+  is_demo TINYINT(1) NOT NULL DEFAULT 0,
   status VARCHAR(50) DEFAULT 'smart_ready',
   level VARCHAR(10) DEFAULT '',
   manual_level VARCHAR(10) DEFAULT '',
   scores JSON NOT NULL,
   personal_summary TEXT,
+  result_released_at DATETIME DEFAULT NULL,
+  pre_objection_status VARCHAR(50) NOT NULL DEFAULT '',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_student_batch (student_id, batch_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -278,6 +287,163 @@ CREATE TABLE IF NOT EXISTS assessment_settings (
   setting_key VARCHAR(50) NOT NULL UNIQUE,
   setting_value JSON DEFAULT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- ============================================================
+-- 十六之二、模块三班级与评价任务相关表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS assessment_colleges (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_assessment_college_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_majors (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  college_id INT NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_assessment_major (college_id, name),
+  KEY idx_assessment_major_college (college_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_classes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  college VARCHAR(100) NOT NULL DEFAULT '',
+  major VARCHAR(100) NOT NULL DEFAULT '',
+  grade VARCHAR(20) NOT NULL DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_assessment_class_scope (college, major, grade, name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS counselor_scopes (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  counselor_id INT NOT NULL,
+  college VARCHAR(100) NOT NULL DEFAULT '',
+  grade VARCHAR(20) NOT NULL DEFAULT '',
+  class_ids JSON DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_counselor_scope (counselor_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_review_assignments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  batch_id INT NOT NULL,
+  target_class_id INT NOT NULL,
+  target_class_name VARCHAR(100) NOT NULL DEFAULT '',
+  reviewer_class_id INT NOT NULL,
+  reviewer_class_name VARCHAR(100) NOT NULL DEFAULT '',
+  created_by INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_batch_target_class (batch_id, target_class_id),
+  KEY idx_assignment_batch (batch_id),
+  KEY idx_assignment_reviewer_class (reviewer_class_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_review_assignment_members (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  assignment_id INT NOT NULL,
+  reviewer_id INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_assignment_reviewer (assignment_id, reviewer_id),
+  KEY idx_assignment_member_reviewer (reviewer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_batch_members (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  batch_id INT NOT NULL,
+  student_id INT NOT NULL,
+  assigned_by INT DEFAULT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'active',
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  removed_at DATETIME DEFAULT NULL,
+  UNIQUE KEY uk_batch_student_member (batch_id, student_id),
+  KEY idx_batch_member_batch_status (batch_id, status),
+  KEY idx_batch_member_student (student_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_review_tasks (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  batch_id INT NOT NULL,
+  form_id INT NOT NULL,
+  reviewer_id INT NOT NULL,
+  reviewer_name VARCHAR(50) DEFAULT '',
+  reviewer_no VARCHAR(20) DEFAULT '',
+  reviewer_class_id INT DEFAULT NULL,
+  reviewer_class_name VARCHAR(100) DEFAULT '',
+  target_class_name VARCHAR(100) DEFAULT '',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  stage VARCHAR(30) NOT NULL DEFAULT 'initial',
+  action VARCHAR(20) DEFAULT '',
+  comment TEXT,
+  assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  completed_at DATETIME DEFAULT NULL,
+  KEY idx_task_batch_reviewer (batch_id, reviewer_id),
+  KEY idx_task_form (form_id),
+  KEY idx_task_status (status),
+  KEY idx_task_batch_status_stage (batch_id, status, stage)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+
+CREATE TABLE IF NOT EXISTS assessment_item_reviews (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  form_id INT NOT NULL,
+  item_id INT NOT NULL,
+  reviewer_id INT NOT NULL,
+  reviewer_role VARCHAR(30) NOT NULL DEFAULT '',
+  stage VARCHAR(30) NOT NULL DEFAULT 'initial',
+  action VARCHAR(20) NOT NULL DEFAULT 'approve',
+  reason TEXT,
+  reviewed_score DECIMAL(5,2) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_item_review_stage (form_id, item_id, reviewer_id, reviewer_role, stage),
+  KEY idx_item_review_form (form_id),
+  KEY idx_item_review_item (item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_objections (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  batch_id INT NOT NULL,
+  form_id INT NOT NULL,
+  item_id INT NOT NULL,
+  student_id INT NOT NULL,
+  reason TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  original_reviewer_id INT NOT NULL,
+  resolution TEXT,
+  resolved_by INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  resolved_at DATETIME DEFAULT NULL,
+  UNIQUE KEY uk_form_item_objection (form_id, item_id, student_id),
+  KEY idx_objection_batch_status (batch_id, status),
+  KEY idx_objection_form_status (form_id, status),
+  KEY idx_objection_reviewer (original_reviewer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS assessment_operation_logs (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  operator_id INT DEFAULT NULL,
+  operator_name VARCHAR(50) DEFAULT '',
+  operator_role VARCHAR(30) DEFAULT '',
+  action VARCHAR(100) DEFAULT '',
+  target VARCHAR(200) DEFAULT '',
+  detail TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_operation_created_at (created_at),
+  KEY idx_operation_operator (operator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

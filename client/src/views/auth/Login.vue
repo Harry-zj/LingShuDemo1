@@ -7,7 +7,7 @@
     </div>
     <div class="login-card glass-card">
       <h2 class="login-title">欢迎回来</h2>
-      <p class="login-subtitle">请选择角色并登录您的账号</p>
+      <p class="login-subtitle">学生使用学号登录；辅导员、学生工作处和管理员使用系统账号登录</p>
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="field-group">
           <label class="field-label">角色</label>
@@ -20,10 +20,10 @@
           </div>
         </div>
         <div class="field-group">
-          <label class="field-label">用户名</label>
-          <div class="input-wrapper" :class="{ focused: focusField === 'username', filled: form.username }">
+          <label class="field-label">学号/账号</label>
+          <div class="input-wrapper" :class="{ focused: focusField === 'account', filled: form.account }">
             <VIcon icon="mdi:account-outline" class="input-icon" />
-            <input v-model="form.username" placeholder="请输入用户名" required @focus="focusField = 'username'" @blur="focusField = ''" />
+            <input v-model="form.account" placeholder="学生请输入学号；其他角色请输入账号" required @focus="focusField = 'account'" @blur="focusField = ''" />
           </div>
         </div>
         <div class="field-group">
@@ -33,13 +33,13 @@
             <input v-model="form.password" type="password" placeholder="请输入密码" required @focus="focusField = 'password'" @blur="focusField = ''" />
           </div>
         </div>
-        <button type="submit" class="btn-login" :disabled="loading || !form.role">
+        <button type="submit" class="btn-login" :disabled="loading">
           <span v-if="!loading">登录</span>
           <span v-else class="btn-loading"><VIcon icon="mdi:loading" class="spin" />登录中...</span>
         </button>
       </form>
       <p class="login-tip">
-        测试账号：zhangsan / 123456（学生）
+        测试账号：2024001001 / 123456（学生）；a000001 / a000001（管理员）
         <br />没有账号？<router-link to="/register">立即注册</router-link>
       </p>
     </div>
@@ -54,38 +54,32 @@ import { useRouter } from 'vue-router';
 
 const userStore = useUserStore();
 const router = useRouter();
-const form = ref({ username: '', password: '', role: '' });
+const form = ref({ account: '', password: '', role: '' });
 const loading = ref(false);
 const focusField = ref('');
 
 const ROLE_OPTIONS = {
   student: '学生',
   admin: '管理员',
-  class_committee: '班级测评小组',
   counselor: '辅导员',
   student_affairs: '学生工作处',
 };
 
 // 角色到首页路由映射
 const ROLE_HOME = {
-  admin: '/module3/batch-manage',
-  class_committee: '/module3/class-leader',
-  counselor: '/module3/class-leader',
-  student_affairs: '/module3/class-leader',
+  admin: '/module3/admin',
+  counselor: '/module3/counselor',
+  student_affairs: '/module3/student-affairs',
 };
 
 async function handleLogin() {
-  if (!form.value.role) {
-    alert('请先选择登录身份');
-    return;
-  }
   loading.value = true;
   try {
-    const res = await login(form.value);
+    const res = await login({ account: form.value.account, password: form.value.password, role: form.value.role });
     if (res.code === 200) {
       userStore.setAuth(res.data.token, res.data.user);
       const role = res.data.user.role;
-      router.push(ROLE_HOME[role] || '/home');
+      router.push(ROLE_HOME[role] || '/module3/student');
     } else {
       alert(res.msg);
     }
@@ -122,6 +116,7 @@ async function handleLogin() {
 .input-wrapper input::placeholder { color: var(--color-text-tertiary); }
 .btn-login { width: 100%; padding: 14px; background: var(--color-primary-gradient-bright); color: white; border: none; border-radius: var(--radius-full); font-size: 16px; font-weight: var(--font-weight-semibold); cursor: pointer; position: relative; overflow: hidden; transition: all var(--duration-normal) var(--easing-spring); margin-top: 4px; box-shadow: 0 4px 20px rgba(99,102,241,0.3); }
 .btn-login:hover:not(:disabled) { box-shadow: 0 8px 32px rgba(99,102,241,0.4); transform: translateY(-1px); }
+.btn-login:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .btn-login:disabled { opacity: 0.7; cursor: not-allowed; }
 .btn-loading { display: flex; align-items: center; justify-content: center; gap: 8px; }
 .spin { animation: spin 0.8s linear infinite; font-size: 18px; }

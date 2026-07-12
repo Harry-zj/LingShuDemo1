@@ -2,11 +2,34 @@ const bcrypt = require("bcryptjs");
 
 async function seedDevData(conn) {
   const pwd = await bcrypt.hash("123456", 10);
+  const adminPwd = await bcrypt.hash("a000001", 10);
+
+  await conn.execute(
+    "INSERT IGNORE INTO users (id, username, password, role) VALUES (1, 'a000001', ?, 'admin')",
+    [adminPwd]
+  );
+  await conn.execute(
+    "INSERT INTO assessment_colleges (name) VALUES ('信息科学与工程学院') ON DUPLICATE KEY UPDATE is_active=1"
+  );
+  const [[seedCollege]] = await conn.execute("SELECT id FROM assessment_colleges WHERE name='信息科学与工程学院' LIMIT 1");
+  await conn.execute(
+    "INSERT INTO assessment_majors (college_id, name) VALUES (?, '计算机科学与技术') ON DUPLICATE KEY UPDATE is_active=1",
+    [seedCollege.id]
+  );
+
+  // 模块三班级基础数据；不假定固定主键，避免与已有数据库中的班级 ID 冲突。
+  await conn.execute(
+    "INSERT IGNORE INTO assessment_classes (name, college, major, grade) VALUES ('计科2401班', '信息科学与工程学院', '计算机科学与技术', '2024级')"
+  );
+  const [[seedClass]] = await conn.execute(
+    "SELECT id FROM assessment_classes WHERE name='计科2401班' AND college='信息科学与工程学院' AND major='计算机科学与技术' AND grade='2024级' LIMIT 1"
+  );
+  const seedClassId = seedClass?.id || null;
 
   // ---- 只保留测试学生：张三 ----
   await conn.execute(
-    "INSERT IGNORE INTO users (id, username, password, role, real_name, student_no, class_id, class_name, college, major, grade) VALUES (2, 'zhangsan', ?, 'student', '张三', '2024001001', 1, '计科2401班', '信息科学与工程学院', '计算机科学与技术', '2024级')",
-    [pwd]
+    "INSERT IGNORE INTO users (id, username, password, role, real_name, student_no, class_id, class_name, college, major, grade) VALUES (2, '2024001001', ?, 'student', '张三', '2024001001', ?, '计科2401班', '信息科学与工程学院', '计算机科学与技术', '2024级')",
+    [pwd, seedClassId]
   );
 
   // 测试模板
@@ -40,15 +63,15 @@ async function seedDevData(conn) {
 
   // ---- 评估批次 ----
   await conn.execute(
-    "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (101, '2025-2026学年本科学生综合素质测评', '学生上传支撑材料后，由智能填表模块生成综测评价表结果。', '2026-07-01 08:00:00', '2026-07-25 23:59:59', '评价表结果由智能填表模块生成，三类评价主体依次评价。', 'published', 2, '张三', ?)",
+    "INSERT IGNORE INTO assessment_batches (id, school_year, title, college, grade, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (101, '2025-2026', '2025-2026学年本科学生综合素质测评', '信息科学与工程学院', '2024级', '学生上传支撑材料后，由智能填表模块生成综测评价表结果。', '2026-07-01 08:00:00', '2026-07-25 23:59:59', '评价表结果由智能填表模块生成，三类评价主体依次评价。', 'published', 2, '张三', ?)",
     [JSON.stringify({ allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false })]
   );
   await conn.execute(
-    "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (102, '2024-2025学年本科学生综合素质测评', '历史批次——大二学年综测评定', '2025-07-01 08:00:00', '2025-07-25 23:59:59', '', 'published', 2, '张三', ?)",
+    "INSERT IGNORE INTO assessment_batches (id, school_year, title, college, grade, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (102, '2024-2025', '2024-2025学年本科学生综合素质测评', '信息科学与工程学院', '2024级', '历史批次——大二学年综测评定', '2025-07-01 08:00:00', '2025-07-25 23:59:59', '', 'published', 2, '张三', ?)",
     [JSON.stringify({})]
   );
   await conn.execute(
-    "INSERT IGNORE INTO assessment_batches (id, title, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (103, '2023-2024学年本科学生综合素质测评', '历史批次——大一学年综测评定', '2024-07-01 08:00:00', '2024-07-25 23:59:59', '', 'published', 2, '张三', ?)",
+    "INSERT IGNORE INTO assessment_batches (id, school_year, title, college, grade, description, start_time, end_time, requirements, status, created_by, creator_name, options) VALUES (103, '2023-2024', '2023-2024学年本科学生综合素质测评', '信息科学与工程学院', '2024级', '历史批次——大一学年综测评定', '2024-07-01 08:00:00', '2024-07-25 23:59:59', '', 'published', 2, '张三', ?)",
     [JSON.stringify({})]
   );
 
@@ -62,8 +85,8 @@ async function seedDevData(conn) {
     F3_details: { B1: 8.0, B2: 18.0, B3: 6.0, B4: 3.0, B5: 0, B6: 8.0, B7: 7.5, B8: 6.3 }
   };
   await conn.execute(
-    "INSERT IGNORE INTO assessment_forms (id, batch_id, batch_title, student_id, student_name, student_no, college, major, grade, class_id, class_name, from_smart_fill, status, level, scores, personal_summary) VALUES (201, 101, '2025-2026学年本科学生综合素质测评', 2, '张三', '2024001001', '信息科学与工程学院', '计算机科学与技术', '2024级', 1, '计科2401班', 1, 'smart_ready', '优', ?, ?)",
-    [JSON.stringify(zhangsanScores), '该数据由智能填表模块根据学生上传材料和规则自动生成。']
+    "INSERT IGNORE INTO assessment_forms (id, batch_id, batch_title, student_id, student_name, student_no, college, major, grade, class_id, class_name, from_smart_fill, status, level, scores, personal_summary) VALUES (201, 101, '2025-2026学年本科学生综合素质测评', 2, '张三', '2024001001', '信息科学与工程学院', '计算机科学与技术', '2024级', ?, '计科2401班', 1, 'smart_ready', '优', ?, ?)",
+    [seedClassId, JSON.stringify(zhangsanScores), '该数据由智能填表模块根据学生上传材料和规则自动生成。']
   );
 
   // ---- 评估表加分项（14条，与MOCK_DATA完全一致） ----
@@ -95,7 +118,7 @@ async function seedDevData(conn) {
   );
   await conn.execute(
     "INSERT IGNORE INTO assessment_settings (id, setting_key, setting_value) VALUES (2, 'general', ?)",
-    [JSON.stringify({ submitDeadline: '2026-07-25 23:59:59', allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false, publishNotice: '请在截止时间前确认智能填表结果，并提交至班级测评小组。' })]
+    [JSON.stringify({ submitDeadline: '2026-07-25 23:59:59', allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false, publishNotice: '请在截止时间前确认智能填表结果，并提交至综测成员。' })]
   );
 
   // ---- 个性评定配置（权重 & 等级阈值） ----
@@ -116,7 +139,7 @@ async function seedDevData(conn) {
     [JSON.stringify(gradeLevels)]
   );
 
-  console.log("[DB] 种子完成: 用户(zhangsan) 映射(" + maps.length + "条) 评定(3学年) 批次(3个) 配置(2项) 表单(1条) 条目(14条)");
+  console.log("[DB] 种子完成: 管理员(a000001/a000001) 学生(2024001001/123456) 映射(" + maps.length + "条) 评定(3学年) 批次(3个) 配置(2项) 表单(1条) 条目(14条)");
 }
 
 module.exports = { seedDevData };

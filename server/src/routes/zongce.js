@@ -1,5 +1,5 @@
 const router = require("express").Router();
-const auth = require("../middleware/devAuth");  // 开发模式，正式上线改回 ../middleware/auth
+const auth = require("../middleware/auth");
 const upload = require("../middleware/upload");
 
 const ruleCtrl = require("../controllers/zongce/ruleController");
