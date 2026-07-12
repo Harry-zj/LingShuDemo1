@@ -114,7 +114,7 @@
             <div class="card-icon">
               <VIcon :icon="item.icon" />
             </div>
-            
+            <span>{{ item.tag }}</span>
           </div>
 
           <div class="card-main">
@@ -125,6 +125,28 @@
           <div class="card-bottom">
             <span>{{ item.stage }}</span>
             <VIcon icon="mdi:arrow-top-right" />
+          </div>
+        </div>
+      </div>
+
+      <div class="workflow-spacer" aria-hidden="true"></div>
+
+      <div class="workflow-ambient" aria-hidden="true">
+        <div class="ambient-line"></div>
+        <div class="ambient-copy">
+          <span>LingShu Meridian</span>
+          <strong>五维脉络自然汇合</strong>
+          <p>以轻量留白承接上方工作流，保持页面呼吸感。</p>
+        </div>
+
+        <div class="ambient-nodes">
+          <div
+            v-for="node in ambientNodes"
+            :key="node.label"
+            class="ambient-node"
+          >
+            <VIcon :icon="node.icon" />
+            <span>{{ node.label }}</span>
           </div>
         </div>
       </div>
@@ -173,25 +195,25 @@ const dimensions = [
   {
     name: '智育',
     icon: 'mdi:book-open-page-variant-outline',
-    color: '#4F46E5',
+    color: 'var(--color-primary)',
     className: 'node-zhiyu'
   },
   {
     name: '德育',
     icon: 'mdi:hand-heart-outline',
-    color: '#D97706',
+    color: 'var(--color-accent)',
     className: 'node-deyu'
   },
   {
     name: '体育',
     icon: 'mdi:run-fast',
-    color: '#059669',
+    color: 'var(--color-primary-hover)',
     className: 'node-tiyu'
   },
   {
     name: '美育',
     icon: 'mdi:palette-outline',
-    color: '#7C3AED',
+    color: 'var(--color-primary)',
     className: 'node-meiyu'
   },
   {
@@ -208,8 +230,9 @@ const modules = computed(() => [
     desc: 'AI 自动识别材料内容，匹配综测规则和表单字段，是整个平台的核心入口。',
     path: '/zongce/smart-fill',
     icon: 'mdi:auto-fix',
-    color: '#4F46E5',
+    color: 'var(--color-primary)',
     stage: 'Material → Form',
+    tag: '核心入口',
     large: true
   },
   {
@@ -217,8 +240,9 @@ const modules = computed(() => [
     desc: '按登录身份进入对应管理台，材料状态、班级初审、批次管理与老师总控统一收口。',
     path: managementHome.value,
     icon: 'mdi:account-group-outline',
-    color: '#F59E0B',
+    color: 'var(--color-accent)',
     stage: 'Manage → Review',
+    tag: '权限分流',
     large: true
   },
   {
@@ -226,34 +250,46 @@ const modules = computed(() => [
     desc: '批量处理多人材料，减少重复录入，适合班级或批次集中填报。',
     path: '/zongce/batch-fill',
     icon: 'mdi:file-multiple-outline',
-    color: '#059669',
-    stage: 'Batch'
+    color: 'var(--color-primary-hover)',
+    stage: 'Batch',
+    tag: '批量处理'
   },
   {
     title: '对话填表',
     desc: '用自然语言补充材料信息，让缺失字段通过问答方式快速完善。',
     path: '/zongce/chat-fill',
     icon: 'mdi:chat-processing-outline',
-    color: '#7C3AED',
-    stage: 'Chat'
+    color: 'var(--color-primary)',
+    stage: 'Chat',
+    tag: '自然语言'
   },
   {
     title: '评定结果',
     desc: '查看五维评分、画像分析与评定结果，快速定位优势和待提升项。',
     path: '/module2/evaluation',
     icon: 'mdi:chart-box-outline',
-    color: '#D97706',
-    stage: 'Evaluate'
+    color: 'var(--color-accent)',
+    stage: 'Evaluate',
+    tag: '五维画像'
   },
   {
     title: '评定报告',
     desc: '生成智能评语、改进建议与综测报告，形成可导出的最终成果。',
     path: '/module2/report',
     icon: 'mdi:file-chart-outline',
-    color: '#06B6D4',
-    stage: 'Report'
+    color: 'var(--color-cyan-accent, var(--color-accent))',
+    stage: 'Report',
+    tag: '结果沉淀'
   },
 ]);
+
+const ambientNodes = [
+  { label: '德育', icon: 'mdi:hand-heart-outline' },
+  { label: '智育', icon: 'mdi:book-open-page-variant-outline' },
+  { label: '体育', icon: 'mdi:run-fast' },
+  { label: '美育', icon: 'mdi:palette-outline' },
+  { label: '劳育', icon: 'mdi:hammer-wrench' },
+];
 </script>
 
 <style scoped>
@@ -648,7 +684,7 @@ const modules = computed(() => [
   grid-template-columns: repeat(8, minmax(0, 1fr));
   grid-auto-rows: 168px;
   gap: 18px;
-  align-items: stretch;
+align-items: stretch;
 }
 
 .module-card {
@@ -770,14 +806,14 @@ const modules = computed(() => [
 
 .module-card:nth-child(1) {
   background:
-    radial-gradient(circle at 88% 14%, rgba(79, 70, 229, 0.18), transparent 36%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.48));
+    radial-gradient(circle at 88% 14%, color-mix(in srgb, var(--color-primary) 14%, transparent), transparent 36%),
+    var(--glass-bg);
 }
 
 .module-card:nth-child(2) {
   background:
-    radial-gradient(circle at 88% 14%, rgba(245, 158, 11, 0.2), transparent 36%),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.48));
+    radial-gradient(circle at 88% 14%, color-mix(in srgb, var(--color-accent) 13%, transparent), transparent 36%),
+    var(--glass-bg);
 }
 
 .card-main p {
@@ -807,6 +843,117 @@ const modules = computed(() => [
 
 .module-card:hover .card-bottom svg {
   transform: translate(3px, -3px);
+}
+
+/* 工作流下方隔离与装饰区 */
+.workflow-spacer {
+  height: 220px;
+  flex: 0 0 220px;
+}
+
+.workflow-ambient {
+  position: relative;
+  z-index: 0;
+  min-height: 118px;
+  padding: 0 28px 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  align-items: center;
+  gap: 32px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.workflow-ambient::before {
+  content: '';
+  position: absolute;
+  left: 24px;
+  right: 24px;
+  top: -72px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    color-mix(in srgb, var(--color-primary) 18%, transparent),
+    color-mix(in srgb, var(--color-accent) 12%, transparent),
+    transparent
+  );
+}
+
+.ambient-line {
+  position: absolute;
+  left: 35%;
+  right: 8%;
+  top: 50%;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--color-primary) 10%, transparent),
+    color-mix(in srgb, var(--color-primary) 22%, transparent),
+    color-mix(in srgb, var(--color-accent) 16%, transparent),
+    transparent
+  );
+}
+
+.ambient-copy,
+.ambient-nodes {
+  position: relative;
+  z-index: 1;
+}
+
+.ambient-copy span {
+  color: color-mix(in srgb, var(--color-primary) 76%, var(--color-text-secondary));
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.ambient-copy strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--color-text);
+  font-size: clamp(20px, 2vw, 28px);
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.ambient-copy p {
+  max-width: 420px;
+  margin-top: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.ambient-nodes {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ambient-node {
+  min-height: 78px;
+  display: grid;
+  place-items: center;
+  gap: 7px;
+  border-radius: 24px;
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--glass-bg, rgba(255, 255, 255, 0.45)) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 10%, var(--glass-border, rgba(255, 255, 255, 0.18)));
+  box-shadow:
+    0 14px 38px color-mix(in srgb, var(--color-primary) 5%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #fff 58%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.ambient-node svg {
+  font-size: 23px;
+}
+
+.ambient-node span {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 /* 动画 */
@@ -846,6 +993,29 @@ const modules = computed(() => [
   .module-card.wide {
     grid-column: span 2;
     grid-row: span 2;
+  }
+
+  .workflow-spacer {
+    height: 170px;
+    flex-basis: 170px;
+  }
+
+  .workflow-ambient {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+
+  .ambient-line {
+    left: 28px;
+    right: 28px;
+    top: auto;
+    bottom: 50px;
+  }
+
+  .ambient-nodes {
+    grid-template-columns: repeat(5, minmax(72px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
 
 }
@@ -916,6 +1086,27 @@ const modules = computed(() => [
 
   .module-card.large .card-main h3 {
     font-size: 24px;
+  }
+
+  .workflow-spacer {
+    height: 120px;
+    flex-basis: 120px;
+  }
+
+  .workflow-ambient {
+    padding: 0 4px 8px;
+  }
+
+  .ambient-nodes {
+    grid-template-columns: repeat(5, minmax(66px, 1fr));
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .ambient-node {
+    min-height: 66px;
+    border-radius: 18px;
   }
 
 }
