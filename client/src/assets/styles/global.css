@@ -2711,3 +2711,13 @@ body .dropdown-icon {
     transform: none !important;
   }
 }
+.layout-switch,
+.side-layout-switch {
+  color: var(--color-text) !important;
+  transition: color var(--duration-fast) var(--easing-standard) !important;
+}
+
+.layout-switch:hover,
+.side-layout-switch:hover {
+  color: var(--color-primary-hover) !important;
+}
