@@ -50,12 +50,26 @@ async function initDatabase() {
 
     // 迁移：evaluation_results 表结构升级（兼容旧表）
     const migrations = [
-      "ALTER TABLE evaluation_results ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id",
-      "ALTER TABLE evaluation_results DROP INDEX uk_user",
-      "ALTER TABLE evaluation_results ADD UNIQUE KEY uk_user_batch (user_id, batch_id)",
+      "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",
+      "ALTER TABLE rule_items ADD COLUMN scope VARCHAR(50) DEFAULT NULL AFTER limit_value",
+      "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
+      "ALTER TABLE rule_sources ADD COLUMN file_hash CHAR(64) DEFAULT NULL",
+      "ALTER TABLE rule_sources ADD COLUMN is_frozen TINYINT(1) DEFAULT 0",
+      // ★ fact_rule_matches 补列（V2 匹配管线需要）
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_current TINYINT(1) DEFAULT 1 AFTER review_status",
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_selected TINYINT(1) DEFAULT 1 AFTER is_current",
+      "ALTER TABLE fact_rule_matches ADD COLUMN preview_data JSON DEFAULT NULL AFTER is_selected",
     ];
-    for (const sql of migrations) {
-      try { await conn.query(sql); } catch (_) { /* 列/索引已存在则跳过 */ }
+    // rule_set_documents 列名迁移（兼容旧表 source_document_id）
+    try {
+      await conn.execute("ALTER TABLE rule_set_documents CHANGE source_document_id rule_source_id INT NOT NULL");
+    } catch (e) {
+      if (e.errno !== 1054 && e.errno !== 1060) console.warn("[DB] 迁移 rule_set_documents:", e.message);
+    }
+    for (const s of migrations) {
+      try { await conn.execute(s); } catch (e) {
+        if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
+      }
     }
 
     // 种子数据（INSERT IGNORE 幂等安全，只含张三测试用户）

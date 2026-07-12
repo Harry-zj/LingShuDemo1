@@ -5,8 +5,8 @@
     <!-- 状态概览条 -->
     <div class="status-bar">
       <div class="status-item" :class="{ ready: ruleReady }">
-        <span class="status-num">{{ confirmedRuleCount }}</span>
-        <span class="status-label">已确认规则</span>
+        <span class="status-num">{{ publishedRuleSetCount }}</span>
+        <span class="status-label">已发布规则集</span>
       </div>
       <div class="status-item" :class="{ ready: materialCount > 0 }">
         <span class="status-num">{{ materialCount }}</span>
@@ -29,7 +29,7 @@
         <div class="card-content">
           <h3>规则管理</h3>
           <p>上传规则文件或输入文字，AI 自动解析为结构化规则</p>
-          <span class="card-status done">✅ {{ confirmedRuleCount }} 条已确认</span>
+          <span class="card-status done">{{ ruleReady ? '✅ 已发布' : '📝 待发布' }}</span>
         </div>
       </div>
 
@@ -39,7 +39,7 @@
           <h3>材料上传与识别</h3>
           <p>上传证明材料，AI 自动识别归类并给出加分建议</p>
           <span class="card-status" :class="ruleReady ? 'ready' : 'locked'">
-            {{ ruleReady ? `📋 ${materialCount} 份材料` : '🔒 请先确认至少一条规则' }}
+            {{ ruleReady ? `📋 ${materialCount} 份材料` : '🔒 请先发布规则集' }}
           </span>
         </div>
       </div>
@@ -50,7 +50,7 @@
           <h3>评分清单</h3>
           <p>查看所有加分项明细，按维度汇总</p>
           <span class="card-status" :class="ruleReady ? 'ready' : 'locked'">
-            {{ ruleReady ? (totalScore !== null ? `📊 总分 ${totalScore}` : '待计算') : '🔒 请先确认至少一条规则' }}
+            {{ ruleReady ? (totalScore !== null ? `📊 总分 ${totalScore}` : '待计算') : '🔒 请先发布规则集' }}
           </span>
         </div>
       </div>
@@ -77,30 +77,24 @@
       <SmartFillRule
         v-if="activeCard === 'rule'"
         :ruleSources="ruleSources"
-        :ruleItems="ruleItems"
+        :ruleSets="ruleSets"
         @remove-source="removeRuleSource"
-        @toggle-item="toggleRuleItem"
-        @remove-item="removeRuleItem"
         @refresh="refreshRules"
       />
 
       <SmartFillMaterial
         v-if="activeCard === 'material'"
         :materials="materials"
-        :ruleItems="ruleItems"
         @create="createMaterial"
         @upload="uploadFiles"
-        @analyze="analyzeMaterial"
-        @confirm="confirmRecognition"
-        @dismiss="dismissRecognition"
         @remove="removeMaterial"
       />
 
       <SmartFillScore
         v-if="activeCard === 'score'"
         :materials="materials"
-        :ruleItems="ruleItems"
         :evaluation="evaluation"
+        :scoreList="scoreList"
         @calculate="calculateScore"
       />
 
@@ -139,25 +133,26 @@ function openCard(name) {
 
 // ========== 共享状态 ==========
 const ruleSources = ref([])
-const ruleItems = ref([])
+const ruleSets = ref([])
 const materials = ref([])
 const evaluation = ref(null)
+const scoreList = ref(null)
 const templates = ref([])
 const fillResults = ref([])
 
-const confirmedRuleCount = computed(() => ruleItems.value.filter(r => r.status === 'confirmed').length)
-const ruleReady = computed(() => confirmedRuleCount.value > 0)
+const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
+const ruleReady = computed(() => publishedRuleSetCount.value > 0)
 const materialCount = computed(() => materials.value.length)
 const confirmedRecCount = computed(() =>
-  materials.value.filter(m => m.recognition?.confirm_status === 'confirmed').length
+  materials.value.reduce((sum, m) => sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0)
 )
 const totalScore = computed(() => evaluation.value?.total_score ?? null)
 
-// ========== 按需刷新（只拉变了的） ==========
+// ========== 刷新 ==========
 async function refreshRules() {
-  const [s, i] = await Promise.all([api.getRuleSources(), api.getRuleItems()]);
+  const [s, rs] = await Promise.all([api.getRuleSources(), api.getRuleSets()]);
   if (s.code === 200) ruleSources.value = s.data || [];
-  if (i.code === 200) ruleItems.value = i.data || [];
+  if (rs.code === 200) ruleSets.value = rs.data || [];
 }
 async function refreshMaterials() {
   const r = await api.getMaterials();
@@ -173,35 +168,15 @@ async function refreshTemplates() {
 }
 onMounted(async () => {
   await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]);
+  refreshScoreList();
 });
 
 // ========== 规则 ==========
 async function removeRuleSource(id) {
-  if (!confirm('删除规则来源将同时删除其所有规则项，确定？')) return
+  if (!confirm('删除该规则来源？')) return
   const res = await api.deleteRuleSource(id)
   if (res.code === 200) refreshRules()
   else alert(res.msg)
-}
-async function toggleRuleItem(item) {
-  const prev = item.status
-  // 乐观更新：先切状态，失败再回滚
-  item.status = item.status === 'confirmed' ? 'pending_confirm' : 'confirmed'
-  try {
-    const res = await api.toggleRuleItem(item.id)
-    if (res.code === 200) {
-      item.status = res.data.status  // 以后端返回为准
-    } else {
-      item.status = prev
-      alert(res.msg)
-    }
-  } catch (e) {
-    item.status = prev
-    alert('操作失败: ' + (e.response?.data?.msg || e.message))
-  }
-}
-async function removeRuleItem(id) {
-  const res = await api.deleteRuleItem(id)
-  if (res.code === 200) refreshRules()
 }
 
 // ========== 材料 ==========
@@ -217,30 +192,35 @@ async function uploadFiles(matId, files) {
   if (res.code === 200) refreshMaterials()
   else alert(res.msg)
 }
-async function analyzeMaterial(matId) {
-  const res = await api.analyzeMaterial(matId)
-  if (res.code === 200) { alert(res.msg); refreshMaterials() }
-  else alert(res.msg)
-}
-async function confirmRecognition(recId) {
-  const res = await api.confirmRecognition(recId)
-  if (res.code === 200) refreshMaterials()
-}
-async function dismissRecognition(recId) {
-  const res = await api.dismissRecognition(recId)
-  if (res.code === 200) refreshMaterials()
-}
 async function removeMaterial(id) {
   if (!confirm('确定删除该材料及其附件？')) return
   const res = await api.deleteMaterial(id)
   if (res.code === 200) refreshMaterials()
 }
 
+const publishedRuleSetId = computed(() => {
+  const pub = ruleSets.value.find(r => r.status === 'published')
+  return pub ? pub.id : null
+})
+
 // ========== 评分 ==========
 async function calculateScore() {
-  const res = await api.calculateScore()
-  if (res.code === 200) { alert(res.msg); refreshEval() }
-  else alert(res.msg)
+  const rsId = publishedRuleSetId.value
+  if (!rsId) { alert('请先发布规则集'); return }
+  const res = await api.calculateScoreV2(rsId, materials.value.map(m => m.id))
+  if (res.code === 200) {
+    alert(res.msg)
+    refreshEval()
+    // ★ 同时拉取评分清单
+    const sl = await api.getScoreList(rsId)
+    if (sl.code === 200) scoreList.value = sl.data
+  } else { alert(res.msg) }
+}
+async function refreshScoreList() {
+  const rsId = publishedRuleSetId.value
+  if (!rsId) return
+  const sl = await api.getScoreList(rsId)
+  if (sl.code === 200) scoreList.value = sl.data
 }
 
 // ========== 填表 ==========

@@ -12,7 +12,7 @@
         <input type="file" ref="fileInput" multiple hidden accept=".docx,.xlsx,.pdf,.png,.jpg,.jpeg" @change="onFiles" />
       </div>
       <div class="upload-right">
-        <textarea v-model="ruleText" rows="3" placeholder="文字补充约束：如'志愿服务归德育，学科竞赛归智育...'"></textarea>
+        <textarea v-model="ruleText" rows="3" placeholder="补充说明文字..."></textarea>
         <button class="btn primary" @click="sendText" :disabled="!ruleText.trim()">发送 → AI 解析</button>
       </div>
     </div>
@@ -22,62 +22,73 @@
       <div class="progress-bar">
         <div class="progress-fill" :style="{ width: parsePercent + '%' }"></div>
       </div>
-      <span class="progress-text">{{ parseProgress.completed || 0 }}/{{ parseProgress.total || '?' }} 段已完成</span>
+      <span class="progress-text">{{ progressLabel }}</span>
     </div>
 
-    <!-- 已上传的来源 -->
+    <!-- 已上传的文件 -->
     <div v-if="ruleSources.length" class="source-list">
-      <h4>已上传的规则来源</h4>
+      <h4>已上传的规则文件</h4>
       <div v-for="src in ruleSources" :key="src.id" class="source-row">
-        <span>{{ src.source_type === 'file' ? '📄' : '💬' }} {{ src.file_name || truncate(src.original_text, 40) }}</span>
+        <span>📄 {{ src.file_name || truncate(src.original_text, 40) }}</span>
         <span class="badge" :class="src.status">
-          {{ parsingId === src.id ? `解析中 ${parseProgress.completed || 0}/${parseProgress.total || '?'}` : (src.status === 'parsed' ? '已解析' : '待解析') }}
+          {{ parsingId === src.id ? (phaseLabels[parseProgress.phase] || '解析中') : (src.status === 'parsed' ? '已解析' : '待解析') }}
         </span>
         <button v-if="src.status !== 'parsed'" class="btn-text primary" :disabled="!!parsingId" @click="doParse(src.id)">
-          {{ parsingId === src.id ? '⏳ AI解析中...' : '🔍 解析' }}
+          {{ parsingId === src.id ? '⏳ 解析中...' : '🔍 解析' }}
         </button>
         <button class="btn-text danger" @click="$emit('remove-source', src.id)">删除</button>
       </div>
     </div>
 
-    <!-- 规则清单（按维度折叠分组） -->
-    <div v-if="ruleItems.length" class="rule-summary">
-      <div class="rule-summary-header">
-        <h4>规则清单（{{ confirmedCount }}/{{ ruleItems.length }} 已确认）</h4>
-        <button class="btn-text" @click="confirmAll">✅ 全部确认</button>
+    <!-- 已解析的规则集 -->
+    <div v-if="ruleSets.length" class="rule-sets-list">
+      <div class="ruleset-list-header">
+        <h4>已解析的规则集 ({{ ruleSets.length }})</h4>
+        <button v-if="draftCount > 0" class="btn-text danger" @click="batchDelete">🗑 批量删除草稿 ({{ draftCount }})</button>
       </div>
-
-      <div v-for="group in groupedRules" :key="group.key" class="rule-group">
-        <div class="group-header" @click="group.open = !group.open">
-          <span class="group-arrow">{{ group.open ? '▼' : '▶' }}</span>
-          <span class="group-name" :style="{ color: group.color }">{{ group.label }}</span>
-          <span class="group-count">{{ group.confirmed }}/{{ group.items.length }}</span>
-          <button class="btn-text sm" @click.stop="confirmGroup(group)">确认本组</button>
+      <div v-for="rs in ruleSets" :key="rs.id" class="ruleset-card">
+        <div class="ruleset-header" @click="toggleDetail(rs)">
+          <input v-if="rs.status === 'draft'" type="checkbox" :checked="selected.has(rs.id)" @change="toggleSelect(rs.id)" @click.stop class="ruleset-check" />
+          <span class="ruleset-arrow">{{ rs._open ? '▼' : '▶' }}</span>
+          <span class="ruleset-label">{{ rs.version_label || '规则集' }}</span>
+          <span class="badge" :class="rs.status">{{ rs.status === 'published' ? '已发布' : '草稿' }}</span>
+          <span class="ruleset-meta">
+            {{ rs.indicator_count || 0 }} 指标 · {{ rs.package_count || 0 }} 包 · {{ rs.rule_count || 0 }} 规则 · {{ rs.lookup_count || 0 }} 表
+          </span>
+          <button v-if="rs.status !== 'published'" class="btn primary sm" @click.stop="publishSet(rs)">✅ 确认发布</button>
+          <button class="btn-text sm" @click.stop="toggleDetail(rs)">🔍 {{ rs._open && rs._detail ? '收起' : '查看详情' }}</button>
+          <button v-if="rs.status === 'draft'" class="btn-text danger sm" @click.stop="deleteSet(rs)">🗑</button>
         </div>
 
-        <div v-show="group.open" class="group-body">
-          <!-- 子分组：加分项 / 上限 / 冲突 -->
-          <div v-for="sub in group.subs" :key="sub.key" class="sub-group">
-            <div class="sub-header">
-              <span class="sub-label">{{ sub.label }}</span>
-              <span class="sub-count">{{ sub.items.length }} 条</span>
+        <!-- 展开详情 -->
+        <div v-if="rs._open && rs._detail" class="ruleset-body">
+          <!-- 指标树 -->
+          <div class="detail-section">
+            <h5>指标结构</h5>
+            <div v-for="row in flatIndicators(rs._detail.indicators || [])" :key="row.id" class="ind-node" :style="{ paddingLeft: (row._depth * 20 + 8) + 'px' }">
+              <span class="ind-code">{{ row.code || '-' }}</span>
+              <span class="ind-name">{{ row.name }}</span>
+              <span class="ind-meta">{{ row.calc_method }} | max={{ row.max_score }} | w={{ row.weight }}</span>
             </div>
-            <div class="rule-table-wrap">
-              <table class="rule-table">
-                <thead>
-                  <tr><th>确认</th><th>描述</th><th>级别</th><th>分值</th><th>互斥组</th><th>操作</th></tr>
-                </thead>
-                <tbody>
-                  <tr v-for="item in sub.items" :key="item.id" :class="{ dimmed: item.status !== 'confirmed' }">
-                    <td><input type="checkbox" :checked="item.status === 'confirmed'" @change="$emit('toggle-item', item)" /></td>
-                    <td class="desc-cell">{{ item.description }}</td>
-                    <td>{{ levelLabel(item.level) }}</td>
-                    <td>{{ item.score != null ? (item.rule_type === 'scoring' ? '+' : '') + item.score : '-' }}</td>
-                    <td>{{ item.conflict_group || '-' }}</td>
-                    <td><button class="btn-text danger" @click="$emit('remove-item', item.id)">删</button></td>
-                  </tr>
-                </tbody>
-              </table>
+          </div>
+
+          <!-- 规则包 -->
+          <div class="detail-section">
+            <h5>规则包 & 规则 ({{ rs._detail.packages?.length || 0 }})</h5>
+            <div v-for="pkg in (rs._detail.packages || [])" :key="pkg.id" class="pkg-card">
+              <div class="pkg-header">
+                <span class="pkg-name">{{ pkg.name }}</span>
+                <span class="pkg-key">{{ pkg.canonical_key }}</span>
+                <span class="pkg-level">{{ pkg.auto_level === 'manual_required' ? '⚠ 需人工' : pkg.auto_level }}</span>
+              </div>
+              <div class="pkg-rules" v-if="pkg.rules?.length">
+                <div v-for="r in pkg.rules" :key="r.id" class="rule-row">
+                  <span class="rule-type">{{ r.rule_type }}</span>
+                  <span class="rule-name">{{ r.name }}</span>
+                  <span class="rule-stage">{{ r.execution_stage }}</span>
+                  <span class="rule-scope">{{ r.application_scope }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -91,8 +102,8 @@ import { ref, computed } from 'vue'
 import { useUserStore } from '../../stores/user'
 import * as api from '../../api/zongce'
 
-const props = defineProps({ ruleSources: Array, ruleItems: Array })
-const emit = defineEmits(['remove-source','remove-item','toggle-item','refresh'])
+const props = defineProps({ ruleSources: Array, ruleSets: Array })
+const emit = defineEmits(['remove-source', 'refresh'])
 
 const ruleText = ref('')
 const fileInput = ref(null)
@@ -100,27 +111,100 @@ const uploading = ref(false)
 const uploadingFiles = ref([])
 const parsingId = ref(null)
 const parseProgress = ref({ completed: 0, total: 0 })
+
 const parsePercent = computed(() => {
   if (!parseProgress.value.total) return 0
   return Math.round((parseProgress.value.completed / parseProgress.value.total) * 100)
 })
-
-async function onFiles(e) {
-  const files = Array.from(e.target.files)
-  if (!files.length) return
-  uploadingFiles.value = files.map(f => f.name)
-  uploading.value = true
-  const fd = new FormData()
-  for (const f of files) fd.append('files', f)
-  const res = await api.uploadRuleFiles(fd)
-  alert(res.msg)
-  if (res.code === 200) emit('refresh')
-  uploading.value = false
-  uploadingFiles.value = []
-  e.target.value = ''
+const phaseLabels = {
+  extracting: '正在提取文档…',
+  chapter_tree: '正在识别章节…',
+  task_split: '正在拆分任务…',
+  executing: 'AI 解析中',
+  merging: '正在合并去重…',
+  validating: '正在校验…',
+  writing: '正在写入…',
 }
-async function onDrop(e) {
-  const files = Array.from(e.dataTransfer.files)
+const progressLabel = computed(() => {
+  const p = parseProgress.value
+  const phase = phaseLabels[p.phase] || p.phase || '处理中'
+  const count = p.total ? `${p.completed || 0}/${p.total}` : ''
+  return count ? `${phase} (${count})` : phase
+})
+
+// 扁平化指标树
+function flatIndicators(nodes, depth = 0) {
+  if (!nodes) return []
+  const result = []
+  for (const n of nodes) {
+    result.push({ ...n, _depth: depth })
+    if (n.children?.length) result.push(...flatIndicators(n.children, depth + 1))
+  }
+  return result
+}
+
+// 切换详情面板：加载+展开 / 收起
+async function toggleDetail(rs) {
+  if (rs._open) { rs._open = false; return }
+  if (!rs._detail) {
+    try {
+      const res = await api.getRuleSet(rs.id)
+      if (res.code === 200) rs._detail = res.data
+      else { alert(res.msg); return }
+    } catch (e) { alert('加载失败: ' + (e.response?.data?.msg || e.message)); return }
+  }
+  rs._open = true
+}
+
+// 多选
+const selected = ref(new Set())
+const draftCount = computed(() => props.ruleSets.filter(r => r.status === 'draft').length)
+function toggleSelect(id) {
+  const s = new Set(selected.value)
+  s.has(id) ? s.delete(id) : s.add(id)
+  selected.value = s
+}
+async function batchDelete() {
+  const ids = [...selected.value]
+  if (!ids.length) return alert('请先勾选要删除的草稿')
+  if (!confirm(`确定删除 ${ids.length} 个草稿规则集？`)) return
+  let ok = 0
+  for (const id of ids) {
+    try { const r = await api.deleteRuleSet(id); if (r.code === 200) ok++ }
+    catch (_) {}
+  }
+  selected.value = new Set()
+  emit('refresh')
+  alert(`已删除 ${ok}/${ids.length} 个`)
+}
+
+// 删除单个草稿
+async function deleteSet(rs) {
+  if (!confirm('确定删除该规则集？')) return
+  try {
+    const res = await api.deleteRuleSet(rs.id)
+    if (res.code === 200) emit('refresh')
+    else alert(res.msg)
+  } catch (e) { alert('删除失败: ' + (e.response?.data?.msg || e.message)) }
+}
+
+// 确认发布
+async function publishSet(rs) {
+  try {
+    const res = await api.publishRuleSet(rs.id)
+    if (res.code === 200) {
+      rs.status = 'published'
+      emit('refresh')
+    } else {
+      alert(res.msg)
+    }
+  } catch (e) { alert('发布失败: ' + (e.response?.data?.msg || e.message)) }
+}
+
+// 上传
+function onDrop(e) { onFiles({ target: { files: e.dataTransfer.files } }) }
+async function onFiles(e) {
+  const files = [...(e.target.files || [])]
   if (!files.length) return
   uploadingFiles.value = files.map(f => f.name)
   uploading.value = true
@@ -139,6 +223,8 @@ async function sendText() {
   if (res.code === 200) emit('refresh')
   ruleText.value = ''
 }
+
+// 解析
 async function doParse(sourceId) {
   parsingId.value = sourceId
   parseProgress.value = { completed: 0, total: 1 }
@@ -147,19 +233,19 @@ async function doParse(sourceId) {
     if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
 
     const taskId = startRes.data.taskId
-    // SSE 流式接收进度
-    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(useUserStore().token)}`)
+    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream`)
     es.addEventListener('progress', (e) => {
-      try { parseProgress.value = JSON.parse(e.data); } catch (_) {}
+      try { const p = JSON.parse(e.data); parseProgress.value = p } catch (_) {}
     })
-    es.addEventListener('done', (e) => {
+    es.addEventListener('done', async (e) => {
       es.close()
+      try { const p = JSON.parse(e.data); parseProgress.value = { ...p, completed: p.total || p.task_count || 1 } } catch (_) {}
       emit('refresh')
       parsingId.value = null
     })
-    es.addEventListener('error', (e) => {
+    es.addEventListener('error', () => {
       es.close()
-      try { const d = JSON.parse(e.data); alert('解析失败: ' + (d.msg || '未知错误')); } catch (_) { alert('解析连接失败'); }
+      alert('解析失败')
       parsingId.value = null
     })
   } catch (e) {
@@ -169,41 +255,6 @@ async function doParse(sourceId) {
 }
 
 function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
-const catMap = { moral:'德育', intellectual:'智育', physical:'体育', aesthetic:'美育', labor:'劳育' }
-const catColors = { moral:'#EA8600', intellectual:'#1A73E8', physical:'#34A853', aesthetic:'#9C27B0', labor:'#FF6D00' }
-function catLabel(c) { return catMap[c] || c || '全局' }
-function typeLabel(t) { return { scoring:'加分', limit:'上限', conflict:'冲突' }[t] || t }
-function levelLabel(l) { return { national:'国家级', provincial:'省级', school:'校级', college:'院级' }[l] || l || '-' }
-
-// 动态分组
-const confirmedCount = computed(() => props.ruleItems.filter(r => r.status === 'confirmed').length)
-const groupedRules = computed(() => {
-  const groups = {}
-  for (const r of props.ruleItems) {
-    const cat = r.category || '__global__'
-    if (!groups[cat]) groups[cat] = { scoring: [], limit: [], conflict: [] }
-    groups[cat][r.rule_type || 'scoring'].push(r)
-  }
-  return Object.entries(groups).map(([cat, byType]) => {
-    const items = [...byType.scoring, ...byType.limit, ...byType.conflict]
-    return {
-      key: cat, label: catLabel(cat), color: catColors[cat] || '#9AA0A6',
-      items, open: true,
-      confirmed: items.filter(r => r.status === 'confirmed').length,
-      subs: [
-        { key: 'scoring', label: '加分项', items: byType.scoring },
-        { key: 'limit', label: '上限约束', items: byType.limit },
-        { key: 'conflict', label: '冲突规则', items: byType.conflict },
-      ].filter(s => s.items.length),
-    }
-  })
-})
-function confirmGroup(group) {
-  group.items.forEach(item => { if (item.status !== 'confirmed') emit('toggle-item', item) })
-}
-function confirmAll() {
-  props.ruleItems.forEach(item => { if (item.status !== 'confirmed') emit('toggle-item', item) })
-}
 </script>
 
 <style scoped>
@@ -247,8 +298,7 @@ function confirmAll() {
 
 .cat-tag { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-tag); font-weight: 500; }
 
-.btn { padding: 8px 20px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn { padding: 8px 18px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn.primary { background: var(--color-primary); color: #fff; }
 .btn-text { padding: 4px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); cursor: pointer; font-size: 12px; font-family: inherit; }
 .btn-text.primary { color: var(--color-primary); border-color: var(--color-primary); }
