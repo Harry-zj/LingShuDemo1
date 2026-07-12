@@ -4,12 +4,13 @@ const path = require("path");
 require("dotenv").config();
 
 const { seedDevData } = require("../services/zongce/db/seed");
+const { migrateModule3 } = require("../services/module3/migrate");
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "135246",
+  password: process.env.DB_PASSWORD || "kk18360",
   database: "lingshu_zongce",
   charset: "utf8mb4",
   multipleStatements: true,
@@ -24,7 +25,7 @@ async function initDatabase() {
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "135246",
+    password: process.env.DB_PASSWORD || "kk18360",
     charset: "utf8mb4",
     multipleStatements: true,
   });
@@ -85,6 +86,9 @@ async function initDatabase() {
         if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
       }
     }
+
+    // 模块三：先兼容升级旧数据库，再执行使用新字段的幂等种子数据。
+    await migrateModule3(conn);
 
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);

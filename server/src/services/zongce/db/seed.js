@@ -10,7 +10,7 @@ async function seedDevData(conn) {
   );
   await conn.execute(
     "INSERT IGNORE INTO assessment_settings (id, setting_key, setting_value) VALUES (2, 'general', ?)",
-    [JSON.stringify({ submitDeadline: '2026-07-25 23:59:59', allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false, publishNotice: '请在截止时间前确认智能填表结果，并提交至班级测评小组。' })]
+    [JSON.stringify({ submitDeadline: '2026-07-25 23:59:59', allowStudentEdit: true, allowReturnEdit: true, requireReviewerComment: false, publishNotice: '请在截止时间前确认智能填表结果，并提交至综测成员。' })]
   );
 
   // 个性评定配置（权重 & 等级阈值）

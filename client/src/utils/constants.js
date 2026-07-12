@@ -1,7 +1,7 @@
 export const STATUS_MAP = {
   smart_ready: { label: "智能填表待提交", color: "#9AA0A6", bg: "#F1F3F4" },
-  pending_class_committee: { label: "待班级测评小组评价", color: "#E37400", bg: "#FEF7E0" },
-  returned_by_class_committee: { label: "班级测评小组退回", color: "#D93025", bg: "#FCE8E6" },
+  pending_class_committee: { label: "待综测成员评价", color: "#E37400", bg: "#FEF7E0" },
+  returned_by_class_committee: { label: "综测成员退回", color: "#D93025", bg: "#FCE8E6" },
   pending_counselor: { label: "待辅导员评价", color: "#E37400", bg: "#FEF7E0" },
   returned_by_counselor: { label: "辅导员退回", color: "#D93025", bg: "#FCE8E6" },
   pending_student_affairs: { label: "待学生工作处评价", color: "#E37400", bg: "#FEF7E0" },
@@ -13,12 +13,12 @@ export const STATUS_MAP = {
 export const ROLE_LABEL = {
   student: "学生",
   admin: "管理员",
-  class_committee: "班级测评小组",
   counselor: "辅导员",
   student_affairs: "学生工作处"
 };
 
-export const REVIEWER_ROLES = ["class_committee", "counselor", "student_affairs"];
+export const LOGIN_ROLES = ["student", "counselor", "student_affairs", "admin"];
+export const REVIEWER_ROLES = ["student", "counselor", "student_affairs"];
 
 export const FORM_STRUCTURE = [
   {

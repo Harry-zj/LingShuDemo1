@@ -1,4 +1,4 @@
-﻿const router = require("express").Router();
+const router = require("express").Router();
 const auth = require("../middleware/auth");  // 开发模式，正式上线改回 ../middleware/auth
 const upload = require("../middleware/upload");
 

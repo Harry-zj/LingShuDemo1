@@ -7,7 +7,7 @@
     </div>
     <div class="login-card glass-card">
       <h2 class="login-title">欢迎回来</h2>
-      <p class="login-subtitle">请选择角色并登录您的账号</p>
+      <p class="login-subtitle">学生使用学号登录；辅导员、学生工作处和管理员使用系统账号登录</p>
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="field-group">
           <label class="field-label">角色</label>
@@ -20,10 +20,10 @@
           </div>
         </div>
         <div class="field-group">
-          <label class="field-label">用户名</label>
-          <div class="input-wrapper" :class="{ focused: focusField === 'username', filled: form.username }">
+          <label class="field-label">学号/账号</label>
+          <div class="input-wrapper" :class="{ focused: focusField === 'account', filled: form.account }">
             <VIcon icon="mdi:account-outline" class="input-icon" />
-            <input v-model="form.username" placeholder="请输入用户名" required @focus="focusField = 'username'" @blur="focusField = ''" />
+            <input v-model="form.account" placeholder="学生请输入学号；其他角色请输入账号" required @focus="focusField = 'account'" @blur="focusField = ''" />
           </div>
         </div>
         <div class="field-group">
@@ -53,34 +53,32 @@ import { useRouter } from 'vue-router';
 
 const userStore = useUserStore();
 const router = useRouter();
-const form = ref({ username: '', password: '', role: '' });
+const form = ref({ account: '', password: '', role: '' });
 const loading = ref(false);
 const focusField = ref('');
 
 const ROLE_OPTIONS = {
   student: '学生',
   admin: '管理员',
-  class_committee: '班级测评小组',
   counselor: '辅导员',
   student_affairs: '学生工作处',
 };
 
 // 角色到首页路由映射
 const ROLE_HOME = {
-  admin: '/module3/batch-manage',
-  class_committee: '/module3/class-leader',
-  counselor: '/module3/class-leader',
-  student_affairs: '/module3/class-leader',
+  admin: '/module3/admin',
+  counselor: '/module3/counselor',
+  student_affairs: '/module3/student-affairs',
 };
 
 async function handleLogin() {
   loading.value = true;
   try {
-    const res = await login(form.value);
+    const res = await login({ account: form.value.account, password: form.value.password, role: form.value.role });
     if (res.code === 200) {
       userStore.setAuth(res.data.token, res.data.user);
       const role = res.data.user.role;
-      router.push(ROLE_HOME[role] || '/home');
+      router.push(ROLE_HOME[role] || '/module3/student');
     } else {
       alert(res.msg);
     }
