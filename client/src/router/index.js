@@ -8,7 +8,7 @@ const routes = [
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
   /* 综测核心 */
-  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表", instant: true } },
+  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表" } },
   { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
   { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
   /* 模块二 */

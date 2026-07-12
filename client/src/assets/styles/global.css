@@ -2629,3 +2629,85 @@ body .deadline-value { color: #f6f2e8 !important; font-family: var(--font-displa
     font-size: 15px;
   }
 }
+/* =========================================================
+   登录用户名完整显示修复
+   ========================================================= */
+
+body .nav-right {
+  min-width: max-content !important;
+  flex-shrink: 0 !important;
+}
+
+body .user-menu {
+  width: max-content !important;
+  min-width: max-content !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+
+body .user-name {
+  width: auto !important;
+  min-width: max-content !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  word-break: keep-all !important;
+}
+
+body .user-avatar,
+body .dropdown-icon {
+  flex-shrink: 0 !important;
+}
+/* 页面切换动画 */
+
+.page-enter-active {
+  transition:
+    opacity 190ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  will-change: opacity, transform;
+  backface-visibility: hidden;
+}
+
+.page-leave-active {
+  transition:
+    opacity 90ms cubic-bezier(0.4, 0, 1, 1),
+    transform 90ms cubic-bezier(0.4, 0, 1, 1);
+
+  will-change: opacity, transform;
+  backface-visibility: hidden;
+  pointer-events: none;
+}
+
+.page-enter-from {
+  opacity: 0;
+  transform: translate3d(0, 8px, 0);
+}
+
+.page-enter-to,
+.page-leave-from {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.page-leave-to {
+  opacity: 0;
+  transform: translate3d(0, -4px, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-enter-active,
+  .page-leave-active {
+    transition-duration: 1ms !important;
+  }
+
+  .page-enter-from,
+  .page-enter-to,
+  .page-leave-from,
+  .page-leave-to {
+    transform: none !important;
+  }
+}
