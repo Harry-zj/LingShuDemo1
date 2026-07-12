@@ -14,13 +14,21 @@
     <div class="de-layout">
       <div class="de-hero">
         <div class="de-img-frame">
-          <div class="de-img-placeholder" :style="{background: 'linear-gradient(135deg,' + dim.color + '06, var(--color-surface-variant))'}">
+          <div v-if="carouselImages.length" class="de-carousel">
+            <img :src="carouselImages[currentSlide]" class="de-carousel-img" />
+            <button class="car-arrow left" @click="prevSlide"><VIcon icon="mdi:chevron-left" /></button>
+            <button class="car-arrow right" @click="nextSlide"><VIcon icon="mdi:chevron-right" /></button>
+          </div>
+          <div v-else class="de-img-placeholder" :style="{background: 'linear-gradient(135deg,' + dim.color + '06, var(--color-surface-variant))'}">
             <div class="de-ph-ring" :style="{borderColor:dim.color}"></div>
             <VIcon icon="mdi:image-outline" class="de-ph-icon" :style="{color:dim.color}" />
             <span>活动海报 / 现场照片轮播区</span>
             <span class="de-ph-sub">暂未上传素材</span>
           </div>
-          <div class="de-img-dots"><span class="dot active" :style="{background:dim.color}"></span><span class="dot"></span><span class="dot"></span></div>
+          <div class="de-img-dots">
+            <span v-for="(img, idx) in (carouselImages.length || 3)" :key="idx"
+              class="dot" :class="{ active: idx === currentSlide }" :style="carouselImages.length && idx === currentSlide ? {background:dim.color} : {}"></span>
+          </div>
         </div>
         <p class="de-hero-desc">{{ dim.desc }}</p>
         <div class="de-hero-count">共 {{ displayActs.length }} 项推荐活动 · 点击卡片查看详情</div>
@@ -87,6 +95,11 @@ const dim = computed(() => DIMENSION_CONFIG.find(d => d.key === dimKey.value) ||
 const displayActs = ref([])
 const detailAct = ref(null)
 const addedSet = ref(new Set())
+const currentSlide = ref(0)
+
+const carouselImages = computed(() => displayActs.value.filter(a => a.image).map(a => a.image))
+function prevSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value - 1 + carouselImages.value.length) % carouselImages.value.length }
+function nextSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value + 1) % carouselImages.value.length }
 
 function openDetail(act) { detailAct.value = act }
 
@@ -133,8 +146,8 @@ const allPools = {
   ],
   zhi: [
     // B1 考证（全专业通用，不设 majors 限制）
-    { title:'大学英语四级/六级（CET-4/6）', cat:'B1 证书', desc:'全国大学英语四六级考试，最基础的英语能力证明。', url:'https://cet.neea.edu.cn/', score:'B1 +2~6' },
-    { title:'全国计算机等级考试（NCRE）', cat:'B1 证书', desc:'一/二/三级计算机证书，涵盖Office、编程、数据库等方向。', url:'https://ncre.neea.edu.cn/', score:'B1 +2~6' },
+    { title:'大学英语四级/六级（CET-4/6）', cat:'B1 证书', desc:'全国大学英语四六级考试，最基础的英语能力证明。', url:'https://cet.neea.edu.cn/', score:'B1 +2~6', image:'/images/zhi/四六级.jpg' },
+    { title:'全国计算机等级考试（NCRE）', cat:'B1 证书', desc:'一/二/三级计算机证书，涵盖Office、编程、数据库等方向。', url:'https://ncre.neea.edu.cn/', score:'B1 +2~6', image:'/images/zhi/计算机等级考试.png' },
     { title:'普通话水平测试等级证书', cat:'B1 证书', desc:'考取二乙及以上普通话证书，教师、播音等职业必备。', url:'https://www.cltt.org/', score:'B1 +1~3' },
     { title:'教师资格证（中小学）', cat:'B1 证书', desc:'中小学教师资格考试，教育行业准入门槛。', url:'https://ntce.neea.edu.cn/', score:'B1 +3~6' },
     { title:'初级/中级会计职称', cat:'B1 证书', desc:'会计专业技术资格考试，财会专业核心证书。', url:'http://kzp.mof.gov.cn/', score:'B1 +2~6', majors:['会计','财务','审计','经济','金融'] },
@@ -144,8 +157,10 @@ const allPools = {
     { title:'CAD/BIM工程师证书', cat:'B1 证书', desc:'建筑、机械、土木专业核心技能证书。', score:'B1 +2~6', majors:['建筑','土木','机械','工程','设计'] },
     // B2 竞赛
     { title:'中国国际大学生创新大赛（互联网+）', cat:'B2 竞赛', desc:'教育部主办最高级别创新创业赛事，校→省→国三级。', url:'https://cy.ncss.cn/', score:'B2 +5~20', majors:['计算机','软件','电子','信息'] },
-    { title:'"挑战杯"课外学术科技作品竞赛', cat:'B2 竞赛', desc:'共青团中央主办科创赛事，分自然科学、社科、发明三类。', url:'http://www.tiaozhanbei.net/', score:'B2 +5~20', majors:['计算机','电子','机械','自动化','物理'] },
+    { title:'"挑战杯"课外学术科技作品竞赛', cat:'B2 竞赛', desc:'共青团中央主办科创赛事，分自然科学、社科、发明三类。', url:'http://www.tiaozhanbei.net/', score:'B2 +5~20', majors:['计算机','电子','机械','自动化','物理'], image:'/images/zhi/挑战杯.jpg' },
     { title:'"挑战杯"创业计划竞赛', cat:'B2 竞赛', desc:'侧重商业策划与创业实践，偶数年举办。', url:'http://www.tiaozhanbei.net/', score:'B2 +5~15', majors:['经济','管理','金融','市场'] },
+    { title:'中国国际大学生创新大赛（互联网+）', cat:'B2 竞赛', desc:'教育部主办最高级别创新创业赛事，校→省→国三级。', url:'https://cy.ncss.cn/', score:'B2 +5~20', majors:['计算机','软件','电子','信息'], image:'/images/zhi/金种子杯.jpg' },
+    { title:'大学生职业规划大赛', cat:'B2 竞赛', desc:'全国大学生职业规划大赛，规划职业发展方向，展示个人竞争力。', image:'/images/zhi/职规赛.jpg', score:'B2 +2~6' },
     { title:'全国大学生数学建模竞赛', cat:'B2 竞赛', desc:'3人组队72小时建模解题，理工科经典赛事。', url:'http://www.mcm.edu.cn/', score:'B2 +5~15', majors:['数学','计算机','统计','物理','工程','电子'] },
     { title:'美国大学生数学建模竞赛（MCM）', cat:'B2 竞赛', desc:'国际数学建模赛事，中英文论文参赛。', url:'https://www.comap.com/', score:'B2 +5~20', majors:['数学','计算机','统计','工程'] },
     { title:'蓝桥杯全国软件和信息技术大赛', cat:'B2 竞赛', desc:'算法/软件开发/嵌入式竞赛，省赛→国赛。', url:'https://dasai.lanqiao.cn/', score:'B2 +3~10', majors:['计算机','软件','信息','电子','通信'] },
@@ -222,8 +237,8 @@ onMounted(() => {
   const pool = allPools[dimKey.value] || allPools.de
   const count = PICK_COUNT[dimKey.value] || 5
   const uid = userStore.user?.id || userStore.user?.username || 'default'
-  const seed = `dim_v6_${dimKey.value}_${uid}`
-  const cacheKey = `lingshu_dim_acts_v6_${dimKey.value}_${uid}`
+  const seed = `dim_v7_${dimKey.value}_${uid}`
+  const cacheKey = `lingshu_dim_acts_v7_${dimKey.value}_${uid}`
 
   const cached = localStorage.getItem(cacheKey)
   if (cached) {
@@ -264,6 +279,8 @@ onMounted(() => {
 .de-hero { flex:0 0 50%; position:sticky; top:24px; }
 .de-img-frame { background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:20px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,0.03); transition:box-shadow 0.3s; }
 .de-img-frame:hover { box-shadow:0 6px 32px rgba(0,0,0,0.06); }
+.de-carousel { position:relative; aspect-ratio:3/2; overflow:hidden; }
+.de-carousel-img { width:100%;height:100%;object-fit:cover; display:block; }
 .de-img-placeholder { aspect-ratio:3/2; display:flex; flex-direction:column; align-items:center; justify-content:center; border-bottom:1px dashed var(--color-border); color:var(--color-text-tertiary); position:relative; }
 .de-ph-ring { position:absolute; width:60%; aspect-ratio:1; border-radius:50%; border:1px dashed; opacity:0.12; }
 .de-ph-icon { font-size:56px; opacity:0.22; margin-bottom:16px; position:relative; z-index:1; }
