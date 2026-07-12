@@ -46,7 +46,12 @@ async function executeCalculation(taskId) {
     for (const inp of inputs) {
       const [facts] = await conn.execute(
         `SELECT ef.* FROM extracted_facts ef
-         WHERE ef.analysis_run_id = ? AND ef.status = 'active'`, [inp.analysis_run_id]
+        JOIN fact_rule_matches frm ON frm.extracted_fact_id = ef.id
+        WHERE ef.analysis_run_id = ? 
+          AND ef.status = 'active'
+          AND frm.review_status = 'confirmed'
+          AND frm.rule_set_id = ?`, 
+        [inp.analysis_run_id, task.rule_set_id]
       );
       allFacts.push(...facts);
     }

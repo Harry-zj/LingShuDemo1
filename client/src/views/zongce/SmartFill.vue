@@ -1,8 +1,7 @@
-<template>
+﻿<template>
   <div class="dashboard">
     <h2 class="page-title">智能填表</h2>
 
-    <!-- 状态概览条 -->
     <div class="status-bar">
       <div class="status-item" :class="{ ready: ruleReady }">
         <span class="status-num">{{ publishedRuleSetCount }}</span>
@@ -22,98 +21,46 @@
       </div>
     </div>
 
-    <!-- 四个功能卡片 -->
     <div class="card-grid">
       <div class="func-card" :class="{ active: activeCard === 'rule' }" @click="openCard('rule')">
-        <div class="card-icon">①</div>
-        <div class="card-content">
-          <h3>规则管理</h3>
-          <p>上传规则文件或输入文字，AI 自动解析为结构化规则</p>
-          <span class="card-status done">{{ ruleReady ? '✅ 已发布' : '📝 待发布' }}</span>
-        </div>
+        <div class="card-icon">①</div><div class="card-content"><h3>规则管理</h3><p>上传规则，AI解析</p><span class="card-status done">{{ ruleReady ? '已发布' : '待发布' }}</span></div>
       </div>
-
       <div class="func-card" :class="{ active: activeCard === 'material' }" @click="openCard('material')">
-        <div class="card-icon">②</div>
-        <div class="card-content">
-          <h3>材料上传与识别</h3>
-          <p>上传证明材料，AI 自动识别归类并给出加分建议</p>
-          <span class="card-status" :class="ruleReady ? 'ready' : 'locked'">
-            {{ ruleReady ? `📋 ${materialCount} 份材料` : '🔒 请先发布规则集' }}
-          </span>
-        </div>
+        <div class="card-icon">②</div><div class="card-content"><h3>材料上传与识别</h3><p>上传证明，AI识别加分</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady ? materialCount+'份' : '请先发布规则集' }}</span></div>
       </div>
-
       <div class="func-card" :class="{ active: activeCard === 'score' }" @click="openCard('score')">
-        <div class="card-icon">③</div>
-        <div class="card-content">
-          <h3>评分清单</h3>
-          <p>查看所有加分项明细，按维度汇总</p>
-          <span class="card-status" :class="ruleReady ? 'ready' : 'locked'">
-            {{ ruleReady ? (totalScore !== null ? `📊 总分 ${totalScore}` : '待计算') : '🔒 请先发布规则集' }}
-          </span>
-        </div>
+        <div class="card-icon">③</div><div class="card-content"><h3>F3 评分清单</h3><p>B1-B8加分明细</p><span class="card-status" :class="confirmedRecCount>0?'ready':'locked'">{{ confirmedRecCount>0 ? confirmedRecCount+'条确认' : '请先确认' }}</span></div>
       </div>
-
+      <div class="func-card" :class="{ active: activeCard === 'f1' }" @click="openCard('f1')">
+        <div class="card-icon">④</div><div class="card-content"><h3>F1 基本素质</h3><p>思想政治、道德品质评分</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady?'填写评分':'请先发布规则集' }}</span></div>
+      </div>
+      <div class="func-card" :class="{ active: activeCard === 'f2' }" @click="openCard('f2')">
+        <div class="card-icon">⑤</div><div class="card-content"><h3>F2 课程成绩</h3><p>录入课程学分和成绩</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady?'录入成绩':'请先发布规则集' }}</span></div>
+      </div>
       <div class="func-card" :class="{ active: activeCard === 'form' }" @click="openCard('form')">
-        <div class="card-icon">④</div>
-        <div class="card-content">
-          <h3>自动填表</h3>
-          <p>上传 Word 模板，一键自动填充并下载</p>
-          <span class="card-status" :class="totalScore !== null ? 'ready' : 'locked'">
-            📝 自动填表
-          </span>
-        </div>
+        <div class="card-icon">⑥</div><div class="card-content"><h3>自动填表</h3><p>上传模板，一键填充下载</p><span class="card-status" :class="confirmedRecCount>0?'ready':'locked'">自动填表</span></div>
       </div>
     </div>
 
-    <!-- 展开的功能区 -->
     <div v-if="activeCard" class="section-panel">
       <div class="section-header">
-        <button class="btn-back" @click="activeCard = null">← 返回</button>
+        <button class="btn-back" @click="activeCard = null">返回</button>
         <h3>{{ sectionTitle }}</h3>
       </div>
-
-      <SmartFillRule
-        v-if="activeCard === 'rule'"
-        :ruleSources="ruleSources"
-        :ruleSets="ruleSets"
-        @remove-source="removeRuleSource"
-        @refresh="refreshRules"
-      />
-
-      <SmartFillMaterial
-        v-if="activeCard === 'material'"
-        :materials="materials"
-        @create="createMaterial"
-        @upload="uploadFiles"
-        @remove="removeMaterial"
-      />
-
-      <SmartFillScore
-        v-if="activeCard === 'score'"
-        :materials="materials"
-        :evaluation="evaluation"
-        :scoreList="scoreList"
-        @calculate="calculateScore"
-      />
-
-      <SmartFillForm
-        v-if="activeCard === 'form'"
-        :evaluation="evaluation"
-        :templates="templates"
-        :fillResults="fillResults"
-        @upload-template="uploadTemplate"
-        @fill="doFill"
-        @download="downloadFill"
-      />
+      <SmartFillF1 v-if="activeCard === 'f1'" />
+      <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
+      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" @remove-source="removeRuleSource" @refresh="refreshRules" />
+      <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
+      <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="calculateScore" />
+      <SmartFillForm @score-changed="calculateScoreSilent" v-if="activeCard === 'form'" :evaluation="evaluation" :templates="templates" :fillResults="fillResults" :ruleSetId="publishedRuleSetId" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :materials="materials" @upload-template="onUploadTemplate" @fill="doFill" @download="downloadFill" @update:uploadedTemplate="uploadedTemplate = $event" />
     </div>
   </div>
 </template>
-
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import SmartFillRule from './SmartFillRule.vue'
+import SmartFillF1 from './SmartFillF1.vue'
+import SmartFillF2 from './SmartFillF2.vue'
 import SmartFillMaterial from './SmartFillMaterial.vue'
 import SmartFillScore from './SmartFillScore.vue'
 import SmartFillForm from './SmartFillForm.vue'
@@ -121,13 +68,14 @@ import * as api from '../../api/zongce'
 
 const activeCard = ref(null)
 const sectionTitle = computed(() => ({
-  rule: '规则管理', material: '材料上传与识别', score: '评分清单', form: '自动填表',
+  rule: '规则管理', material: '材料上传与识别', score: 'F3 评分清单', f1: 'F1 基本素质', f2: 'F2 课程成绩', form: '自动填表',
 }[activeCard.value] || ''))
 
 function openCard(name) {
   if (name === 'rule') { activeCard.value = 'rule'; return }
-  if (!ruleReady.value) return
-  if (name === 'form' && totalScore.value === null) return
+  if (!ruleReady.value) { alert('请先发布规则集后再操作'); return }
+  if (name === 'f1' || name === 'f2') { if (!ruleReady.value) { alert('请先发布规则集'); return }; activeCard.value = name; return }
+  if (name === 'form' && confirmedRecCount.value === 0) { alert('暂无已确认的识别结果，请先在材料识别中完成 AI 识别并逐条确认后再使用自动填表'); return }
   activeCard.value = name
 }
 
@@ -138,7 +86,7 @@ const materials = ref([])
 const evaluation = ref(null)
 const scoreList = ref(null)
 const templates = ref([])
-const fillResults = ref([])
+const fillResults = ref([]); const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
 const ruleReady = computed(() => publishedRuleSetCount.value > 0)
@@ -167,7 +115,7 @@ async function refreshTemplates() {
   if (r.code === 200) templates.value = r.data || [];
 }
 onMounted(async () => {
-  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]);
+  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]); if (templates.value.length > 0) { const latest = templates.value[0]; uploadedTemplate.value = { id: latest.id, name: latest.name, size: 0 }; }
   refreshScoreList();
 });
 
@@ -204,6 +152,30 @@ const publishedRuleSetId = computed(() => {
 })
 
 // ========== 评分 ==========
+
+// ★ 材料确认后同时刷新评分和填表预览
+
+function onF1F2Saved() {
+  refreshScoreList()
+  refreshEval()
+  // ★ 如果自动填表当前展开，强制重载以同步 F2 课程数据
+  if (activeCard.value === 'form') {
+    const wasForm = activeCard.value
+    activeCard.value = null
+    nextTick(() => { activeCard.value = wasForm })
+  }
+}
+async function onMaterialConfirmed() {
+    await calculateScoreSilent()   // ★ 触发后端重算，内部会刷新 scoreList
+  // 如果填表表单已展开，触发重新加载
+  if (activeCard.value === 'form') {
+    const wasForm = activeCard.value
+    activeCard.value = null
+    await nextTick()
+    activeCard.value = wasForm
+  }
+}
+
 async function calculateScore() {
   const rsId = publishedRuleSetId.value
   if (!rsId) { alert('请先发布规则集'); return }
@@ -216,18 +188,38 @@ async function calculateScore() {
     if (sl.code === 200) scoreList.value = sl.data
   } else { alert(res.msg) }
 }
-async function refreshScoreList() {
+
+async function calculateScoreSilent() {
   const rsId = publishedRuleSetId.value
   if (!rsId) return
-  const sl = await api.getScoreList(rsId)
-  if (sl.code === 200) scoreList.value = sl.data
+  try {
+    const res = await api.calculateScoreV2(rsId, materials.value.map(m => m.id))
+    if (res.code === 200) {
+      refreshEval(); 
+      const sl = await api.getScoreList(rsId); 
+      if (sl.code === 200) {
+        scoreList.value = sl.data;
+      } 
+    }
+  } catch (_) { /* 静默失败 */ }
+}
+
+async function refreshScoreList() {
+  const rsId = publishedRuleSetId.value
+  if (!rsId) { console.warn('[SmartFill] refreshScoreList: 无已发布规则集，跳过'); return }
+  console.log('[SmartFill] refreshScoreList: ruleSetId=', rsId)
+  try {
+    const sl = await api.getScoreList(rsId)
+    console.log('[SmartFill] getScoreList 返回 code=', sl.code, 'fact_count=', sl.data?.fact_count, 'indicators=', sl.data?.indicators?.length)
+    if (sl.code === 200) scoreList.value = sl.data
+  } catch (e) { console.error('[SmartFill] refreshScoreList 失败:', e.message) }
 }
 
 // ========== 填表 ==========
-async function uploadTemplate(file) {
+async function onUploadTemplate(file) {
   const fd = new FormData(); fd.append('file', file)
   const res = await api.uploadTemplate(fd)
-  if (res.code === 200) { alert(res.msg); refreshTemplates() }
+  if (res.code === 200) { alert(res.msg); uploadedTemplate.value = res.data; refreshTemplates() }
   else alert(res.msg)
 }
 async function doFill(tplId) {

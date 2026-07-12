@@ -45,30 +45,30 @@ CREATE TABLE IF NOT EXISTS rule_sources (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ===========================================================-- 简化的计分规则表（V3 替代 V1/V2 多表体系）
 -- ============================================================
--- 三、规则项表（★核心★ scoring/limit/conflict）
--- ============================================================
-CREATE TABLE IF NOT EXISTS rule_items (
+CREATE TABLE IF NOT EXISTS scoring_rules (
   id INT AUTO_INCREMENT PRIMARY KEY,
+  rule_set_id INT NOT NULL,
   user_id INT NOT NULL,
-  source_id INT DEFAULT NULL,
-  category VARCHAR(50) DEFAULT NULL,
-  description TEXT NOT NULL,
-  level VARCHAR(20) DEFAULT NULL,
-  score DECIMAL(5,2) DEFAULT NULL,
-  rule_type ENUM('scoring','limit','conflict') NOT NULL DEFAULT 'scoring',
-  limit_value DECIMAL(5,2) DEFAULT NULL,
-  scope VARCHAR(50) DEFAULT NULL,
-  strategy VARCHAR(50) DEFAULT NULL,
-  max_times INT DEFAULT 1,
-  conflict_group VARCHAR(100) DEFAULT NULL,
-  proof_required JSON DEFAULT NULL,
-  status ENUM('pending_confirm','confirmed') DEFAULT 'pending_confirm',
+  section VARCHAR(10) DEFAULT 'F3',
+  item_key VARCHAR(10) NOT NULL,
+  item_name VARCHAR(50),
+  score_level VARCHAR(20),
+  score_rank VARCHAR(50),
+  score INT NOT NULL DEFAULT 0,
+  keywords TEXT,
+  description TEXT,
+  max_score INT DEFAULT NULL,
+  dedup_group VARCHAR(50) DEFAULT NULL,
+  status ENUM('active','inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  INDEX idx_sr_rule_set (rule_set_id),
+  INDEX idx_sr_user (user_id),
+  INDEX idx_sr_item_key (item_key),
+  INDEX idx_sr_level_rank (score_level, score_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
 -- 四、材料表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS materials (
@@ -257,6 +257,23 @@ CREATE TABLE IF NOT EXISTS assessment_form_items (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
+-- 十四点五、智能填表数据缓存表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS smart_fill_data (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  rule_set_id INT NOT NULL,
+  section VARCHAR(10) NOT NULL COMMENT 'F1/F2/F3',
+  item_key VARCHAR(20) NOT NULL COMMENT 'A1/B1/COURSE等',
+  score DECIMAL(5,2) DEFAULT 0,
+  description TEXT COMMENT '理由/评语',
+  extra_data JSON DEFAULT NULL,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uk_user_rule_item (user_id, rule_set_id, section, item_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+
+-- ============================================================
 -- 十五、评估审核记录表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS assessment_review_records (
@@ -376,138 +393,6 @@ CREATE TABLE IF NOT EXISTS doc_block_relations (
   relation_type ENUM('annotates','describes','continues','belongs_to') NOT NULL,
   confidence DECIMAL(5,4) DEFAULT NULL,
   UNIQUE KEY uk_dbr (source_block_id, target_block_id, relation_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS indicator_nodes (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  canonical_key VARCHAR(200) NOT NULL,
-  code VARCHAR(50) DEFAULT '',
-  name VARCHAR(500) DEFAULT '',
-  parent_id INT DEFAULT NULL,
-  weight DECIMAL(5,4) DEFAULT NULL,
-  calc_method ENUM('sum_children','weighted_sum','formula_ast','lookup','direct') DEFAULT 'sum_children',
-  formula_ast JSON DEFAULT NULL,
-  max_score DECIMAL(6,2) DEFAULT NULL,
-  min_score DECIMAL(6,2) DEFAULT 0,
-  sort_order INT DEFAULT 0,
-  status ENUM('pending_review','confirmed') DEFAULT 'pending_review',
-  UNIQUE KEY uk_ind (rule_set_id, canonical_key),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_packages (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  indicator_id INT DEFAULT NULL,
-  canonical_key VARCHAR(200) NOT NULL,
-  name VARCHAR(500) DEFAULT '',
-  summary TEXT,
-  auto_level ENUM('automatic','assisted','manual_required') DEFAULT 'automatic',
-  status ENUM('pending_review','confirmed','rejected') DEFAULT 'pending_review',
-  conflict_note TEXT,
-  UNIQUE KEY uk_rp (rule_set_id, canonical_key),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS executable_rules (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  package_id INT NOT NULL,
-  canonical_key VARCHAR(200) NOT NULL,
-  rule_type ENUM('fixed','per_unit','tiered','lookup','formula_ast',
-    'coefficient','cap','dedup','eligibility','manual',
-    'normalization','evidence_policy','override','outcome_constraint') NOT NULL,
-  name VARCHAR(500) DEFAULT '',
-  config JSON NOT NULL,
-  config_version VARCHAR(20) DEFAULT 'v1',
-  input_selector JSON DEFAULT NULL,
-  condition_config JSON DEFAULT NULL,
-  application_scope ENUM('per_fact','per_material','per_group','per_indicator','global') DEFAULT 'per_fact',
-  group_by_config JSON DEFAULT NULL,
-  execution_stage VARCHAR(50) DEFAULT 'base_score',
-  priority INT DEFAULT 0,
-  proof_required JSON DEFAULT NULL,
-  auto_level ENUM('automatic','assisted','manual_required') DEFAULT 'automatic',
-  status ENUM('pending_review','confirmed','rejected') DEFAULT 'pending_review',
-  UNIQUE KEY uk_er (package_id, canonical_key),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS executable_rule_dependencies (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_id INT NOT NULL,
-  depends_on_rule_id INT NOT NULL,
-  dependency_type ENUM('requires','after') DEFAULT 'requires',
-  UNIQUE KEY uk_erd (rule_id, depends_on_rule_id, dependency_type),
-  CHECK (rule_id != depends_on_rule_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS executable_rule_exclusions (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_a_id INT NOT NULL,
-  rule_b_id INT NOT NULL,
-  resolution_strategy ENUM('take_higher_priority','take_higher_score','manual_review','keep_first') DEFAULT 'manual_review',
-  UNIQUE KEY uk_ere (rule_a_id, rule_b_id),
-  CHECK (rule_a_id < rule_b_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS lookup_tables (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  canonical_key VARCHAR(200) NOT NULL,
-  name VARCHAR(500) DEFAULT '',
-  UNIQUE KEY uk_lt (rule_set_id, canonical_key),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS lookup_dimensions (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  table_id INT NOT NULL,
-  dim_name VARCHAR(100) DEFAULT '',
-  dim_label VARCHAR(200) DEFAULT '',
-  sort_order INT DEFAULT 0
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS lookup_cells (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  table_id INT NOT NULL,
-  dimension_values JSON NOT NULL,
-  dimension_hash CHAR(64) NOT NULL,
-  value DECIMAL(6,2) NOT NULL,
-  UNIQUE KEY uk_lc (table_id, dimension_hash)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_source_refs (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  entity_type ENUM('indicator_node','rule_package','executable_rule','lookup_cell') NOT NULL,
-  entity_id INT NOT NULL,
-  doc_block_id INT NOT NULL,
-  relation_type ENUM('defines','modifies','overrides','clarifies','provides_evidence') DEFAULT 'defines',
-  parse_confidence DECIMAL(5,4) DEFAULT NULL,
-  INDEX idx_rsr (entity_type, entity_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_conflicts (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  canonical_key VARCHAR(200) DEFAULT '',
-  conflict_type ENUM('value_mismatch','strategy_mismatch','scope_overlap','timing_conflict','other'),
-  description TEXT,
-  suggested_resolution TEXT,
-  status ENUM('open','resolved_auto','resolved_manual','escalated') DEFAULT 'open',
-  resolved_by INT DEFAULT NULL,
-  resolution TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_conflict_items (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  conflict_id INT NOT NULL,
-  entity_type ENUM('executable_rule','rule_package','indicator_node','lookup_cell') NOT NULL,
-  entity_id INT NOT NULL,
-  side ENUM('a','b') DEFAULT 'a',
-  doc_block_id INT DEFAULT NULL,
-  UNIQUE KEY uk_rci (conflict_id, entity_type, entity_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS material_analysis_runs (

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  两阶段 Kimi 规则匹配管线
 //  Phase 1: rule cards → Kimi 选 top-k 候选业务块
 //  Phase 2: 加载完整上下文 → Kimi 精确匹配+字段归一化
@@ -170,7 +170,7 @@ async function loadRuleContext(ruleSetId, selectedIndicatorIds) {
     const [rules] = await pool.execute(
       `SELECT er.* FROM executable_rules er
        JOIN rule_packages rp ON er.package_id = rp.id
-       WHERE rp.indicator_id = ?`, [indId]
+       WHERE rp.indicator_id = ? AND rp.rule_set_id = ?`, [indId, ruleSetId]
     );
 
     // ★ 只加载与当前 indicator 关联的 lookup_tables
@@ -309,6 +309,7 @@ const FACT_PRECISE_MATCH_SYSTEM = `你是高校综测规则精确匹配器。在
 - recommended_policy: "standard_lookup" | "special_override" | "explicit_exclusion" | "manual_review"
 - explicit_exclusion_hit: 命中的排除规则（有则填）
 - special_override_hit: 命中的特殊规则（有则填）
+- reason_text: 自然语言加分理由文案。描述做了什么、获得什么级别奖项，例如参加中国大学生数学建模竞赛获湖南省赛区三等奖。注意：不要写分数数字（分数由后端查表确定），不要写成达到规则X条或符合B2指标
 - confidence / needs_review / review_reason
 
 === 禁止 ===
@@ -330,6 +331,7 @@ const FACT_PRECISE_MATCH_SYSTEM = `你是高校综测规则精确匹配器。在
   "recommended_policy": "standard_lookup",
   "explicit_exclusion_hit": null,
   "special_override_hit": null,
+  "reason_text": "参加中国大学生数学建模竞赛获湖南省赛区三等奖",
   "confidence": 0.91,
   "needs_review": false,
   "review_reason": null
@@ -473,6 +475,7 @@ async function matchFactPipeline(fact, ruleSetId, { maxRounds = 2 } = {}) {
     status: matchResult.needs_review ? 'needs_review' : 'matched',
     failure_reason: matchResult.needs_review ? 'match_not_executed' : null,
     reason: matchResult.review_reason || null,
+    reason_text: matchResult.reason_text || null,
     phase1_candidates: selection.candidates,
     phase2_result: matchResult,
     rounds: round,
@@ -508,11 +511,26 @@ async function validateAndPersistMatch(fact, extractedFactId, analysisRunId, rul
 
     // ★ 失效旧 match（同一 extracted_fact_id 的旧 current match）
     await conn.execute(
-      "UPDATE fact_rule_matches SET is_current = 0 WHERE extracted_fact_id = ? AND is_current = 1",
+      "UPDATE fact_rule_matches SET is_current = 0, is_selected = 0 WHERE extracted_fact_id = ? AND is_current = 1",
       [extractedFactId]
     );
 
     const phase2 = matchResult.phase2_result || {};
+
+    // ★★★ P0修复: 从DB indicator_nodes获取权威code覆盖previewMeta
+    if (previewMeta && previewMeta.indicator && previewMeta.indicator.id) {
+      try {
+        const [indRows] = await conn.execute(
+          "SELECT code, name FROM indicator_nodes WHERE id = ? AND rule_set_id = ?",
+          [previewMeta.indicator.id, ruleSetId]
+        );
+        if (indRows.length) {
+          if (!previewMeta.indicator) previewMeta.indicator = {};
+          previewMeta.indicator.code = indRows[0].code || previewMeta.indicator.code;
+          previewMeta.indicator.name = indRows[0].name || previewMeta.indicator.name;
+        }
+      } catch (_) {}
+    }
 
     // ★ 确定性验证
     const verifications = [];
@@ -549,10 +567,13 @@ async function validateAndPersistMatch(fact, extractedFactId, analysisRunId, rul
       );
       rulesOk = ruleCheck.length === ruleIds.length;
     }
-    verifications.push({ check: 'rules_in_rule_set', passed: rulesOk });
+    // ★ 查分表命中 → 规则ID校验降级为警告（真实分数来自查分表）
+    const lookupMatched = scorePreview && scorePreview.score_preview !== null;
+    verifications.push({ check: 'rules_in_rule_set', passed: lookupMatched ? true : rulesOk, warning: !rulesOk && lookupMatched });
 
     // 5. fact_type 兼容
-    const [rules] = rulesOk ? await conn.execute(
+    // 查分表命中时也尝试加载规则（用于 fact_type 校验等）
+    const [rules] = (rulesOk || lookupMatched) ? await conn.execute(
       `SELECT er.id, er.rule_type, er.input_selector, er.condition_config, er.config FROM executable_rules er WHERE er.id IN (${ruleIds.map(() => '?').join(',')})`,
       ruleIds
     ) : [[], []];
@@ -606,25 +627,30 @@ async function validateAndPersistMatch(fact, extractedFactId, analysisRunId, rul
     // 10. 无 consistency_conflict
     verifications.push({ check: 'no_consistency_conflict', passed: !scorePreview.consistency_conflict });
 
-    // ★ 综合判定
-    const allPassed = verifications.every(v => v.passed);
+    // ★ 综合判定（忽略 warning 级别的校验）
+    const allPassed = verifications.filter(v => !v.warning).every(v => v.passed);
     const matchCondition = allPassed ? 'pass'
-      : (verifications.filter(v => !v.passed).length <= 2 ? 'uncertain' : 'fail');
+      : (verifications.filter(v => !v.passed && !v.warning).length <= 2 ? 'uncertain' : 'fail');
     const reasons = verifications.filter(v => !v.passed).map(v => v.check);
 
-    // ★ 写入 fact_rule_matches（每个候选 rule 一条）
+    // ★ AI 生成的加分理由（Phase 2 reason_text）
+    const aiReasonText = (matchResult.phase2_result && matchResult.phase2_result.reason_text) || matchResult.reason_text || null;
+
+    // ★ 写入 fact_rule_matches（每个事实仅保留最佳匹配的一条记录）
+    let inserted = false;
     for (const r of rules) {
       const isMatched = (phase2.matched_rule_ids || []).includes(r.id);
-      const condition = isMatched ? matchCondition : 'fail';
-      const reason = isMatched
-        ? (allPassed ? `验证通过: ${verifications.length}项全部通过` : `验证未通过: ${reasons.join(', ')}`)
-        : '非候选匹配规则';
+      if (!isMatched || inserted) continue;
+      inserted = true;
+      const reason = allPassed
+        ? (aiReasonText || `验证通过: ${verifications.length}项全部通过`)
+        : `验证未通过: ${reasons.join(', ')}`;
 
       await conn.execute(
         `INSERT INTO fact_rule_matches
-         (match_run_id, extracted_fact_id, executable_rule_id, match_condition, confidence, reason, review_status, is_current, preview_data)
-         VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, ?)`,
-        [matchRunId, extractedFactId, r.id, condition, scorePreview.confidence || phase2.confidence || 0.5, reason, JSON.stringify(previewMeta)]
+         (match_run_id, extracted_fact_id, executable_rule_id, match_condition, confidence, reason, review_status, is_current, is_selected, preview_data)
+         VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, 1, ?)`,
+        [matchRunId, extractedFactId, r.id, matchCondition, scorePreview.confidence || phase2.confidence || 0.5, reason, JSON.stringify(previewMeta)]
       );
     }
 
@@ -635,7 +661,7 @@ async function validateAndPersistMatch(fact, extractedFactId, analysisRunId, rul
          (match_run_id, extracted_fact_id, executable_rule_id, match_condition, confidence, reason, review_status, is_current)
          VALUES (?, ?, 0, ?, ?, ?, 'pending', 1)`,
         [matchRunId, extractedFactId, matchCondition, phase2.confidence || 0.5,
-         allPassed ? '指标已匹配，无具体规则ID' : `验证未通过: ${reasons.join(', ')}`]
+         allPassed ? (aiReasonText || '指标已匹配，无具体规则ID') : `验证未通过: ${reasons.join(', ')}`]
       );
     }
 

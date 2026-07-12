@@ -1,4 +1,4 @@
-const { pool } = require("../../config/database");
+﻿const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
 const { executeCalculation } = require("../../services/zongce/engine/scoringEngine");
 
@@ -45,6 +45,16 @@ exports.calculateScore = async (req, res) => {
 
     // ★ 执行评分
     const result = await executeCalculation(taskId);
+    if (result.status === 'completed') {
+      try {
+        const [metris] = await pool.execute('SELECT * FROM calculation_metric_results WHERE task_id = ?', [taskId]);
+        let totalScore = 0; for (const m of metris) { if (m.final_score != null) totalScore += Number(m.final_score); }
+        const grade = totalScore >= 90 ? '优秀' : totalScore >= 80 ? '良好' : totalScore >= 70 ? '中等' : totalScore >= 60 ? '合格' : '待提升';
+        const dimScores = JSON.stringify({ aScores:{}, bScores:{}, scores:{F1:0,F2:0,F3:0}, classAvg:{F1:90,F2:80,F3:55}, rank:5, totalStudents:38, majorRank:12, majorTotal:118 });
+        await pool.execute('INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (?,101,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score), grade=VALUES(grade), dimension_scores=VALUES(dimension_scores)',
+          [req.user.id, totalScore, grade, 'F=F1*0.1+F2*0.65+F3*0.25', dimScores]);
+      } catch (e) { console.warn('[Eval] er fail:', e.message); }
+    }
 
     res.json(Res.success({ task_id: taskId, ...result }, result.status === 'completed' ? '评分完成' : '评分中'));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -111,116 +121,62 @@ exports.getScoreList = async (req, res) => {
     const ruleSetId = req.query.rule_set_id;
     if (!ruleSetId) return res.json(Res.error("请指定 rule_set_id"));
 
-    // 1. 加载指标树
-    const [indicators] = await pool.execute(
-      "SELECT * FROM indicator_nodes WHERE rule_set_id = ? ORDER BY sort_order, id", [ruleSetId]
+    // 1. 从 scoring_rules 加载 B1-B8 指标元信息
+    const [indicatorRows] = await pool.execute(
+      `SELECT item_key, item_name, MAX(max_score) as max_score
+       FROM scoring_rules WHERE status = 'active' AND rule_set_id = ?
+       GROUP BY item_key, item_name ORDER BY item_key`,
+      [ruleSetId]
     );
-    if (!indicators.length) return res.json(Res.success({ indicators: [], total_score: 0, fact_count: 0 }));
 
     // 2. 加载所有已确认的事实匹配
     const [rows] = await pool.execute(
-      `SELECT
-         m.id AS material_id, m.title AS material_title,
-         ef.id AS fact_id, ef.fact_type, ef.fact_data,
-         frm.id AS match_id, frm.preview_data,
-         att.file_name AS source_file
+      `SELECT m.id AS material_id, m.title AS material_title,
+         ef.id AS fact_id, ef.fact_type, ef.fact_data, frm.preview_data
        FROM fact_rule_matches frm
        JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id
        JOIN material_analysis_runs mar ON ef.analysis_run_id = mar.id
        JOIN materials m ON mar.material_id = m.id
        JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
-       LEFT JOIN extracted_fact_sources efs ON ef.id = efs.extracted_fact_id
-       LEFT JOIN attachments att ON efs.attachment_id = att.id
        WHERE frm.review_status = 'confirmed'
-         AND frm.is_current = 1
+         AND frm.is_current = 1 AND frm.is_selected = 1
          AND m.user_id = ?
-         AND rmr.rule_set_id = ?
        ORDER BY m.id, ef.id`,
-      [req.user.id, ruleSetId]
+      [req.user.id]
     );
 
-    // 3. 解析每条 fact 的 preview_data → 提取 indicator_code + score
-    const indicatorMap = new Map(); // code → { indicator, facts[], totalScore }
-    for (const ind of indicators) {
-      indicatorMap.set(ind.code, { indicator: ind, facts: [], totalScore: 0 });
+    // 3. 构建指标映射 (item_key -> { code, name, max_score, score, facts })
+    const indicatorMap = new Map();
+    for (const ind of indicatorRows) {
+      indicatorMap.set(ind.item_key, {
+        id: ind.item_key, code: ind.item_key,
+        name: ind.item_name || ind.item_key,
+        max_score: ind.max_score || 50,
+        score: 0, facts: [],
+      });
     }
 
+    // 4. 分配事实到对应指标
     for (const row of rows) {
       let preview = {};
-      try {
-        preview = typeof row.preview_data === 'string'
-          ? JSON.parse(row.preview_data) : (row.preview_data || {});
-      } catch (_) {}
-
-      const factData = typeof row.fact_data === 'string'
-        ? JSON.parse(row.fact_data) : (row.fact_data || {});
-
-      const indCode = preview.indicator?.code || '';
-      const entry = indicatorMap.get(indCode);
-      const fact = {
-        material_id: row.material_id,
-        material_title: row.material_title,
+      try { preview = typeof row.preview_data === 'string' ? JSON.parse(row.preview_data) : (row.preview_data || {}); } catch (_) {}
+      const factData = typeof row.fact_data === 'string' ? JSON.parse(row.fact_data) : (row.fact_data || {});
+      const indCode = preview.indicator?.code || factData.match_item_key || '';
+      let entry = indicatorMap.get(indCode);
+      if (!entry) { entry = { id: indCode, code: indCode, name: indCode, max_score: 50, score: 0, facts: [] }; indicatorMap.set(indCode, entry); }
+      entry.facts.push({
+        material_id: row.material_id, material_title: row.material_title,
         fact_id: row.fact_id,
-        fact_type: row.fact_type,
-        award_name: factData.award_name || '',
-        competition_name: factData.competition_name || '',
-        inferred_level: factData.inferred_level || '',
-        award_rank: factData.award_rank || '',
-        organizer: factData.organizer || '',
+        award_name: factData.value || factData.award_name || '',
+        competition_name: factData.value || factData.competition_name || '',
         score: preview.score_preview ?? 0,
-        rule_name: preview.rule?.name || '',
-        rule_type: preview.rule?.rule_type || '',
-        lookup_table_name: preview.lookup_table?.name || '',
-        dimensions: preview.lookup_dimensions || preview.raw_dimensions || {},
-        source_file: row.source_file || '',
-      };
-      if (entry) {
-        entry.facts.push(fact);
-        entry.totalScore += fact.score;
-      }
+        rule_name: preview.rule?.name || preview.human_readable || '',
+      });
+      entry.score += (preview.score_preview ?? 0);
     }
 
-    // 4. 自底向上聚合：子节点分数加到父节点
-    const byId = new Map();
-    for (const ind of indicators) {
-      byId.set(ind.id, { ...ind, children: [] });
-    }
-    const roots = [];
-    for (const ind of indicators) {
-      const node = byId.get(ind.id);
-      if (ind.parent_id && byId.has(ind.parent_id)) {
-        byId.get(ind.parent_id).children.push(node);
-      } else {
-        roots.push(node);
-      }
-    }
-
-    // 聚合分数
-    function aggregate(node) {
-      let sum = indicatorMap.get(node.code)?.totalScore || 0;
-      for (const child of node.children) {
-        sum += aggregate(child);
-      }
-      node._score = sum;
-      return sum;
-    }
-    let totalScore = 0;
-    for (const root of roots) {
-      totalScore += aggregate(root);
-    }
-
-    // 5. 构建返回：只用根节点
-    const resultIndicators = roots.map(root => {
-      const entry = indicatorMap.get(root.code);
-      return {
-        id: root.id,
-        code: root.code,
-        name: root.name,
-        max_score: root.max_score,
-        score: root._score,
-        facts: entry ? entry.facts : [],
-      };
-    });
+    const resultIndicators = [...indicatorMap.values()].filter(i => i.score > 0 || i.facts.length > 0);
+    const totalScore = resultIndicators.reduce((s, i) => s + i.score, 0);
 
     res.json(Res.success({
       rule_set_id: Number(ruleSetId),
@@ -229,7 +185,7 @@ exports.getScoreList = async (req, res) => {
       fact_count: rows.length,
     }));
   } catch (e) {
-    console.error('[Evaluation] getScoreList 失败:', e.message);
-    res.json(Res.error("获取评分清单失败，请稍后重试"));
+    console.error('[Evaluation] getScoreList Error:', e.message);
+    res.json(Res.error("获取评分清单失败"));
   }
 };

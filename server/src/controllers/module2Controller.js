@@ -67,14 +67,14 @@ function extractScoreData(dimensionScores) {
   };
 }
 
-async function getStudentInfo() {
+async function getStudentInfo(userId) {
   const [users] = await pool.execute(
-    "SELECT id, real_name AS name, grade, major, class_name AS class FROM users WHERE id = 2"
+    "SELECT id, real_name AS name, grade, major, class_name AS class FROM users WHERE id = ?", [userId]
   );
   if (users.length === 0)
-    return { name: "张三", grade: "2024级", major: "计算机科学与技术", class: "计科2401班" };
+    return { name: "未知用户", grade: "", major: "", class: "" };
   const u = users[0];
-  return { name: u.name, grade: u.grade, major: u.major, class: u.class };
+  return { name: u.name || "未知用户", grade: u.grade || "", major: u.major || "", class: u.class || "" };
 }
 
 async function getBatchTitle(batchId) {
@@ -82,18 +82,19 @@ async function getBatchTitle(batchId) {
   const [rows] = await pool.execute("SELECT title FROM assessment_batches WHERE id = ?", [batchId]);
   return rows.length > 0 ? rows[0].title : null;
 }
+
 exports.getEvaluation = async (req, res) => {
   try {
     const { batch_id } = req.query;
     const batchId = batch_id || 101;
     const [rows] = await pool.execute(
-      "SELECT * FROM evaluation_results WHERE user_id = 2 AND batch_id = ?", [batchId]
+      "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = ?", [req.user.id, batchId]
     );
     if (rows.length === 0) return res.json(Res.success(null, "暂无评定数据"));
     const record = rows[0];
     const { aScores, bScores, scores, classAvg, rank, totalStudents, majorRank, majorTotal } =
       extractScoreData(record.dimension_scores);
-    const student = await getStudentInfo();
+    const student = await getStudentInfo(req.user.id);
     const semester = await getBatchTitle(batchId);
     const gradeLevels = await getGradeLevels();
     const dims = calcDimensions({ aScores, bScores, scores });
@@ -116,12 +117,12 @@ exports.generateReport = async (req, res) => {
     const { batch_id } = req.body || {};
     const batchId = batch_id || 101;
     const [rows] = await pool.execute(
-      "SELECT * FROM evaluation_results WHERE user_id = 2 AND batch_id = ?", [batchId]
+      "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = ?", [req.user.id, batchId]
     );
     if (rows.length === 0) return res.json(Res.error("暂无评定数据"));
     const record = rows[0];
     const { aScores, bScores, scores, rank, totalStudents } = extractScoreData(record.dimension_scores);
-    const student = await getStudentInfo();
+    const student = await getStudentInfo(req.user.id);
     const gradeLevels = await getGradeLevels();
     const dims = calcDimensions({ aScores, bScores, scores });
     const totalScore = record.total_score || calcF(scores);
@@ -164,10 +165,11 @@ exports.generateReport = async (req, res) => {
     }, "报告生成成功（模板）"));
   } catch (e) { res.json(Res.error(e.message)); }
 };
+
 exports.getClassStats = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT * FROM evaluation_results WHERE user_id = 2 AND batch_id = 101"
+      "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = 101", [req.user.id]
     );
     if (rows.length === 0) return res.json(Res.success(null, "暂无班级数据"));
     const record = rows[0];
@@ -187,7 +189,7 @@ exports.getClassStats = async (req, res) => {
 exports.getHistory = async (req, res) => {
   try {
     const [records] = await pool.execute(
-      "SELECT er.*, ab.title AS batch_title FROM evaluation_results er LEFT JOIN assessment_batches ab ON er.batch_id = ab.id WHERE er.user_id = 2 ORDER BY er.batch_id"
+      "SELECT er.*, ab.title AS batch_title FROM evaluation_results er LEFT JOIN assessment_batches ab ON er.batch_id = ab.id WHERE er.user_id = ? ORDER BY er.batch_id", [req.user.id]
     );
     const gradeLevels = await getGradeLevels();
     const semesters = records.map(r => {
@@ -205,13 +207,6 @@ exports.getHistory = async (req, res) => {
         rating: getLevel(totalScore, gradeLevels).label, milestones: [],
       };
     });
-    if (semesters.length >= 3) {
-      semesters[2].milestones = ["完成暑期社会实践项目", "获校级三等奖学金"];
-      semesters[1].milestones = ["担任班级学习委员", "获院级优秀学生干部"];
-    }
-    if (semesters.length >= 1) {
-      semesters[0].milestones = ["参加编程竞赛获校级三等奖", "加入学生会宣传部"];
-    }
     res.json(Res.success({
       semesters,
       currentSemester: semesters.length > 0 ? semesters[semesters.length - 1].semester : "",
@@ -222,7 +217,7 @@ exports.getHistory = async (req, res) => {
 exports.getAdvice = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT * FROM evaluation_results WHERE user_id = 2 AND batch_id = 101"
+      "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = 101", [req.user.id]
     );
     if (rows.length === 0) return res.json(Res.success([]));
     const { aScores, bScores, scores } = extractScoreData(rows[0].dimension_scores);

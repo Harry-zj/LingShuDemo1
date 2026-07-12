@@ -1,4 +1,4 @@
-import request from "./request";
+﻿import request from "./request";
 
 // ===== 规则 =====
 export const uploadRuleFiles = (formData) =>
@@ -52,6 +52,18 @@ export const confirmRecognition = (id) =>
 export const dismissRecognition = (id) =>
   request.put(`/zongce/recognitions/${id}/dismiss`);
 
+// ★ 确认事实匹配（更新 fact_rule_matches.review_status）
+export const confirmFactMatch = (id) =>
+  request.put(`/zongce/recognitions/fact-match/${id}/confirm`);
+
+// ★ V3 确认加分（材料级别 confirm-match，携带 auth token）
+export const confirmMatchMaterial = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/confirm-match`, data, { timeout: 30000 });
+
+// ★ AI 生成加分描述
+export const generateMatchDescription = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/generate-description`, data, { timeout: 30000 });
+
 // ===== 评分 =====
 export const calculateScore = () =>
   request.post("/zongce/evaluation/calculate");
@@ -75,8 +87,18 @@ export const doFill = (templateId) =>
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });
 
-export const getMockData = () =>
-  request.get("/zongce/mock-data");
+export const getFillPreview = () =>
+  request.get("/zongce/fill-preview");
+// ===== 智能填表数据保存 =====
+export const saveFillData = (items) =>
+  request.post("/zongce/smart-fill/save", { items });
+
+export const getSmartFillData = (ruleSetId) =>
+  request.get("/zongce/smart-fill/data", { params: { rule_set_id: ruleSetId } });
+
+export const generateF1Description = (section, item_key, item_name) =>
+  request.post("/zongce/smart-fill/generate-f1", { section, item_key, item_name });
+
 
 // ===== 批量填表 =====
 export const batchUploadFiles = (formData) =>

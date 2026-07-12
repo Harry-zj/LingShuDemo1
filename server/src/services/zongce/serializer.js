@@ -60,7 +60,7 @@ async function serializeFact(efRow) {
       review_status: frm.review_status,
       needs_review: frm.match_condition !== 'pass' || frm.review_status === 'pending',
       error_type: extra.error_type || null,
-      reason: frm.reason || null,
+      reason: extra.human_readable || (frm.reason && !frm.reason.startsWith("验证") ? frm.reason : null),
       confidence: frm.confidence,
     };
   }

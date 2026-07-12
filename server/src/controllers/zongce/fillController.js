@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
-const { fillDocx, getFillData, getMockData } = require("../../services/zongce/fillService");
+const { fillDocx, getFillData, getFillDataPreview } = require("../../services/zongce/fillService");
 const { analyzeAndFill: smartFill } = require("../../services/zongce/templateAnalyzer");
 
 exports.uploadTemplate = async (req, res) => {
@@ -14,6 +14,7 @@ exports.uploadTemplate = async (req, res) => {
       return res.json(Res.error("仅支持 .docx 格式的 Word 模板"));
     }
     const buf = fs.readFileSync(req.file.path);
+    const safeName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
     if (buf[0] !== 0x50 || buf[1] !== 0x4b) {
       fs.unlink(req.file.path, () => {});
       return res.json(Res.error("文件格式无效，请上传真正的 .docx 文件"));
@@ -22,15 +23,15 @@ exports.uploadTemplate = async (req, res) => {
     try {
       [r] = await pool.execute(
         "INSERT INTO fill_templates (user_id, name, file_path, template_type) VALUES (?, ?, ?, ?)",
-        [req.user.id, req.file.originalname, req.file.filename, "docx"]
+        [req.user.id, safeName, req.file.filename, "docx"]
       );
     } catch (e) {
       [r] = await pool.execute(
         "INSERT INTO fill_templates (user_id, name, file_path) VALUES (?, ?, ?)",
-        [req.user.id, req.file.originalname, req.file.filename]
+        [req.user.id, safeName, req.file.filename]
       );
     }
-    res.json(Res.success({ id: r.insertId, name: req.file.originalname, size: req.file.size }, "模板上传成功"));
+    res.json(Res.success({ id: r.insertId, name: safeName, size: req.file.size }, "模板上传成功"));
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
@@ -55,7 +56,10 @@ exports.doFill = async (req, res) => {
     const tpl = tplRows[0];
     const templatePath = path.join(__dirname, "../../../uploads", tpl.file_path);
     if (!fs.existsSync(templatePath)) return res.json(Res.error("模板文件丢失，请重新上传"));
-    const fillData = getFillData(req.user.id);
+
+    // ★ 从数据库获取当前用户的真实填表数据
+    const fillData = await getFillData(req.user.id);
+
     const templateBuffer = fs.readFileSync(templatePath);
     const outputBuffer = smartFill(templateBuffer, fillData);
     const outputFileName = "filled_" + Date.now() + "_" + tpl.file_path;
@@ -114,7 +118,86 @@ exports.downloadFill = async (req, res) => {
   }
 };
 
-exports.getMockData = async (req, res) => {
-  try { res.json(Res.success(getMockData())); }
-  catch (e) { res.json(Res.error(e.message)); }
+// ★ 获取当前用户的填表预览数据（替代原来的 mock-data）
+exports.getFillPreview = async (req, res) => {
+  try {
+    const preview = await getFillDataPreview(req.user.id);
+    res.json(Res.success(preview));
+  } catch (e) {
+    console.error("[预览] 失败:", e.message);
+    res.json(Res.error(e.message));
+  }
+};
+
+// ★ 保存智能填表数据（分数 + 描述）
+exports.saveFillData = async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!items || !Array.isArray(items)) return res.json(Res.error("缺少 items 数组"));
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      for (const item of items) {
+        if (!item.section || !item.item_key) continue;
+        await conn.execute(
+          `INSERT INTO smart_fill_data (user_id, rule_set_id, section, item_key, score, description, extra_data)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE score=VALUES(score), description=VALUES(description), extra_data=VALUES(extra_data)`,
+          [req.user.id, item.rule_set_id || 0, item.section, item.item_key,
+           item.score ?? 0, item.description || '', item.extra_data ? JSON.stringify(item.extra_data) : null]
+        );
+      }
+      await conn.commit();
+      res.json(Res.success(null, "已保存"));
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally { conn.release(); }
+  } catch (e) {
+    console.error("[保存填表数据] 失败:", e.message);
+    res.json(Res.error(e.message));
+  }
+};
+
+// ★ AI 生成 F1 描述
+exports.generateF1Descriptions = async (req, res) => {
+  try {
+    const { section, item_key, item_name } = req.body;
+    const { chatStream } = require("../../services/zongce/ai/aiService");
+
+    const prompt = `你是高校辅导员，需要为综测表中"${item_name || item_key}"这一项写一段简短评语（20-40字）。
+要求：积极正面、合理可信、解释该学生为什么能获得此项的评分。直接输出评语，不要引号。`;
+
+    let desc = "";
+    const stream = await chatStream(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.7, maxTokens: 200 }
+    );
+    for await (const token of stream) desc += token;
+    desc = desc.trim().replace(/^["'""']|["'""']$/g, '');
+
+    res.json(Res.success({ description: desc || `${item_name || item_key}表现良好，符合评分标准。` }));
+  } catch (e) {
+    console.error("[生成F1描述] 失败:", e.message);
+    // 失败时返回兜底描述
+    res.json(Res.success({ description: `${req.body.item_name || req.body.item_key}表现良好，符合评分标准。` }));
+  }
+};
+
+// ★ 获取智能填表数据（供前端加载）
+exports.getSmartFillData = async (req, res) => {
+  try {
+    const { rule_set_id } = req.query;
+    if (!rule_set_id) return res.json(Res.error("缺少 rule_set_id"));
+
+    const [rows] = await pool.execute(
+      "SELECT * FROM smart_fill_data WHERE user_id = ? AND rule_set_id = ?",
+      [req.user.id, rule_set_id]
+    );
+    res.json(Res.success(rows));
+  } catch (e) {
+    console.error("[获取填表数据] 失败:", e.message);
+    res.json(Res.error(e.message));
+  }
 };

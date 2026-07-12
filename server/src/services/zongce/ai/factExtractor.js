@@ -161,7 +161,11 @@ async function extractStructuredFacts(attachments) {
       );
     }
 
-    if (!result || !result.facts) continue;
+    if (!result || !result.facts) {
+      console.log('[FactExtract] AI response missing facts. Keys:', result ? Object.keys(result).join(',') : 'null');
+      console.log('[FactExtract] Raw result sample:', JSON.stringify(result || {}).slice(0, 300));
+      continue;
+    }
 
     for (const f of result.facts) {
       f.fact_id = `f${allFacts.length + 1}`;

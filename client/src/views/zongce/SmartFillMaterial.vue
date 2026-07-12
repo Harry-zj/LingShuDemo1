@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="material-page">
     <div class="add-bar">
       <button class="btn primary" @click="$emit('create')">+ 新建材料项</button>
@@ -46,137 +46,128 @@
 
       <template v-if="mat.facts?.length">
         <div class="extract-card">
-          <div class="extract-header" @click="toggleCollapse(mat.id)" style="cursor:pointer">
-            <span>{{ collapsedMap[mat.id] ? '▶' : '▼' }} 识别结果 — {{ statusLabel(mat) }}
+          <div class="extract-header clickable" @click="toggleCollapse(mat.id)">
+            <span class="eh-left">
+              <span class="eh-arrow">{{ collapsedMap[mat.id] ? '▶' : '▼' }}</span>
+              <span class="eh-title">识别结果</span>
+              <span class="eh-status" :class="statusLabel(mat)">{{ statusLabel(mat) }}</span>
               <span v-if="matchedCount(mat) < mat.facts.length" class="match-progress">
-                ⏳ 正在匹配规则 {{ matchedCount(mat) }}/{{ mat.facts.length }}...
+                <span class="spinner-sm"></span> 匹配规则 {{ matchedCount(mat) }}/{{ mat.facts.length }}
               </span>
             </span>
-            <button class="btn-text sm" @click.stop="doExtract(mat)">重新识别</button>
+            <button class="btn-text sm" @click.stop="doExtract(mat)">🔄 重新识别</button>
           </div>
 
-          <div v-show="!collapsedMap[mat.id]">
-          <div v-for="f in mat.facts" :key="f.fact_id || f.legacy_fact_key" class="fact-editor">
-            <div class="fact-header">事实 #{{ f.fact_id || f.legacy_fact_key }}</div>
-            <div class="edit-grid">
-              <div class="edit-field">
-                <label>规则分类</label>
-                <select v-model="f.fact_data.suggested_rule_block" @change="doPreview(mat, f)">
-                  <option value="">-- 不确定 --</option>
-                  <option v-for="b in ruleBlocks" :key="b" :value="b">{{ b }}</option>
-                </select>
-              </div>
-              <div class="edit-field"><label>赛事/活动</label><input v-model="f.fact_data.competition_name" @change="doPreview(mat, f)" /></div>
-              <div class="edit-field"><label>获奖名称</label><input v-model="f.fact_data.award_name" @change="doPreview(mat, f)" /></div>
-              <div class="edit-field">
-                <label>获奖等级</label>
-                <select v-model="f.fact_data.award_rank" @change="doPreview(mat, f)">
-                  <option value="">-- 未知 --</option>
-                  <option value="special">特等奖</option><option value="first">一等奖</option><option value="second">二等奖</option>
-                  <option value="third">三等奖</option><option value="encouragement">鼓励奖/纪念奖/入围奖</option>
-                  <option value="excellence">优秀奖</option><option value="participation">参与奖</option>
-                  <option value="优胜奖">优胜奖（保持原文）</option>
-                </select>
-              </div>
-              <div class="edit-field"><label>主办单位</label><input v-model="f.fact_data.organizer" @change="doPreview(mat, f)" /></div>
-              <div class="edit-field">
-                <label>建议级别</label>
-                <select v-model="f.fact_data.inferred_level" @change="doPreview(mat, f)">
-                  <option value="">-- 不确定 --</option>
-                  <option value="national">国家级</option><option value="provincial">省级</option>
-                  <option value="school">校级</option><option value="college">院级</option>
-                </select>
-              </div>
-              <div class="edit-field"><label>日期</label><input v-model="f.fact_data.award_date" @change="doPreview(mat, f)" /></div>
-              <div class="edit-field">
-                <label>团队/个人</label>
-                <select v-model="f.fact_data.is_team" @change="doPreview(mat, f)">
-                  <option :value="false">个人</option><option :value="true">团队</option>
-                </select>
-              </div>
-              <div class="edit-field"><label>角色</label><input v-model="f.fact_data.my_role" @change="doPreview(mat, f)" placeholder="队长/队员/个人" /></div>
-              <div class="edit-field">
-                <label>重复获奖</label>
-                <select v-model="f.fact_data.is_duplicate_project" @change="doPreview(mat, f)">
-                  <option :value="false">否</option><option :value="true">是</option>
-                </select>
-              </div>
-            </div>
+          <div v-show="!collapsedMap[mat.id]" class="extract-body">
+          <!-- V3 简化匹配卡片 -->
+          <template v-if="mat.score_previews && mat.score_previews.length">
+            <div v-for="(sp, spi) in mat.score_previews" :key="spi"
+              class="match-card-v3"
+              :class="{ confirmed: sp._confirmed, 'needs-review': sp.needs_review }">
 
-            <!-- ⏳ 匹配中 -->
-            <div v-if="!f.match && isPreviewing(f)" class="preview-block matching-block">
-              <div class="preview-status">
-                <span class="badge matching">⏳ 正在匹配规则…</span>
+              <!-- 卡片头部：维度标签 + 匹配度 -->
+              <div class="match-header-v3">
+                <div class="mh-left">
+                  <span class="cat-badge">{{ sp.indicator_code || sp.matched_rule?.category || '?' }}</span>
+                  <span class="cat-name">{{ sp.matched_rule?.name || sp.indicator_name || '未识别' }}</span>
+                </div>
+                <div class="mh-right">
+                  <span class="sim-badge" :class="sp.needs_review ? 'sim-low' : 'sim-ok'">
+                    <svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-2px;margin-right:2px">
+                      <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                      <path d="M6 3.5v3.5M6 8.2v.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                    </svg>
+                    匹配 {{ Math.round((sp.similarity_score||0)*100) }}%
+                  </span>
+                  <span v-if="sp._confirmed" class="confirmed-badge">✓ 已确认</span>
+                </div>
               </div>
-              <div class="preview-body">
-                <div class="matching-hint">AI 正在查找匹配的加分规则，请稍候…</div>
+
+              <!-- 卡片主体：得分 + 加分描述 -->
+              <div class="match-body-v3">
+                <!-- 得分行 -->
+                <div class="score-row-v3">
+                  <div class="sr-label">
+                    <svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px">
+                      <polygon points="7,1 9.5,5 14,5.8 10.5,9.5 11.3,14 7,11.5 2.7,14 3.5,9.5 0,5.8 4.5,5" fill="currentColor" opacity="0.8"/>
+                    </svg>
+                    <span>加分数</span>
+                  </div>
+                  <div class="sr-input-group">
+                    <input v-model.number="sp.score_preview" type="number" class="score-inp-v3"
+                      :disabled="sp._confirmed" :min="0" />
+                    <span class="sr-unit">分</span>
+                  </div>
+                </div>
+
+                <!-- 描述行 -->
+                <div class="desc-row-v3">
+                  <div class="sr-label">
+                    <svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px">
+                      <rect x="1" y="3" width="12" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
+                      <line x1="3.5" y1="6.5" x2="10.5" y2="6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                      <line x1="3.5" y1="9" x2="8.5" y2="9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                    </svg>
+                    <span>加分描述</span>
+                    <button v-if="!sp._genDescLoading && !sp._confirmed" class="btn-ai-sm" @click.stop="generateDescription(mat, sp, spi)" title="AI 生成描述">
+                      🤖 生成
+                    </button>
+                    <span v-if="sp._genDescLoading" class="gen-desc-loading">⏳ 生成中...</span>
+                  </div>
+                  <div class="desc-input-wrap">
+                    <textarea v-model="sp.ai_description" rows="2" class="desc-input-v3"
+                      :placeholder="sp._confirmed ? '' : '输入加分描述或点击 AI 生成...'"
+                      :disabled="sp._confirmed"></textarea>
+                  </div>
+                </div>
               </div>
-            </div>
-            <!-- 匹配结果 -->
-            <div v-else-if="f.match" class="preview-block">
-              <div class="preview-status">
-                <span v-if="f.match.error_type === 'ambiguous_lookup_table'" class="badge review">多表歧义</span>
-                <span v-else-if="f.match.review_status === 'confirmed'" class="badge ok">已确认</span>
-                <span v-else-if="f.match.score_status === 'candidate_pending_review'" class="badge review">待查分确认</span>
-                <span v-else-if="f.match.score_status === 'lookup_failed'" class="badge conflict">查分未命中</span>
-                <span v-else-if="f.match.score_preview !== null" class="badge ok">已匹配</span>
-                <span v-else-if="f.match.error_type" class="badge review">{{ f.match.error_type }}</span>
-                <span v-else class="badge review">无法计分</span>
-              </div>
-              <div class="preview-body">
-                <div class="preview-row" v-if="f.match.indicator?.code"><label>指标</label><b>{{ f.match.indicator.code }}</b><span v-if="f.match.indicator.name"> — {{ f.match.indicator.name }}</span></div>
-                <div class="preview-row" v-if="f.match.rule?.name"><label>规则</label>{{ f.match.rule.name }} <span class="rule-type-tag">{{ f.match.rule.rule_type }}</span></div>
-                <div class="preview-row" v-if="f.match.lookup_table?.name"><label>查分表</label>{{ f.match.lookup_table.name }}</div>
-                <div class="preview-row" v-if="hasDimEntries(f.match.raw_dimensions)"><label>维度</label>{{ formatDims(f.match.raw_dimensions) }}</div>
-                <div class="preview-score">
-                  <template v-if="f.match.score_preview !== null">
-                    <span class="score-num" :class="{ plus: f.match.score_preview > 0, zero: f.match.score_preview === 0 }">{{ f.match.score_preview > 0 ? '+' + f.match.score_preview : String(f.match.score_preview) }}</span>
-                    <span class="score-unit">分</span>
-                    <span v-if="f.match.review_status === 'pending' && f.match.score_preview !== null" class="score-hint">待确认</span>
-                  </template>
-                  <template v-else>
-                    <span class="score-num na">—</span>
-                    <span class="score-unit na-text">{{ f.match.error_type || '无法计分' }}</span>
-                  </template>
+
+              <!-- 卡片底部：确认按钮 -->
+              <div class="match-footer-v3">
+                <div v-if="sp._confirmed" class="confirmed-info">
+                  <svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:-3px">
+                    <circle cx="8" cy="8" r="7" fill="#34A853"/>
+                    <polyline points="5,8.5 7.5,11 11,5.5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span>已确认</span>
+                </div>
+                <div v-else class="footer-actions">
+                  <div class="footer-score-summary">
+                    <span class="fss-label">规则建议:</span>
+                    <span class="fss-value">+{{ sp.score_preview || 0 }} 分</span>
+                  </div>
+                  <button class="btn-confirm" @click="doConfirmV3(mat, sp, spi)"
+                    :disabled="sp._confirming">
+                    <svg v-if="sp._confirming" class="spinning" width="14" height="14" viewBox="0 0 14 14">
+                      <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20" stroke-dashoffset="5"/>
+                    </svg>
+                    <span v-else>✓</span>
+                    {{ sp._confirming ? '确认中...' : '确认加分' }}
+                  </button>
                 </div>
               </div>
             </div>
-
-            <!-- ★ 单条确认 -->
-            <div v-if="f.match" style="margin-top:10px; display:flex; align-items:center; gap:8px">
-              <!-- 已确认：显示状态 -->
-              <span v-if="f.match.review_status === 'confirmed'" class="badge ok">已确认</span>
-              <!-- 可确认：显示确认按钮 -->
-              <button
-                v-else-if="canConfirm(f)"
-                class="btn primary sm"
-                @click="confirmMatch(mat.id, f)"
-              >确认该条</button>
-              <!-- 不可确认：显示禁用按钮 + 原因提示 -->
-              <template v-else>
-                <button class="btn sm btn-disabled" disabled>{{ confirmBlockLabel(f) }}</button>
-                <span class="block-hint">{{ confirmBlockReason(f) }}</span>
-              </template>
-            </div>
+          </template>
+          <div v-else class="no-match-v3">
+            <div class="no-match-icon">📋</div>
+            <div class="no-match-title">暂未匹配到计分规则</div>
+            <div class="no-match-desc">请确认已有已发布的规则集，且规则数据正常</div>
           </div>
-          </div>  <!-- v-show -->
+          </div>
         </div>
       </template>
 
     </div>
   </div>
 </template>
-
 <script setup>
 import { watch, ref } from 'vue'
 import * as api from '../../api/zongce'
 
 const props = defineProps({ materials: Array })
-const emit = defineEmits(['create','upload','remove'])
+const emit = defineEmits(['create', 'upload', 'remove', 'score-recalc'])
 const fileInputs = {}
-const ruleBlocks = ['B1','B2','B3','B4','B5','B6','B7','B8']
 const extractingIds = ref(new Set())
-const previewingKeys = ref(new Set())
 const collapsedMap = ref({})
 function toggleCollapse(matId) { collapsedMap.value[matId] = !collapsedMap.value[matId] }
 
@@ -187,30 +178,21 @@ watch(() => props.materials, (mats) => {
         if (f.match?.indicator?.code) { mat._bestCat = f.match.indicator.code; break }
       }
     }
-    // 默认折叠：已全部确认 → 收起；未确认 → 展开
-    if (!(mat.id in collapsedMap.value)) {
-      collapsedMap.value[mat.id] = allConfirmed(mat)
-    }
-  }
-}, { immediate: true })
+    if (!(mat.id in collapsedMap.value)) { collapsedMap.value[mat.id] = allConfirmed(mat) }; if (mat.score_previews) mat.score_previews.forEach(sp => { sp._confirmed = sp._confirmed || !!sp.confirmed || false; sp._confirming = !!sp._confirming && false }); }; }, { immediate: true })
 
 function onFiles(matId, e) {
   const files = Array.from(e.target.files)
   if (files.length) emit('upload', matId, files)
 }
-function hasDimEntries(dims) { return dims && typeof dims === 'object' && Object.keys(dims).length > 0 }
-function formatDims(dims) { return Object.entries(dims || {}).map(([k, v]) => k + '=' + v).join(', ') }
-function allConfirmed(mat) { return mat.facts?.length && mat.facts.every(f => f.match?.review_status === 'confirmed') }
-function someConfirmed(mat) { return mat.facts?.some(f => f.match?.review_status === 'confirmed') }
+function allConfirmed(mat) { return mat.facts?.length && mat.facts.every(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
+function someConfirmed(mat) { return mat.facts?.some(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
 function statusLabel(mat) {
   if (!mat.facts?.length) return '待提取'
   if (allConfirmed(mat)) return '已入库'
   if (someConfirmed(mat)) return '部分已确认'
   return '待确认'
 }
-function factKey(f) { return f.fact_id || f.legacy_fact_key }
-function matchedCount(mat) { return (mat.facts || []).filter(f => f.match).length }
-function isPreviewing(f) { return previewingKeys.value.has(factKey(f)) }
+function matchedCount(mat) { return (mat.facts || []).filter(f => f.match || (f.fact_data && f.fact_data.match_score != null)).length }
 
 async function doExtract(mat) {
   extractingIds.value.add(mat.id)
@@ -219,205 +201,382 @@ async function doExtract(mat) {
     if (res.code === 200) {
       mat.facts = (res.data.facts || []).map(f => ({
         fact_id: f.fact_id || null,
-        legacy_fact_key: f.legacy_fact_key || ('f_' + Date.now()),
-        fact_type: f.fact_type || f.type || null,
         fact_data: f.fact_data || f,
       }))
-      for (const f of mat.facts) await doPreview(mat, f)
+      mat.score_previews = (res.data.score_previews || []).map(sp => ({
+        ...sp,
+        _confirmed: false,
+        _confirming: false,
+        _genDescLoading: false,
+        ai_description: sp.ai_description || '',
+      }))
+      collapsedMap.value[mat.id] = false
     } else { alert(res.msg) }
-  } catch (e) { alert('识别失败，请稍后重试') }
+  } catch (e) { alert('识别失败: ' + e.message) }
   extractingIds.value.delete(mat.id)
 }
 
-async function doPreview(mat, fact) {
-  const fd = fact.fact_data || fact
-  if (!fd.inferred_level) {
-    fact.match = { score_preview: null, error_type: 'incomplete', reason: '缺少级别信息' }
-    return
-  }
-  const key = fact.fact_id || fact.legacy_fact_key
-  previewingKeys.value.add(key)
+// ★ 使用 API 模块（携带 auth token）代替 raw fetch，修复 401 错误
+async function doConfirmV3(mat, sp, spi) {
+  sp._confirming = true
   try {
-    const res = await api.previewScore(mat.id, { fact: fd })
-    if (res.code === 200) {
-      fact.match = res.data.match || res.data
-      if (!mat._bestCat && fact.match?.indicator?.code) mat._bestCat = fact.match.indicator.code
-    } else {
-      fact.match = { score_preview: null, error_type: 'match_failed', reason: res.msg }
-      alert('规则匹配失败：' + (res.msg || '未知错误'))
-    }
-  } catch (_) {
-    fact.match = { score_preview: null, error_type: 'error', reason: '预览请求失败' }
-    alert('规则匹配请求失败，请检查网络或稍后重试')
-  } finally { previewingKeys.value.delete(key) }
-}
-
-function recalcPreviewSummary(mat) {
-  let cs = 0, cc = 0, sc = 0, cac = 0, pc = 0, fc = 0
-  for (const f of (mat.facts || [])) {
-    const m = f.match
-    if (!m || m.score_preview == null) { if (m?.error_type) fc++; else pc++ }
-    else if (m.review_status === 'pending') { cc += m.score_preview; cac++ }
-    else { cs += m.score_preview; sc++ }
-  }
-  // ★ mutate in-place：保证 Vue Proxy 追踪到每个属性变更
-  if (!mat.preview_summary) mat.preview_summary = {}
-  Object.assign(mat.preview_summary, {
-    confirmed_score: cs, candidate_score: cc,
-    scored_fact_count: sc, candidate_fact_count: cac,
-    pending_fact_count: pc, failed_fact_count: fc,
-    total_fact_count: mat.facts.length,
-  })
-}
-
-function canConfirm(f) {
-  const m = f.match
-  if (!m || !m.fact_rule_match_id) return false
-  if (m.review_status === 'confirmed') return false
-  if (m.score_preview === null || m.score_preview === undefined) return false
-  if (m.match_condition === 'fail') return false
-  if (m.error_type === 'ambiguous_lookup_table') return false
-  if (m.score_status === 'lookup_failed') return false
-  return true
-}
-function confirmBlockReason(f) {
-  const m = f.match
-  if (!m || !m.fact_rule_match_id) return '缺少匹配记录，请重新执行识别'
-  if (m.score_preview === null || m.score_preview === undefined) {
-    if (m.error_type) return '无法计分：' + m.error_type
-    return '无法计分，请补充必要信息后重新匹配'
-  }
-  if (m.error_type === 'ambiguous_lookup_table') return '存在查分表歧义，请明确选择规则分类后重新匹配'
-  if (m.match_condition === 'fail') return '匹配验证未通过，请调整信息后重新匹配'
-  if (m.score_status === 'lookup_failed') return '查分未命中，请调整信息后重新匹配'
-  return '暂不可确认'
-}
-function confirmBlockLabel(f) {
-  const m = f.match
-  if (!m || !m.fact_rule_match_id) return '不可确认'
-  if (m.score_preview === null || m.score_preview === undefined) return '不可确认'
-  if (m.error_type === 'ambiguous_lookup_table') return '需解决歧义'
-  if (m.match_condition === 'fail') return '验证未过'
-  if (m.score_status === 'lookup_failed') return '查分失败'
-  return '不可确认'
-}
-
-async function confirmMatch(matId, fact) {
-  const matchId = fact.match?.fact_rule_match_id
-  const efId = fact.fact_id
-  if (!matchId || !efId) { alert('缺少匹配信息'); return }
-  try {
-    const res = await api.matchMaterial(matId, {
-      fact_rule_match_id: matchId,
-      extracted_fact_id: efId,
+    const res = await api.confirmMatchMaterial(mat.id, {
+      material_id: mat.id,
+      ef_id: sp._ef_id || 0,
+      item_key: sp.indicator_code || sp.matched_rule?.category || '',
+      score: sp.score_preview,
+      description: sp.ai_description
     })
-    if (res.code === 200) {
-      // ★ 乐观更新：立即标记为已确认
-      if (res.data?.fact) {
-        fact.match = res.data.fact.match || fact.match
-        fact.review_status = res.data.fact.review_status || 'confirmed'
-        if (fact.match) fact.match.review_status = fact.review_status
-      } else {
-        if (fact.match) fact.match.review_status = 'confirmed'
-        fact.review_status = 'confirmed'
-      }
-      const mat = props.materials.find(m => m.id === matId)
-      if (mat) {
-        recalcPreviewSummary(mat)
-        collapsedMap.value[matId] = allConfirmed(mat)
-      }
-      // ★ 后台刷新验证（失败不影响确认结果）
-      refreshFactFromServer(matId, efId, fact)
+    if (res.code === 200) { sp._confirmed = true; sp._confirmedAt = new Date().toLocaleString(); if (mat.facts) mat.facts.forEach(f => { if (f.fact_data && (f.fact_data._ef_id === sp._ef_id || f.fact_id === sp._ef_id)) { f.fact_data.confirmed = true; if (f.match) f.match.review_status = 'confirmed'; } }); collapsedMap.value[mat.id] = allConfirmed(mat); emit('score-recalc')
     } else {
-      // ★ 确认失败：按钮状态不变
       alert(res.msg || '确认失败')
     }
-  } catch (e) {
-    // ★ 网络异常：按钮状态不变
-    alert('确认失败，请稍后重试')
+  } catch(e) {
+    alert('确认异常: ' + (e.response?.data?.msg || e.message))
   }
+  sp._confirming = false
 }
 
-// 后台刷新单条 fact，用服务端权威数据验证确认状态
-async function refreshFactFromServer(matId, efId, fact) {
+// ★ AI 生成加分描述
+async function generateDescription(mat, sp, spi) {
+  sp._genDescLoading = true
   try {
-    const res = await api.getMaterials()
-    if (res.code !== 200) { console.warn('[confirm] 后台刷新失败: code=' + res.code); return }
-    const mat = res.data.find(m => m.id === matId)
-    if (!mat) return
-    const refreshed = mat.facts?.find(f => f.fact_id === efId)
-    if (!refreshed) return
-    // ★ 用服务端权威数据更新
-    const oldMatch = fact.match
-    if (refreshed.match) fact.match = refreshed.match
-    fact.review_status = refreshed.review_status || fact.review_status
-    if (fact.match) fact.match.review_status = fact.review_status
-    // 如果序列化返回 null match 但之前有，保留旧的 match 防止 UI 闪烁
-    if (!fact.match && oldMatch) fact.match = oldMatch
-    const localMat = props.materials.find(m => m.id === matId)
-    if (localMat) {
-      recalcPreviewSummary(localMat)
-      collapsedMap.value[matId] = allConfirmed(localMat)
+    const res = await api.generateMatchDescription(mat.id, {
+      ef_id: sp._ef_id || 0,
+      indicator_code: sp.indicator_code || sp.matched_rule?.category || '',
+      score: sp.score_preview,
+      fact_data: sp.fact_data || {}
+    })
+    if (res.code === 200 && res.data?.description) {
+      sp.ai_description = res.data.description
+    } else {
+      // 后端未返回时自动生成一条默认描述
+      sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分`
     }
-  } catch (_) {
-    // ★ 刷新失败：UI 保持乐观更新结果，不弹错误
-    console.warn('[confirm] 确认成功但后台刷新失败，UI 使用乐观更新结果')
+  } catch(e) {
+    // 网络失败时也使用本地默认描述
+    sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分`
   }
+  sp._genDescLoading = false
 }
 </script>
 
 <style scoped>
 .material-page { display: flex; flex-direction: column; gap: 16px; }
+
+/* ===== 顶部栏 ===== */
 .add-bar { display: flex; align-items: center; gap: 16px; }
-.hint { font-size: 13px; color: var(--color-text-tertiary); }
+.add-bar .hint { font-size: 13px; color: var(--color-text-tertiary); }
 
-.material-item {
-  border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 16px;
-}
-.mat-top { display: flex; justify-content: space-between; align-items: center; }
-.mat-left { display: flex; align-items: center; gap: 8px; }
-.mat-title { font-weight: 600; font-size: 15px; }
-.file-count { font-size: 12px; color: var(--color-text-tertiary); background: var(--color-bg); padding: 2px 8px; border-radius: var(--radius-tag); }
-.mat-right { display: flex; gap: 8px; }
-
-.attach-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.attach-tag {
-  display: inline-flex; align-items: center; gap: 4px;
-  font-size: 12px; padding: 3px 8px; background: var(--color-surface-variant); border-radius: var(--radius-tag);
-}
-.attach-del { border: none; background: none; cursor: pointer; color: var(--color-text-tertiary); font-size: 14px; padding: 0 2px; }
-
-.recognition-card {
-  margin-top: 14px; padding: 16px; background: var(--color-surface-variant); border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border);
-}
-.recognition-card.dismissed { opacity: 0.4; }
-.rec-top { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.rec-score { font-size: 20px; font-weight: 700; color: var(--color-primary); }
-.rec-confidence { font-size: 14px; font-weight: 600; }
-.rec-confidence.high { color: #34A853; }
-.rec-confidence.mid { color: #E37400; }
-.rec-confidence.low { color: #D93025; }
-.rec-explanation { font-size: 14px; line-height: 1.6; color: var(--color-text); margin-bottom: 12px; }
-.rec-actions { display: flex; gap: 8px; }
-.rec-status { font-size: 14px; }
-.tag-confirmed { color: #34A853; font-weight: 600; }
-.tag-dismissed { color: #D93025; }
-
-.cat-tag { font-size: 12px; padding: 2px 10px; border-radius: var(--radius-tag); font-weight: 500; }
-.cat-tag.large { font-size: 14px; padding: 4px 14px; }
-
-.empty { text-align: center; color: var(--color-gray); padding: 40px 0; }
-
+/* ===== 按钮 ===== */
 .btn { padding: 8px 20px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: var(--color-primary); color: #fff; }
 .btn.sm { padding: 6px 16px; font-size: 13px; }
-.btn.success { background: #34A853; color: #fff; }
-.btn.outline-danger { background: var(--color-surface); color: #D93025; border: 1px solid #D93025; }
 .btn-text { padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); cursor: pointer; font-size: 13px; font-family: inherit; color: var(--color-text); }
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .btn-text.sm { font-size: 12px; padding: 2px 8px; }
-.btn-disabled { background: #e8e8e8; color: #999; cursor: not-allowed; border: 1px solid #d0d0d0; }
-.block-hint { font-size: 12px; color: #b86500; max-width: 260px; line-height: 1.4; }
+
+/* ===== 材料项 ===== */
+.material-item { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 16px; }
+.mat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.mat-left { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
+.mat-title { font-size: 15px; font-weight: 600; color: var(--color-text); }
+.mat-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.file-count { font-size: 12px; color: var(--color-text-tertiary); background: var(--color-surface-variant); padding: 2px 8px; border-radius: var(--radius-tag); }
+.attach-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.attach-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px; background: var(--color-surface-variant); border-radius: var(--radius-tag); }
+.empty { text-align: center; color: var(--color-gray); padding: 40px 0; }
+.tag-cat { font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #e8f0fe; color: #1a73e8; font-weight: 500; }
+.tag-score { font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.tag-score.plus { background: #e6f4ea; color: #34A853; }
+.tag-score.zero { background: #f1f3f4; color: #888; }
+.tag-score.candidate { background: #fef7e0; color: #E37400; }
+.tag-score.na-label { background: #f1f3f4; color: #888; }
+
+/* ===== 识别结果卡片 ===== */
+.extract-card { margin-top: 12px; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.extract-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: linear-gradient(135deg, #f8faff, #f0f4ff); border-bottom: 1px solid #e8edf2; font-size: 14px; }
+.extract-header.clickable { cursor: pointer; }
+.extract-header.clickable:hover { background: linear-gradient(135deg, #f0f4ff, #e8f0fe); }
+.eh-left { display: flex; align-items: center; gap: 8px; }
+.eh-arrow { font-size: 11px; color: #8892a0; width: 14px; flex-shrink: 0; }
+.eh-title { font-weight: 600; color: #1a1a2e; }
+.eh-status { font-size: 11px; padding: 2px 10px; border-radius: 20px; background: #f1f3f4; color: #888; font-weight: 500; }
+.eh-status.已入库 { background: #e6f4ea; color: #34A853; }
+.eh-status.部分已确认 { background: #fef7e0; color: #E37400; }
+.eh-status.待确认 { background: #fef7e0; color: #E37400; }
+.eh-status.待提取 { background: #e8f0fe; color: #1a73e8; }
+.match-progress { font-size: 12px; color: #E37400; font-weight: 400; display: inline-flex; align-items: center; gap: 4px; }
+.spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid #f0c040; border-top-color: transparent; border-radius: 50%; animation: spin-sm .8s linear infinite; }
+@keyframes spin-sm { to { transform: rotate(360deg); } }
+
+.extract-body { padding: 4px 16px 16px; }
+
+/* ===== V3 匹配卡片 - 全新美化样式 ===== */
+.match-card-v3 {
+  border: 1px solid #e4e8ef;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 12px 0;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  transition: all .2s ease;
+}
+.match-card-v3:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  border-color: #c8d0dd;
+}
+.match-card-v3.confirmed {
+  background: #f6faf8;
+  border-color: #b8d8c8;
+  box-shadow: 0 1px 4px rgba(52,168,83,.08);
+}
+.match-card-v3.needs-review {
+  border-left: 3px solid #E37400;
+}
+
+/* 卡片头部 */
+.match-header-v3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f0f2f5;
+}
+.mh-left { display: flex; align-items: center; gap: 10px; }
+.mh-right { display: flex; align-items: center; gap: 8px; }
+.cat-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  background: linear-gradient(135deg, #4A90D9, #357ABD);
+  color: #fff;
+  letter-spacing: .5px;
+}
+.cat-name { font-weight: 600; font-size: 14px; color: #2c3e50; }
+.sim-badge {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+}
+.sim-ok { background: #e6f4ea; color: #34A853; }
+.sim-low { background: #fef7e0; color: #E37400; }
+.confirmed-badge {
+  font-size: 11px;
+  padding: 2px 10px;
+  border-radius: 20px;
+  background: #34A853;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* 卡片主体 */
+.match-body-v3 { display: flex; flex-direction: column; gap: 10px; }
+.sr-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5a6a7a;
+  margin-bottom: 6px;
+}
+.sr-label svg { color: #8892a0; flex-shrink: 0; }
+
+/* 得分行 */
+.score-row-v3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #f8faff;
+  border-radius: 8px;
+  border: 1px solid #e8edf5;
+}
+.sr-input-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.score-inp-v3 {
+  width: 64px;
+  padding: 7px 10px;
+  border: 1.5px solid #d0d8e5;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: center;
+  color: #1a73e8;
+  background: #fff;
+  transition: all .2s;
+}
+.score-inp-v3:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26,115,232,.1);
+}
+.score-inp-v3:disabled {
+  background: #f0f2f5;
+  color: #34A853;
+  border-color: #b8d8c8;
+}
+.sr-unit { font-size: 14px; color: #8892a0; font-weight: 500; }
+
+/* 描述行 */
+.desc-row-v3 {
+  padding: 10px 14px;
+  background: #fafbfc;
+  border-radius: 8px;
+  border: 1px solid #eef0f4;
+}
+.desc-input-wrap { position: relative; }
+.desc-input-v3 {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #e0e4ea;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+  transition: all .2s;
+  background: #fff;
+  box-sizing: border-box;
+  min-height: 48px;
+  color: #333;
+}
+.desc-input-v3:focus {
+  outline: none;
+  border-color: #4A90D9;
+  box-shadow: 0 0 0 3px rgba(74,144,217,.08);
+}
+.desc-input-v3:disabled {
+  background: #f5f6f8;
+  color: #555;
+  border-color: #e0e4ea;
+}
+.desc-input-v3::placeholder { color: #b0b8c4; font-size: 12px; }
+
+.btn-ai-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #c8d8f0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0f6ff, #e8f0fe);
+  color: #4A90D9;
+  cursor: pointer;
+  transition: all .2s;
+  margin-left: 4px;
+}
+.btn-ai-sm:hover { background: linear-gradient(135deg, #d6e4ff, #c8d8f0); border-color: #4A90D9; }
+.gen-desc-loading { font-size: 11px; color: #E37400; margin-left: 4px; }
+
+/* 卡片底部 */
+.match-footer-v3 {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f2f5;
+}
+.confirmed-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #34A853;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: #f0faf4;
+  border-radius: 8px;
+}
+.footer-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.footer-score-summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.fss-label { font-size: 12px; color: #8892a0; }
+.fss-value { font-size: 16px; font-weight: 700; color: #E37400; }
+
+.btn-confirm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  background: linear-gradient(135deg, #34A853, #2d9249);
+  color: #fff;
+  cursor: pointer;
+  transition: all .2s;
+  box-shadow: 0 2px 6px rgba(52,168,83,.2);
+}
+.btn-confirm:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(52,168,83,.3);
+}
+.btn-confirm:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+.spinning { animation: spin-btn .8s linear infinite; }
+@keyframes spin-btn { to { transform: rotate(360deg); } }
+
+/* 无匹配提示 */
+.no-match-v3 {
+  padding: 30px 20px;
+  text-align: center;
+}
+.no-match-icon { font-size: 36px; margin-bottom: 8px; }
+.no-match-title { font-size: 15px; font-weight: 600; color: #666; margin-bottom: 4px; }
+.no-match-desc { font-size: 13px; color: #999; }
+
+/* 老版预览样式（保留兼容） */
+.preview-block { margin-top: 10px; padding: 12px; background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; }
+.preview-block.matching-block { background: #fef9e7; border-color: #f0c040; }
+.preview-status { margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+.badge.ok { background: #e6f4ea; color: #34A853; }
+.badge.review { background: #fef7e0; color: #E37400; }
+.badge.conflict { background: #fce8e6; color: #D93025; }
+.badge.matching { background: #e8f0fe; color: #1a73e8; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+.preview-body { display: flex; flex-direction: column; gap: 6px; }
+.preview-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; }
+.preview-row label { font-size: 11px; color: var(--color-text-tertiary); min-width: 48px; text-align: right; }
+.preview-row b { color: var(--color-primary); }
+.reason-text { color: var(--color-text); line-height: 1.5; font-style: italic; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #1a73e8; }
+.rule-type-tag { font-size: 10px; background: #e8f0fe; color: #1a73e8; padding: 1px 6px; border-radius: 8px; }
+.preview-score { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed #e0e0e0; }
+.score-num { font-size: 20px; font-weight: 700; }
+.score-num.plus { color: #34A853; }
+.score-num.zero { color: #999; }
+.score-num.na { color: #ccc; }
+.score-unit { font-size: 13px; color: var(--color-text-secondary); }
+.score-unit.na-text { color: #D93025; font-size: 12px; }
+.score-hint { font-size: 11px; color: #E37400; background: #fef7e0; padding: 2px 6px; border-radius: 4px; }
+.matching-hint { font-size: 13px; color: #888; font-style: italic; }
 </style>

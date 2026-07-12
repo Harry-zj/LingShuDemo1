@@ -1,10 +1,33 @@
 /**
  * 开发模式认证中间件
- * - 跳过 JWT 校验
- * - 自动注入测试用户（张三）
- * - 正式上线前请改回 ../middleware/auth
+ * - 优先使用真实JWT校验
+ * - 无token时自动注入默认测试用户
+ * - 正式环境请使用 ../middleware/auth
  */
+const jwt = require("jsonwebtoken");
+const config = require("../config");
+
 module.exports = (req, res, next) => {
+  // 优先尝试从header提取真实JWT
+  let token = null;
+  const header = req.headers.authorization;
+  if (header && header.startsWith("Bearer ")) {
+    token = header.split(" ")[1];
+  }
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
+  if (token) {
+    try {
+      req.user = jwt.verify(token, config.jwt.secret);
+      return next();
+    } catch (e) {
+      console.warn("[devAuth] JWT校验失败，使用dev模式:", e.message);
+    }
+  }
+
+  // 无token或token无效 -> dev模式注入默认用户
   req.user = {
     id: 1,
     name: '管理员',

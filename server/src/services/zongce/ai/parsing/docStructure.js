@@ -423,7 +423,7 @@ function isStrictChapterTitle(text) {
   const s = normalizeText(text);
   if (!s) return false;
 
-  if (!/^第[一二三四五六七八九十百零〇\d]+章/.test(s)) return false;
+  if (!/^第[一二三四五六七八九十百零〇\d]+章/.test(s)) { if (/^[一二三四五六七八九十]+[、]/.test(s) && s.length <= 60 && !(s.length > 40 && /[依据根据按照参照].{10,}/.test(s))) return true; return false; }
 
   // ----- 排除列表 -----
   if (/^第[一二三四五六七八九十百零〇\d]+条/.test(s)) return false;
@@ -458,7 +458,14 @@ function isTopLevelChapter(block) {
  * 返回详细判断结果（给 buildChapterTree 使用）
  */
 function isTopChapter(block) {
-  const text = block.title || block.content || "";
+  let text = block.title || block.content || "";
+
+  if (block.block_type === "table" && !block.title) {
+    const firstLine = text.split(/\r?\n/)[0].trim();
+    if (firstLine && isStrictChapterTitle(firstLine)) {
+      return { isChapter: true, reason: "table+pattern" };
+    }
+  }
 
   if (isStrictChapterTitle(text)) {
     return { isChapter: true, reason: block.block_type === "heading" ? "heading+pattern" : "paragraph+pattern" };
@@ -498,7 +505,7 @@ function buildChapterTree(blocks) {
 
   for (const b of blocks) {
     // ★ 关键改动：不限制 block_type，paragraph 也可以成为 chapter
-    if (b.block_type !== "heading" && b.block_type !== "paragraph") continue;
+    if (b.block_type !== "heading" && b.block_type !== "paragraph" && b.block_type !== "table") continue;
 
     const topCheck = isTopChapter(b);
     if (topCheck.isChapter) {
@@ -507,7 +514,7 @@ function buildChapterTree(blocks) {
 
       currentChapter = {
         id: `ch${chapters.length + 1}`,
-        title: b.title || b.content,
+        title: (b.block_type === 'table' && !b.title) ? (b.content || '').split(/\r?\n/)[0].trim() : (b.title || b.content),
         level: b.structured_content?.level || 1,
         confidence: b.structure_confidence,
         block_start: b.order_index,

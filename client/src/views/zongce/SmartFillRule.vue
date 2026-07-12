@@ -53,7 +53,7 @@
           <span class="ruleset-label">{{ rs.version_label || '规则集' }}</span>
           <span class="badge" :class="rs.status">{{ rs.status === 'published' ? '已发布' : '草稿' }}</span>
           <span class="ruleset-meta">
-            {{ rs.indicator_count || 0 }} 指标 · {{ rs.package_count || 0 }} 包 · {{ rs.rule_count || 0 }} 规则 · {{ rs.lookup_count || 0 }} 表
+            {{ rs.f3_rule_count || 0 }} 条F3规则
           </span>
           <button v-if="rs.status !== 'published'" class="btn primary sm" @click.stop="publishSet(rs)">✅ 确认发布</button>
           <button class="btn-text sm" @click.stop="toggleDetail(rs)">🔍 {{ rs._open && rs._detail ? '收起' : '查看详情' }}</button>
@@ -233,7 +233,8 @@ async function doParse(sourceId) {
     if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
 
     const taskId = startRes.data.taskId
-    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream`)
+    const token = useUserStore().token
+    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`)
     es.addEventListener('progress', (e) => {
       try { const p = JSON.parse(e.data); parseProgress.value = p } catch (_) {}
     })

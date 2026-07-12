@@ -17,21 +17,13 @@ exports.createRuleSet = async (req, res) => {
 exports.getRuleSets = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT rs.*,
-        (SELECT COUNT(*) FROM indicator_nodes WHERE rule_set_id = rs.id) AS indicator_count,
-        (SELECT COUNT(*) FROM rule_packages WHERE rule_set_id = rs.id) AS package_count,
-        (SELECT COUNT(*) FROM executable_rules er
-         JOIN rule_packages rp ON er.package_id = rp.id
-         WHERE rp.rule_set_id = rs.id) AS rule_count,
-        (SELECT COUNT(*) FROM lookup_tables WHERE rule_set_id = rs.id) AS lookup_count
-       FROM rule_sets rs
-       WHERE rs.user_id = ?
-       ORDER BY rs.created_at DESC`,
+      "SELECT rs.*, (SELECT COUNT(*) FROM scoring_rules WHERE rule_set_id = rs.id AND status = 'active') AS f3_rule_count FROM rule_sets rs WHERE rs.user_id = ? ORDER BY rs.created_at DESC",
       [req.user.id]
     );
     res.json(Res.success(rows));
   } catch (e) { res.json(Res.error(e.message)); }
 };
+
 
 // 获取规则集详情
 exports.getRuleSet = async (req, res) => {
@@ -40,64 +32,14 @@ exports.getRuleSet = async (req, res) => {
     const [rows] = await pool.execute("SELECT * FROM rule_sets WHERE id = ?", [id]);
     if (!rows.length) return res.json(Res.error("规则集不存在"));
     const rs = rows[0];
-
-    // 关联文档
-    const [docs] = await pool.execute(
-      `SELECT d.*, rsd.document_role, rsd.priority, rsd.merge_mode
-       FROM rule_set_documents rsd
-       JOIN rule_sources d ON rsd.rule_source_id = d.id
-       WHERE rsd.rule_set_id = ?`, [id]
-    );
-    rs.documents = docs;
-
-    // 解析结果：indicators / packages / rules / lookup_tables
-    const [indicators] = await pool.execute(
-      "SELECT * FROM indicator_nodes WHERE rule_set_id = ? ORDER BY sort_order, id", [id]
-    );
-    const [packages] = await pool.execute(
-      "SELECT * FROM rule_packages WHERE rule_set_id = ?", [id]
-    );
-    const [rules] = await pool.execute(
-      `SELECT er.* FROM executable_rules er
-       JOIN rule_packages rp ON er.package_id = rp.id
-       WHERE rp.rule_set_id = ?`, [id]
-    );
-    const [lookups] = await pool.execute(
-      `SELECT lt.* FROM lookup_tables lt WHERE lt.rule_set_id = ?`, [id]
-    );
-
-    // 嵌套：indicator tree + packages 挂 rules
-    const indicatorMap = new Map();
-    for (const ind of indicators) {
-      ind.children = [];
-      indicatorMap.set(ind.id, ind);
-    }
-    const roots = [];
-    for (const ind of indicators) {
-      if (ind.parent_id && indicatorMap.has(ind.parent_id)) {
-        indicatorMap.get(ind.parent_id).children.push(ind);
-      } else {
-        roots.push(ind);
-      }
-    }
-
-    const pkgMap = new Map();
-    for (const pkg of packages) {
-      pkg.rules = [];
-      pkgMap.set(pkg.id, pkg);
-    }
-    for (const r of rules) {
-      if (pkgMap.has(r.package_id)) {
-        pkgMap.get(r.package_id).rules.push(r);
-      }
-    }
-
-    rs.indicators = roots;
-    rs.packages = Array.from(pkgMap.values());
-    rs.lookup_tables = lookups;
-
-    res.json(Res.success(rs));
-  } catch (e) { res.json(Res.error(e.message)); }
+    try { const [docs] = await pool.execute("SELECT d.*, rsd.document_role, rsd.priority, rsd.merge_mode FROM rule_set_documents rsd JOIN rule_sources d ON rsd.rule_source_id = d.id WHERE rsd.rule_set_id = ?", [id]); rs.documents = docs; } catch(_) { rs.documents = []; }
+    const [f3Rules] = await pool.execute("SELECT * FROM scoring_rules WHERE rule_set_id = ? ORDER BY item_key, score_level, score_rank", [id]);
+    rs.f3_rules = f3Rules; rs.indicators = []; rs.packages = []; rs.lookup_tables = [];
+    res.json(Res.success(JSON.parse(JSON.stringify(rs))));
+  } catch (e) {
+    console.error('[RuleSet] getRuleSet 失败:', e.message);
+    res.json(Res.error('获取规则集详情失败: ' + e.message));
+  }
 };
 
 // 关联文档到规则集
@@ -157,12 +99,7 @@ exports.deleteRuleSet = async (req, res) => {
     try {
       await conn.beginTransaction();
       // 级联删除 V2 子表
-      await conn.execute("DELETE FROM executable_rules WHERE package_id IN (SELECT id FROM rule_packages WHERE rule_set_id = ?)", [id]);
-      await conn.execute("DELETE FROM rule_packages WHERE rule_set_id = ?", [id]);
-      await conn.execute("DELETE FROM lookup_cells WHERE table_id IN (SELECT id FROM lookup_tables WHERE rule_set_id = ?)", [id]);
-      await conn.execute("DELETE FROM lookup_dimensions WHERE table_id IN (SELECT id FROM lookup_tables WHERE rule_set_id = ?)", [id]);
-      await conn.execute("DELETE FROM lookup_tables WHERE rule_set_id = ?", [id]);
-      await conn.execute("DELETE FROM indicator_nodes WHERE rule_set_id = ?", [id]);
+      await conn.execute("DELETE FROM scoring_rules WHERE rule_set_id = ?", [id]);
       await conn.execute("DELETE FROM rule_set_documents WHERE rule_set_id = ?", [id]);
       await conn.execute("DELETE FROM rule_sets WHERE id = ?", [id]);
       await conn.commit();

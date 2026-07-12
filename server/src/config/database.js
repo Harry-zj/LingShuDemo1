@@ -40,7 +40,7 @@ async function initDatabase() {
   const conn = await pool.getConnection();
   try {
     const sqlPath = path.join(__dirname, "../services/zongce/db/init.sql");
-    const sql = fs.readFileSync(sqlPath, "utf-8");
+    const sql = fs.readFileSync(sqlPath, "utf-8").replace(/^\uFEFF/, "");
     const tableSql = sql
       .replace(/CREATE DATABASE IF NOT EXISTS[^;]*;\s*/i, "")
       .replace(/USE\s+lingshu_zongce\s*;\s*/i, "");
@@ -72,7 +72,7 @@ async function initDatabase() {
       }
     }
 
-    // 种子数据（INSERT IGNORE 幂等安全，只含张三测试用户）
+    // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 
     console.log("[DB] lingshu_zongce 初始化完成");

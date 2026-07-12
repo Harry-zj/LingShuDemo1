@@ -39,8 +39,7 @@
         </button>
       </form>
       <p class="login-tip">
-        测试账号：zhangsan / 123456（学生）
-        <br />没有账号？<router-link to="/register">立即注册</router-link>
+<br />没有账号？<router-link to="/register">立即注册</router-link>
       </p>
     </div>
   </div>

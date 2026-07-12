@@ -1,6 +1,6 @@
-const { pool } = require("../../../../config/database");
+﻿const { pool } = require("../../../../config/database");
 const { chatStreamJson } = require("../deepseek");
-const { V2_RULE_PARSE_SYSTEM } = require("../prompts");
+const { V3_RULE_PARSE_SYSTEM } = require("../prompts");
 const { validateV2RuleParse } = require("../schemas");
 const { extractStructure, buildChapterTree, buildParseTasks } = require("./docStructure");
 const path = require("path");
@@ -11,10 +11,10 @@ const crypto = require("crypto");
 // ============================================================
 
 /** 超过此阈值（字符数）必须拆分 */
-const TASK_CHAR_THRESHOLD = 2000;
+const TASK_CHAR_THRESHOLD = 4000;
 
 /** 表格密度阈值：表格数 > 此值 且总字符 > 1200 时也强制拆分 */
-const TABLE_DENSE_THRESHOLD = 3;
+const TABLE_DENSE_THRESHOLD = 2;
 
 /** 业务块编号：B1–B8、C1 等 */
 const BUSINESS_BLOCK_RE = /^[A-H]\d/;
@@ -81,7 +81,7 @@ function splitByTableUnits(taskBlocks, segStartIdx, segEndIdx) {
       /^(表\d|附表|[A-H]\d)/.test((next.title || next.content || "").trim()) &&
       (next.title || next.content || "").trim().length < 40;
 
-    if (isNextTableTitle && chars > 800) {
+    if (isNextTableTitle && chars > 2000) {
       units.push({ startIdx: unitStart, endIdx: b.order_index, tableCount: tbl, noteCount: note, charCount: chars });
       unitStart = next.order_index;
       tbl = 0; note = 0; chars = 0;
@@ -239,7 +239,7 @@ function dedupPerTask(result) {
   return { ...result, indicators: cleanIndicators, packages: cleanPackages };
 }
 
-/** 递归合并两个 indicator 节点（修改 base） */
+/** 递归合并两个 indicator 节点（修改 base）；同时规范化子节点的 parent_code */
 function mergeIndicatorNode(base, other) {
   if (!other.children || !other.children.length) return base;
   if (!base.children) base.children = [];
@@ -248,8 +248,10 @@ function mergeIndicatorNode(base, other) {
   for (const oc of other.children) {
     const key = buildIndicatorKey(oc);
     if (!key) continue;
-    if (map.has(key)) { mergeIndicatorNode(map.get(key), oc); }
-    else { base.children.push({ ...oc }); map.set(key, base.children[base.children.length - 1]); }
+    // 规范化 parent_code：子节点迁移到新父节点 base，code 可能变了
+    const ocNorm = { ...oc, parent_code: base.code || oc.parent_code };
+    if (map.has(key)) { mergeIndicatorNode(map.get(key), ocNorm); }
+    else { base.children.push(ocNorm); map.set(key, base.children[base.children.length - 1]); }
   }
   return base;
 }
@@ -281,13 +283,20 @@ function mergeAndDedupResults(allResults, allTasks) {
     }
   }
   for (const [key, v] of indicatorMap) { if (v.taskIndices.length > 1) duplicates.push({ entityType: 'indicator', canonicalKey: key, taskIndices: v.taskIndices }); }
-  // 只保留非子节点的顶级 indicator
+  // 只保留非子节点的顶级 indicator；被过滤节点的子树合并到父节点对应子节点中
   for (const [, v] of indicatorMap) {
-    let isChild = false;
+    let parentChild = null;
     for (const [, p] of indicatorMap) {
-      if (p.node.children && p.node.children.some(c => buildIndicatorKey(c) === buildIndicatorKey(v.node))) { isChild = true; break; }
+      if (p.node.children) {
+        const match = p.node.children.find(c => buildIndicatorKey(c) === buildIndicatorKey(v.node));
+        if (match) { parentChild = match; break; }
+      }
     }
-    if (!isChild) merged.indicators.push(v.node);
+    if (!parentChild) {
+      merged.indicators.push(v.node);
+    } else {
+      if (v.node.children && v.node.children.length) mergeIndicatorNode(parentChild, v.node);
+    }
   }
 
   // ---- packages ----
@@ -522,20 +531,20 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
 
       // 最多重试 2 次（应对 DeepSeek API "terminated" 等瞬时错误）
       let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
           const result = await chatStreamJson(
-            [{ role: "system", content: V2_RULE_PARSE_SYSTEM }, { role: "user", content: `=== ${label} ===\n${taskText}` }],
-            { temperature: 0.1, maxTokens: 8192 }
+            [{ role: "system", content: V3_RULE_PARSE_SYSTEM }, { role: "user", content: `=== ${label} ===\n${taskText}` }],
+            { temperature: 0.1, maxTokens: 16384 }
           );
           if (attempt > 0) console.log(`[V2Parse] 任务${globalIdx + 1} 重试成功`);
           completedCount++;
           return { taskIndex: globalIdx, label, result: dedupPerTask(result), ok: true };
         } catch (e) {
           lastError = e;
-          if (attempt === 0 && (e.message.includes('terminated') || e.message.includes('ETIMEDOUT') || e.message.includes('ECONNRESET'))) {
+          if (attempt < 2 && (e.message.includes('terminated') || e.message.includes('ETIMEDOUT') || e.message.includes('ECONNRESET') || e.message.includes('格式异常') || e.message.includes('JSON解析'))) {
             console.warn(`[V2Parse] 任务${globalIdx + 1} "${label}" ${e.message.slice(0,60)}，1秒后重试...`);
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 2000));
             continue;
           }
           break; // 非瞬时错误不重试
@@ -573,194 +582,46 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
     throw new Error(errMsg);
   }
 
-  // ===== 4.5 调试：打印每个 task 的 indicators 摘要 =====
-  console.log('[V2Parse] ========== 各任务 indicators 摘要 ==========');
-  for (let ti = 0; ti < allResults.length; ti++) {
-    const r = allResults[ti];
-    if (!r) { console.log(`  [T${ti + 1}] (失败)`); continue; }
-    const task = parseTasks[ti];
-    const label = task ? (task.business_block_title || task.section_title || task.chapter_title || `T${ti + 1}`) : `T${ti + 1}`;
-    console.log(`  [T${ti + 1}] ${label} (${(r.indicators || []).length} indicators):`);
-    const printNodes = (nodes, depth) => {
-      for (const n of (nodes || [])) {
-        console.log(`    ${'  '.repeat(depth)}code=${n.code || '-'} name="${(n.name || '').slice(0,40)}" ckey=${n.canonical_key || '-'} parent=${n.parent_code || '-'} calc=${n.calc_method || '-'}`);
-        if (n.children) printNodes(n.children, depth + 1);
-      }
-    };
-    printNodes(r.indicators, 0);
-  }
-  console.log('[V2Parse] ==========================================');
-
-  // ===== 5. 合并去重 =====
+  // ===== 5. V3 merge f3_rules =====
   if (onProgress) await onProgress('merging', { results: allResults.filter(r => r !== null).length, total: parseTasks.length });
   const validResults = allResults.filter(r => r !== null);
-  const validTasks = parseTasks.filter((_, i) => allResults[i] !== null);
-  const { merged: allResult, sourceRefs, duplicates } = mergeAndDedupResults(validResults, validTasks);
-
-  if (duplicates.length > 0) {
-    console.log(`[V2Parse] 跨任务去重合并: ${duplicates.length} 项`);
-    for (const d of duplicates) console.log(`  ${d.entityType} "${d.canonicalKey}" ← 任务 ${d.taskIndices.join(', ')}`);
-  }
-
-  // ===== 6. 清洗 =====
-  // 清洗 indicators 的 calc_method
-  const cleanCalcMethod = (nodes) => {
-    for (const n of (nodes || [])) {
-      n.calc_method = sanitizeCalcMethod(n.calc_method);
-      if (n.children) cleanCalcMethod(n.children);
-    }
-  };
-  cleanCalcMethod(allResult.indicators);
-
-  for (const pkg of (allResult.packages || [])) {
-    pkg.auto_level = sanitizeAutoLevel(pkg.auto_level);
-    for (const rule of (pkg.rules || [])) {
-      rule.auto_level = sanitizeAutoLevel(rule.auto_level);
-      if (!rule.application_scope || !['per_fact','per_material','per_group','per_indicator','global'].includes(rule.application_scope)) rule.application_scope = 'per_fact';
-      if (rule.rule_type === 'reference') rule.rule_type = 'lookup';
-      if (rule.rule_type === 'sum') rule.rule_type = 'fixed';
+  const allResult = { f3_rules: [] };
+  for (const r of validResults) {
+    if (r.f3_rules) for (const rule of r.f3_rules) {
+      if (rule.item_key && rule.score != null) allResult.f3_rules.push(rule);
     }
   }
+  const duplicates = [];
+  console.log('[V3Parse] ' + allResult.f3_rules.length + ' F3 rules extracted');
 
-  // ===== 7. 校验（schema + 二次硬校验）=====
-  if (onProgress) await onProgress('validating', { indicators: (allResult.indicators || []).length, packages: (allResult.packages || []).length });
-  const valid = validateV2RuleParse(allResult);
-  if (!valid.ok) {
-    const errMsg = "V2解析校验失败: " + valid.error;
-    console.error(`[V2Parse] ${errMsg}`);
-    await pool.execute("UPDATE document_parse_runs SET status = 'failed', raw_ai_response = ? WHERE id = ?", [JSON.stringify({ error: errMsg, validationErrors: valid.error, taskFailures }), parseRunId]);
-    await pool.execute("UPDATE rule_sets SET status = 'draft' WHERE id = ?", [ruleSetId]);
-    await pool.execute("UPDATE rule_sources SET status = 'pending' WHERE id = ?", [sourceId]);
-    throw new Error(errMsg);
-  }
-
-  const hardCheck = validateMergedResult(allResult);
-  if (!hardCheck.ok) {
-    const errMsg = "合并后硬校验失败:\n" + hardCheck.errors.join("\n");
-    console.error(`[V2Parse] ${errMsg}`);
-    console.error(`[V2Parse] 重复项:`, JSON.stringify(duplicates, null, 2));
-    await pool.execute("UPDATE document_parse_runs SET status = 'failed', raw_ai_response = ? WHERE id = ?", [JSON.stringify({ error: errMsg, hardCheckErrors: hardCheck.errors, duplicates }), parseRunId]);
-    await pool.execute("UPDATE rule_sets SET status = 'draft' WHERE id = ?", [ruleSetId]);
-    await pool.execute("UPDATE rule_sources SET status = 'pending' WHERE id = ?", [sourceId]);
-    throw new Error(errMsg);
-  }
-
-  // ===== 8. ★ 事务写入（仅全过）=====
-  if (onProgress) await onProgress('writing', { phase: '事务写入中...' });
+// ===== 8. V3 write scoring_rules =====
+  if (onProgress) await onProgress('writing', { phase: 'writing scoring_rules...' });
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-
-    const indicatorIds = {};
-    async function writeIndicators(nodes, parentId) {
-      for (const n of nodes) {
-        const [ind] = await conn.execute(
-          "INSERT INTO indicator_nodes (rule_set_id, canonical_key, code, name, parent_id, weight, calc_method, max_score, min_score, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending_review')",
-          [ruleSetId, n.canonical_key, n.code, n.name, parentId, n.weight || null, sanitizeCalcMethod(n.calc_method), n.max_score || null, n.min_score || 0]
-        );
-        indicatorIds[n.code || n.canonical_key] = ind.insertId;
-        if (n.children) await writeIndicators(n.children, ind.insertId);
-      }
-    }
-    await writeIndicators(allResult.indicators, null);
-
-    let ruleCount = 0, manualCount = 0;
-    for (const pkg of (allResult.packages || [])) {
-      const indId = pkg.indicator_code ? (indicatorIds[pkg.indicator_code] || indicatorIds[normKey(pkg.indicator_code)]) : null;
-      const [rp] = await conn.execute(
-        "INSERT INTO rule_packages (rule_set_id, indicator_id, canonical_key, name, summary, auto_level, status) VALUES (?, ?, ?, ?, ?, ?, 'pending_review')",
-        [ruleSetId, indId, pkg.canonical_key, pkg.name, pkg.summary || '', pkg.auto_level || 'automatic']
+    const f3Rules = allResult.f3_rules || allResult.rule_items || [];
+    let ruleCount = 0;
+    for (const r of f3Rules) {
+      const itemKey = r.item_key || r.category || 'B2';
+      const itemName = r.item_name || r.description || '';
+      const scoreLevel = r.score_level || r.level || null;
+      const scoreRank = r.score_rank || null;
+      const score = parseInt(r.score) || 0;
+      const keywords = r.keywords || '';
+      const description = r.description || '';
+      const maxScore = r.max_score || null;
+      const dedupGroup = r.dedup_group || null;
+      await conn.execute(
+        "INSERT INTO scoring_rules (rule_set_id, user_id, section, item_key, item_name, score_level, score_rank, score, keywords, description, max_score, dedup_group, status) VALUES (?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+        [ruleSetId, userId, itemKey, itemName, scoreLevel, scoreRank, score, keywords, description, maxScore, dedupGroup]
       );
-      for (const rule of (pkg.rules || [])) {
-        if (rule.auto_level === 'manual_required') manualCount++;
-        await conn.execute(
-          "INSERT INTO executable_rules (package_id, canonical_key, rule_type, name, config, config_version, input_selector, condition_config, application_scope, execution_stage, priority, proof_required, auto_level, status) VALUES (?, ?, ?, ?, ?, 'v1', ?, ?, ?, ?, ?, ?, ?, 'pending_review')",
-          [rp.insertId, rule.canonical_key, rule.rule_type, rule.name, JSON.stringify(rule.config || {}), JSON.stringify(rule.input_selector || null), JSON.stringify(rule.condition_config || null), rule.application_scope || 'per_fact', rule.execution_stage || 'base_score', rule.priority || 0, JSON.stringify(rule.proof_required || []), rule.auto_level || 'automatic']
-        );
-        ruleCount++;
-      }
+      ruleCount++;
     }
-
-    if (allResult.lookup_tables) {
-      for (const t of allResult.lookup_tables) {
-        const [lt] = await conn.execute("INSERT INTO lookup_tables (rule_set_id, canonical_key, name) VALUES (?, ?, ?)", [ruleSetId, t.canonical_key, t.name]);
-        if (t.dimensions) for (const d of t.dimensions) await conn.execute("INSERT INTO lookup_dimensions (table_id, dim_name, dim_label) VALUES (?, ?, ?)", [lt.insertId, d.dim_name, d.dim_label]);
-        if (t.cells) for (const c of t.cells) {
-          const safeValue = sanitizeCellValue(c.value);
-          await conn.execute(
-            "INSERT INTO lookup_cells (table_id, dimension_values, dimension_hash, value) VALUES (?, ?, ?, ?)",
-            [lt.insertId, JSON.stringify(c.dimension_values), crypto.createHash("sha256").update(JSON.stringify(c.dimension_values)).digest("hex").slice(0, 64), safeValue]
-          );
-        }
-      }
-    }
-
-    const meta = `\n\n--- V2解析记录 ---\n模型: deepseek-chat\n任务数: ${parseTasks.length}\n成功: ${completedCount}\n失败: ${failedCount}\n去重合并: ${duplicates.length}项\n解析时间: ${new Date().toISOString()}`;
+    const meta = "\n\n--- V3 parse ---\nF3 rules: " + ruleCount + "\nSuccess: " + completedCount + "\nFailed: " + failedCount;
     await conn.execute("UPDATE rule_sources SET status = 'parsed', original_text = CONCAT(COALESCE(original_text,''), ?) WHERE id = ?", [meta, sourceId]);
     await conn.execute("UPDATE document_parse_runs SET status = ?, completed_at = NOW() WHERE id = ?", [taskFailures.length > 0 ? 'failed' : 'completed', parseRunId]);
-
     await conn.commit();
-    return { rule_set_id: ruleSetId, indicator_count: Object.keys(indicatorIds).length, package_count: (allResult.packages || []).length, rule_count: ruleCount, manual_rule_count: manualCount, lookup_table_count: (allResult.lookup_tables || []).length, uncertainty_count: (allResult.uncertainties || []).length, chapter_count: chapters.length, task_count: parseTasks.length, task_success: completedCount, task_failed: failedCount, duplicate_count: duplicates.length };
-  } catch (err) {
-    await conn.rollback();
-    throw err;
-  } finally { conn.release(); }
-}
-
-/**
- * 清洗 AI 返回的查表单元格值，确保可写入 DECIMAL(6,2) 列
- * 支持：纯数字、数字字符串、{min, max} 范围对象、{default} 对象
- */
-function sanitizeCellValue(v) {
-  if (v == null) return 0;
-  // 纯数字
-  if (typeof v === 'number' && !isNaN(v)) return v;
-  // 数字字符串
-  if (typeof v === 'string') {
-    const n = parseFloat(v);
-    if (!isNaN(n)) return n;
-    return 0;
-  }
-  // 范围对象 {min, max} / {min, max, default}
-  if (typeof v === 'object') {
-    if (typeof v.default === 'number') return v.default;
-    if (typeof v.max === 'number') return v.max;
-    if (typeof v.min === 'number') return v.min;
-    // 取第一个数字属性
-    for (const val of Object.values(v)) {
-      if (typeof val === 'number') return val;
-      if (typeof val === 'string') { const n = parseFloat(val); if (!isNaN(n)) return n; }
-    }
-  }
-  console.warn('[V2Parse] 无法清洗 lookup cell value:', JSON.stringify(v).slice(0, 80));
-  return 0;
-}
-
-/** 清洗 AI 输出的 calc_method → ENUM 允许值 */
-const VALID_CALC = new Set(['sum_children','weighted_sum','formula_ast','lookup','direct']);
-function sanitizeCalcMethod(v) {
-  if (!v) return 'sum_children';
-  const s = String(v).trim().toLowerCase().replace(/[\s\-]+/g, '_');
-  if (VALID_CALC.has(s)) return s;
-  // 常见 AI 输出映射
-  if (s === 'sum' || s === 'add' || s === 'total') return 'sum_children';
-  if (s === 'average' || s === 'avg' || s === 'mean') return 'weighted_sum';
-  if (s === 'fixed' || s === 'fixed_base' || s === 'base_score') return 'direct';     // 固定基准分
-  if (s === 'max' || s === 'maximum' || s === 'take_highest') return 'direct';
-  if (s === 'min' || s === 'minimum') return 'direct';
-  if (s === 'formula' || s === 'custom') return 'formula_ast';
-  if (s === 'table' || s === 'lookup_table') return 'lookup';
-  console.warn(`[V2Parse] 未知 calc_method "${v}" → sum_children`);
-  return 'sum_children';
-}
-
-function sanitizeAutoLevel(v) {
-  if (!v) return 'automatic';
-  const s = String(v).trim().toLowerCase();
-  if (s === 'auto' || s === 'automatic') return 'automatic';
-  if (s === 'assisted') return 'assisted';
-  if (s === 'manual' || s === 'manual_required') return 'manual_required';
-  return 'automatic';
-}
-
-module.exports = { parseRuleSourceV2 };
+    return { rule_set_id: ruleSetId, f3_rule_count: ruleCount, chapter_count: chapters.length, task_count: parseTasks.length, task_success: completedCount, task_failed: failedCount, duplicate_count: duplicates.length };
+  } catch (err) { await conn.rollback(); throw err; }
+  finally { conn.release(); }
+}module.exports = { parseRuleSourceV2 };

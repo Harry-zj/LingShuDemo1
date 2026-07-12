@@ -1,5 +1,5 @@
-const router = require("express").Router();
-const auth = require("../middleware/devAuth");  // 开发模式，正式上线改回 ../middleware/auth
+﻿const router = require("express").Router();
+const auth = require("../middleware/auth");  // 开发模式，正式上线改回 ../middleware/auth
 const upload = require("../middleware/upload");
 
 const ruleCtrl = require("../controllers/zongce/ruleController");
@@ -34,6 +34,10 @@ router.delete("/materials/:matId/attachments/:attId", auth, materialCtrl.deleteA
 // ===== 识别结果 =====
 router.put("/recognitions/:id/confirm", auth, recogCtrl.confirmRecognition);
 router.put("/recognitions/:id/dismiss", auth, recogCtrl.dismissRecognition);
+router.put("/recognitions/fact-match/:id/confirm", auth, recogCtrl.confirmFactMatch);
+
+router.post("/materials/:id/confirm-match", auth, materialCtrl.confirmMatchV3);
+router.post("/materials/:id/generate-description", auth, materialCtrl.generateMatchDescription);
 
 // ===== 评分 =====
 router.post("/evaluation/calculate", auth, evalCtrl.calculateScore);
@@ -42,7 +46,7 @@ router.get("/evaluation/result",     auth, evalCtrl.getEvaluation);
 router.get("/calculations/:id",      auth, evalCtrl.getCalculation);
 router.post("/calculations/:id/resume", auth, evalCtrl.resumeCalculation);
 
-// ===== 规则集 =====
+// ===== 规则�?=====
 router.post("/rule-sets", auth, ruleSetCtrl.createRuleSet);
 router.get("/rule-sets", auth, ruleSetCtrl.getRuleSets);
 router.get("/rule-sets/:id", auth, ruleSetCtrl.getRuleSet);
@@ -52,12 +56,17 @@ router.post("/rule-sets/:id/publish", auth, ruleSetCtrl.publishRuleSet);
 router.delete("/rule-sets/:id", auth, ruleSetCtrl.deleteRuleSet);
 router.post("/rule-sets/:id/clone", auth, ruleSetCtrl.cloneRuleSet);
 
-// ===== 模板与填表 =====
+// ===== 模板与填�?=====
 router.post("/templates/upload",  auth, upload.single("file"), fillCtrl.uploadTemplate);
 router.get("/templates",         auth, fillCtrl.getTemplates);
 router.post("/fill/:templateId", auth, fillCtrl.doFill);
 router.get("/fill/:id/download", auth, fillCtrl.downloadFill);
-router.get("/mock-data",         auth, fillCtrl.getMockData);
+router.get("/fill-preview",         auth, fillCtrl.getFillPreview);
+// ===== 智能填表数据 =====
+router.post("/smart-fill/save",        auth, fillCtrl.saveFillData);
+router.get("/smart-fill/data",         auth, fillCtrl.getSmartFillData);
+router.post("/smart-fill/generate-f1", auth, fillCtrl.generateF1Descriptions);
+
 
 
 
@@ -70,7 +79,7 @@ router.put("/batch-fill/mapping",  auth, batchFillCtrl.updateMapping);
 router.post("/batch-fill/execute/:taskId", auth, batchFillCtrl.executeBatchFill);
 router.get("/batch-fill/:id/download",     batchFillCtrl.downloadResult);
 
-// ===== 对话式填表 =====
+// ===== 对话式填�?=====
 router.post("/chat-fill/upload",      auth, upload.single("file"), chatFillCtrl.uploadTemplate);
 router.post("/chat-fill/analyze/:templateId", auth, chatFillCtrl.analyzeTemplate);
 router.post("/chat-fill/chat",        auth, chatFillCtrl.chatField);

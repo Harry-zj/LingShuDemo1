@@ -207,7 +207,7 @@ function validateV2RuleParse(data) {
   }
 
   // 校验可执行规则
-  const VALID_V2_TYPES = ['fixed','per_unit','tiered','lookup','formula_ast','coefficient','cap','dedup','eligibility','manual','normalization','evidence_policy','override','outcome_constraint'];
+  const VALID_V2_TYPES = ['fixed','per_unit','tiered','lookup','formula_ast','coefficient','cap','dedup','eligibility','manual','normalization','evidence_policy','override','outcome_constraint','adjustment'];
   const VALID_STAGES = ['precheck','normalization','eligibility','base_score','adjustment','override','deduplication','cap','aggregation','post_aggregation','outcome'];
   const VALID_SCOPES = ['per_fact','per_material','per_group','per_indicator','global'];
 

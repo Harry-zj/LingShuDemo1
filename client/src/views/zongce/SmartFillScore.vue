@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="score-root">
     <!-- ★ 页面头部 -->
     <div class="page-header">
@@ -95,13 +95,20 @@ defineEmits(['calculate', 'back'])
 
 const selected = ref(null)  // 当前选中的 indicator 或 null=总览
 
-const indicators = computed(() => props.scoreList?.indicators || [])
-const totalScore = computed(() => props.scoreList?.total_score ?? '--')
+const B_LABELS = { B1:'职业技能', B2:'科技学术', B3:'社会工作', B4:'宣传报道', B5:'文艺创作', B6:'文体竞赛', B7:'其他实践', B8:'劳育类' };
+const indicators = computed(() => {
+  const list = props.scoreList?.indicators || [];
+  return ['B1','B2','B3','B4','B5','B6','B7','B8'].map(code => {
+    const found = list.find(ind => ind.code === code);
+    return found || { code, name: B_LABELS[code], score: 0, max_score: 100, facts: [], id: code };
+  });
+})
+const totalScore = computed(() => indicators.value.reduce((s,ind)=>s+(ind.score||0),0).toFixed(2))
 const totalFactCount = computed(() => props.scoreList?.fact_count || 0)
 
 const hasConfirmed = computed(() =>
   (props.materials || []).reduce((sum, m) =>
-    sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0
+    sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true).length, 0
   ) > 0
 )
 
@@ -138,7 +145,7 @@ const COLORS = ['#8CA5C8','#8DB5A6','#C89B7A','#9E8AB8','#C88A8A','#7AAD9E','#A8
 .main-layout { display: flex; gap: 20px; align-items: stretch; }
 
 /* ===== 左侧网格 ===== */
-.left-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.left-grid { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 
 .dim-card {
   background: #fff; border: 1px solid #eee; border-radius: 14px;
@@ -244,4 +251,5 @@ const COLORS = ['#8CA5C8','#8DB5A6','#C89B7A','#9E8AB8','#C88A8A','#7AAD9E','#A8
 .dpf-score { font-size: 15px; font-weight: 700; color: #2e8b57; }
 .dpf-score.zero { color: #bbb; }
 .dpf-meta { font-size: 12px; color: #999; }
+.dim-card.empty { opacity: 0.5; } .dim-card.empty .dc-score { color: #ccc; }
 </style>
