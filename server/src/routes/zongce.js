@@ -35,6 +35,7 @@ router.put("/recognitions/:id/dismiss", auth, recogCtrl.dismissRecognition);
 
 // ===== 评分 =====
 router.post("/evaluation/calculate", auth, evalCtrl.calculateScore);
+router.get("/evaluation/score-list", auth, evalCtrl.getScoreList);
 router.get("/evaluation/result",     auth, evalCtrl.getEvaluation);
 router.get("/calculations/:id",      auth, evalCtrl.getCalculation);
 router.post("/calculations/:id/resume", auth, evalCtrl.resumeCalculation);

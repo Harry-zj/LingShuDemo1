@@ -104,3 +104,132 @@ exports.getEvaluation = async (req, res) => {
     res.json(Res.success({ task, metrics }));
   } catch (e) { res.json(Res.error(e.message)); }
 };
+
+// ★ 评分清单 — 按根指标分组汇总已确认分数（只读，不写表）
+exports.getScoreList = async (req, res) => {
+  try {
+    const ruleSetId = req.query.rule_set_id;
+    if (!ruleSetId) return res.json(Res.error("请指定 rule_set_id"));
+
+    // 1. 加载指标树
+    const [indicators] = await pool.execute(
+      "SELECT * FROM indicator_nodes WHERE rule_set_id = ? ORDER BY sort_order, id", [ruleSetId]
+    );
+    if (!indicators.length) return res.json(Res.success({ indicators: [], total_score: 0, fact_count: 0 }));
+
+    // 2. 加载所有已确认的事实匹配
+    const [rows] = await pool.execute(
+      `SELECT
+         m.id AS material_id, m.title AS material_title,
+         ef.id AS fact_id, ef.fact_type, ef.fact_data,
+         frm.id AS match_id, frm.preview_data,
+         att.file_name AS source_file
+       FROM fact_rule_matches frm
+       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id
+       JOIN material_analysis_runs mar ON ef.analysis_run_id = mar.id
+       JOIN materials m ON mar.material_id = m.id
+       JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
+       LEFT JOIN extracted_fact_sources efs ON ef.id = efs.extracted_fact_id
+       LEFT JOIN attachments att ON efs.attachment_id = att.id
+       WHERE frm.review_status = 'confirmed'
+         AND frm.is_current = 1
+         AND m.user_id = ?
+         AND rmr.rule_set_id = ?
+       ORDER BY m.id, ef.id`,
+      [req.user.id, ruleSetId]
+    );
+
+    // 3. 解析每条 fact 的 preview_data → 提取 indicator_code + score
+    const indicatorMap = new Map(); // code → { indicator, facts[], totalScore }
+    for (const ind of indicators) {
+      indicatorMap.set(ind.code, { indicator: ind, facts: [], totalScore: 0 });
+    }
+
+    for (const row of rows) {
+      let preview = {};
+      try {
+        preview = typeof row.preview_data === 'string'
+          ? JSON.parse(row.preview_data) : (row.preview_data || {});
+      } catch (_) {}
+
+      const factData = typeof row.fact_data === 'string'
+        ? JSON.parse(row.fact_data) : (row.fact_data || {});
+
+      const indCode = preview.indicator?.code || '';
+      const entry = indicatorMap.get(indCode);
+      const fact = {
+        material_id: row.material_id,
+        material_title: row.material_title,
+        fact_id: row.fact_id,
+        fact_type: row.fact_type,
+        award_name: factData.award_name || '',
+        competition_name: factData.competition_name || '',
+        inferred_level: factData.inferred_level || '',
+        award_rank: factData.award_rank || '',
+        organizer: factData.organizer || '',
+        score: preview.score_preview ?? 0,
+        rule_name: preview.rule?.name || '',
+        rule_type: preview.rule?.rule_type || '',
+        lookup_table_name: preview.lookup_table?.name || '',
+        dimensions: preview.lookup_dimensions || preview.raw_dimensions || {},
+        source_file: row.source_file || '',
+      };
+      if (entry) {
+        entry.facts.push(fact);
+        entry.totalScore += fact.score;
+      }
+    }
+
+    // 4. 自底向上聚合：子节点分数加到父节点
+    const byId = new Map();
+    for (const ind of indicators) {
+      byId.set(ind.id, { ...ind, children: [] });
+    }
+    const roots = [];
+    for (const ind of indicators) {
+      const node = byId.get(ind.id);
+      if (ind.parent_id && byId.has(ind.parent_id)) {
+        byId.get(ind.parent_id).children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+
+    // 聚合分数
+    function aggregate(node) {
+      let sum = indicatorMap.get(node.code)?.totalScore || 0;
+      for (const child of node.children) {
+        sum += aggregate(child);
+      }
+      node._score = sum;
+      return sum;
+    }
+    let totalScore = 0;
+    for (const root of roots) {
+      totalScore += aggregate(root);
+    }
+
+    // 5. 构建返回：只用根节点
+    const resultIndicators = roots.map(root => {
+      const entry = indicatorMap.get(root.code);
+      return {
+        id: root.id,
+        code: root.code,
+        name: root.name,
+        max_score: root.max_score,
+        score: root._score,
+        facts: entry ? entry.facts : [],
+      };
+    });
+
+    res.json(Res.success({
+      rule_set_id: Number(ruleSetId),
+      indicators: resultIndicators,
+      total_score: +totalScore.toFixed(2),
+      fact_count: rows.length,
+    }));
+  } catch (e) {
+    console.error('[Evaluation] getScoreList 失败:', e.message);
+    res.json(Res.error("获取评分清单失败，请稍后重试"));
+  }
+};

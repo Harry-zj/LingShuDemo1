@@ -1,40 +1,86 @@
 <template>
-  <div class="score-page">
-    <div class="score-top">
-      <button class="btn primary large" @click="$emit('calculate')">🔢 计算评分</button>
-      <span v-if="!hasConfirmed" class="hint">需确认至少一条规则和一条材料识别</span>
+  <div class="score-root">
+    <!-- ★ 页面头部 -->
+    <div class="page-header">
+      <button class="back-btn" @click="$emit('back')">
+        <svg width="20" height="20" viewBox="0 0 20 20"><polyline points="12,4 6,10 12,16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <h2 class="page-title">评分清单</h2>
     </div>
 
-    <div v-if="evaluation" class="score-content">
-      <!-- 总分卡片 -->
-      <div class="total-card">
-        <span class="total-label">总分</span>
-        <span class="total-num">{{ evaluation.total_score }}</span>
-      </div>
+    <!-- 空状态 -->
+    <div v-if="!hasConfirmed" class="empty-full">
+      <span class="empty-icon">📋</span>
+      <p>暂无已确认的材料，请先在材料识别中完成 AI 识别并逐条确认</p>
+    </div>
 
-      <!-- 五维清单 -->
-      <div class="dim-list">
-        <div v-for="dim in dims" :key="dim.key" class="dim-block">
-          <div class="dim-header">
-            <span class="dim-name" :style="{ color: dim.color }">{{ dim.label }}</span>
-            <span class="dim-points">{{ evaluation[dim.key]?.score || 0 }} / {{ evaluation[dim.key]?.max || 0 }}</span>
+    <!-- ★ 双栏主体 -->
+    <div v-else class="main-layout">
+      <!-- 左侧：三维均等网格 -->
+      <div class="left-grid">
+        <div
+          v-for="(ind, i) in indicators"
+          :key="ind.id"
+          class="dim-card"
+          :style="{ '--accent': COLORS[i % COLORS.length] }"
+          @click="select(ind)"
+        >
+          <div class="dc-top">
+            <span class="dc-tag">{{ ind.code }}</span>
+            <svg class="dc-arrow" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,3 11,8 6,13" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <div class="dim-bar-bg"><div class="dim-bar" :style="{ width: pct(dim.key) + '%', background: dim.color }"></div></div>
-          <div class="dim-detail" v-if="evaluation[dim.key]?.detail_text">{{ evaluation[dim.key].detail_text }}</div>
+          <div class="dc-name">{{ ind.name }}</div>
+          <div class="dc-bar"><div class="dc-bar-fill" :style="{ width: barPct(ind) + '%' }"></div></div>
+          <div class="dc-foot">
+            <span class="dc-score">{{ ind.score }}</span>
+            <span v-if="ind.max_score" class="dc-max">/ {{ ind.max_score }}</span>
+          </div>
         </div>
       </div>
 
-      <!-- 加分明细清单 -->
-      <div class="detail-list">
-        <h4>加分明细</h4>
-        <div v-if="scoredMaterials.length === 0" class="empty">暂无已确认的材料</div>
-        <div v-for="m in scoredMaterials" :key="m.id" class="detail-row">
-          <span class="detail-name">{{ m.title || '未命名材料' }}</span>
-          <span class="cat-tag" :style="catStyle(m.recognition.category)">{{ catLabel(m.recognition.category) }}</span>
-          <span class="detail-score">+{{ m.recognition.suggested_score }}</span>
-          <span class="detail-conf" :class="confLevel(m.recognition.confidence)">
-            {{ (m.recognition.confidence * 100).toFixed(0) }}%
-          </span>
+      <!-- 右侧：固定汇总面板 -->
+      <div class="right-panel">
+        <!-- 总分卡片 -->
+        <div class="total-card" @click="select(null)">
+          <div class="tc-top">
+            <span class="tc-label">综测总分</span>
+            <svg class="tc-arrow" width="16" height="16" viewBox="0 0 16 16"><polyline points="6,3 11,8 6,13" fill="none" stroke="#bbb" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div class="tc-num">{{ totalScore }}</div>
+          <div class="tc-sub">共 {{ totalFactCount }} 条有效认证材料</div>
+        </div>
+
+        <!-- 明细区域 -->
+        <div class="detail-panel">
+          <div class="dp-head">
+            <span class="dp-title">总分汇总：</span>
+            <button v-if="!selected" class="dp-btn" disabled>查看明细</button>
+            <button v-else class="dp-btn active" @click="clearSelect">← 返回总览</button>
+          </div>
+
+          <!-- 未选中：空白提示 -->
+          <div v-if="!selected" class="dp-placeholder">
+            <span>← 点击左侧维度卡片或总分卡片查看加分明细</span>
+          </div>
+
+          <!-- 已选中 -->
+          <div v-else class="dp-list">
+            <div class="dp-summary">
+              <span class="dps-code">{{ selected.code }}</span>
+              <span class="dps-name">{{ selected.name }}</span>
+              <span class="dps-score">{{ selected.score }} 分</span>
+            </div>
+            <div v-for="f in selected.facts" :key="f.fact_id" class="dp-fact">
+              <div class="dpf-head">
+                <span class="dpf-name">{{ f.award_name || f.competition_name || '事实' }}</span>
+                <span class="dpf-score" :class="{ zero: f.score <= 0 }">+{{ f.score }}</span>
+              </div>
+              <div class="dpf-meta">
+                <span>{{ f.material_title }}</span>
+                <span v-if="f.rule_name"> · {{ f.rule_name }}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -42,85 +88,123 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 
-const props = defineProps({ materials: Array, ruleItems: Array, evaluation: Object })
-defineEmits(['calculate'])
+const props = defineProps({ materials: Array, evaluation: Object, scoreList: Object })
+defineEmits(['calculate', 'back'])
 
-const dims = [
-  { key:'moral', label:'德育', color:'#EA8600' },
-  { key:'intellectual', label:'智育', color:'#1A73E8' },
-  { key:'physical', label:'体育', color:'#34A853' },
-  { key:'aesthetic', label:'美育', color:'#9C27B0' },
-  { key:'labor', label:'劳育', color:'#FF6D00' },
-]
+const selected = ref(null)  // 当前选中的 indicator 或 null=总览
 
-const hasConfirmed = computed(() => {
-  const rulesOk = props.ruleItems.filter(r => r.status === 'confirmed').length > 0
-  const recsOk = props.materials.filter(m => m.recognition?.confirm_status === 'confirmed').length > 0
-  return rulesOk && recsOk
-})
+const indicators = computed(() => props.scoreList?.indicators || [])
+const totalScore = computed(() => props.scoreList?.total_score ?? '--')
+const totalFactCount = computed(() => props.scoreList?.fact_count || 0)
 
-const scoredMaterials = computed(() =>
-  props.materials.filter(m => m.recognition?.confirm_status === 'confirmed')
+const hasConfirmed = computed(() =>
+  (props.materials || []).reduce((sum, m) =>
+    sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0
+  ) > 0
 )
 
-function pct(key) {
-  if (!props.evaluation) return 0
-  const d = props.evaluation[key]
-  return d && d.max ? Math.min((d.score / d.max) * 100, 100) : 0
+function barPct(ind) {
+  const max = ind.max_score
+  if (!max) return ind.score > 0 ? 100 : 0
+  return Math.min((ind.score / max) * 100, 100)
 }
 
-const catMap = { moral:'德育', intellectual:'智育', physical:'体育', aesthetic:'美育', labor:'劳育' }
-const catColors = { moral:'#EA8600', intellectual:'#1A73E8', physical:'#34A853', aesthetic:'#9C27B0', labor:'#FF6D00' }
-function catLabel(c) { return catMap[c] || c || '未归类' }
-function catStyle(c) { return { background: (catColors[c]||'#9AA0A6')+'20', color: catColors[c]||'#9AA0A6' } }
-function confLevel(c) { return c > 0.8 ? 'high' : c >= 0.5 ? 'mid' : 'low' }
+function select(ind) { selected.value = ind }
+function clearSelect() { selected.value = null }
+
+const COLORS = ['#8CA5C8','#8DB5A6','#C89B7A','#9E8AB8','#C88A8A','#7AAD9E','#A888C0','#B89970']
 </script>
 
 <style scoped>
-.score-page { display: flex; flex-direction: column; gap: 24px; }
-.score-top { display: flex; align-items: center; gap: 16px; }
+.score-root { max-width: 1060px; margin: 0 auto; }
 
-.score-content { display: flex; flex-direction: column; gap: 24px; }
+/* ===== 头部 ===== */
+.page-header { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+.back-btn {
+  width: 36px; height: 36px; border: 1px solid #e0e0e0; border-radius: 10px;
+  background: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: #666;
+}
+.back-btn:hover { background: #f5f5f5; }
+.page-title { font-size: 20px; font-weight: 700; color: #1a1a1a; margin: 0; }
 
+/* ===== 空状态 ===== */
+.empty-full { text-align: center; padding: 80px 0; color: #999; font-size: 14px; }
+.empty-icon { font-size: 48px; display: block; margin-bottom: 12px; }
+
+/* ===== 双栏 ===== */
+.main-layout { display: flex; gap: 20px; align-items: stretch; }
+
+/* ===== 左侧网格 ===== */
+.left-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+.dim-card {
+  background: #fff; border: 1px solid #eee; border-radius: 14px;
+  padding: 18px 16px 16px; cursor: pointer; transition: all .2s;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.dim-card:hover { border-color: #d0d8e0; box-shadow: 0 2px 12px rgba(0,0,0,.04); }
+.dc-top { display: flex; justify-content: space-between; align-items: center; }
+.dc-tag {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+  background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent);
+  font-family: monospace; letter-spacing: .3px;
+}
+.dc-arrow { flex-shrink: 0; }
+.dc-name { font-size: 14px; font-weight: 600; color: #222; }
+.dc-bar { height: 5px; background: #eef2f7; border-radius: 3px; overflow: hidden; }
+.dc-bar-fill { height: 100%; border-radius: 3px; background: #b8cfe0; transition: width .5s ease; }
+.dc-foot { display: flex; align-items: baseline; gap: 3px; }
+.dc-score { font-size: 22px; font-weight: 700; color: #333; }
+.dc-max { font-size: 12px; color: #aaa; }
+
+/* ===== 右侧面板 ===== */
+.right-panel {
+  width: 340px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* 总分卡片 */
 .total-card {
-  text-align: center; padding: 24px;
-  background: linear-gradient(135deg, var(--color-primary), #4a90d9);
-  border-radius: var(--radius-card); color: #fff;
+  background: #fff; border: 1px solid #eee; border-radius: 14px;
+  padding: 22px 20px; cursor: pointer; transition: all .2s;
 }
-.total-label { display: block; font-size: 14px; opacity: 0.85; }
-.total-num { font-size: 48px; font-weight: 700; }
+.total-card:hover { border-color: #d0d8e0; box-shadow: 0 2px 12px rgba(0,0,0,.04); }
+.tc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.tc-label { font-size: 13px; color: #888; }
+.tc-arrow { flex-shrink: 0; }
+.tc-num { font-size: 44px; font-weight: 800; color: #1a1a1a; line-height: 1.1; margin-bottom: 6px; }
+.tc-sub { font-size: 12px; color: #aaa; }
 
-.dim-list { display: flex; flex-direction: column; gap: 14px; }
-.dim-block {
-  background: var(--color-white); border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm); padding: 16px;
+/* 明细面板 */
+.detail-panel {
+  background: #fff; border: 1px solid #eee; border-radius: 14px;
+  padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 14px;
+  flex: 1; min-height: 0;
 }
-.dim-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
-.dim-name { font-weight: 600; font-size: 15px; }
-.dim-points { font-size: 14px; color: #666; }
-.dim-bar-bg { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
-.dim-bar { height: 100%; border-radius: 4px; transition: width 0.4s; }
-.dim-detail { font-size: 13px; color: #666; line-height: 1.5; }
-
-.detail-list { }
-.detail-row {
-  display: flex; align-items: center; gap: 12px; padding: 10px;
-  border-bottom: 1px solid #f0f0f0; font-size: 14px;
+.dp-head { display: flex; justify-content: space-between; align-items: center; }
+.dp-title { font-size: 14px; font-weight: 600; color: #333; }
+.dp-btn {
+  font-size: 12px; padding: 5px 14px; border-radius: 6px; border: 1px solid #e0e0e0;
+  background: #fff; color: #bbb; cursor: not-allowed;
 }
-.detail-name { flex: 1; }
-.detail-score { font-weight: 700; color: var(--color-primary); }
-.detail-conf { font-size: 13px; }
-.detail-conf.high { color: #34A853; }
-.detail-conf.mid { color: #E37400; }
-.detail-conf.low { color: #D93025; }
+.dp-btn.active { color: #4A90D9; border-color: #b8d4f0; background: #f5f9ff; cursor: pointer; }
 
-.cat-tag { font-size: 12px; padding: 2px 8px; border-radius: var(--radius-tag); font-weight: 500; }
-.empty { text-align: center; color: var(--color-gray); padding: 20px; }
+.dp-placeholder { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 13px; color: #ccc; text-align: center; padding: 20px; }
 
-.btn { padding: 10px 28px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 15px; font-family: inherit; }
-.btn.primary { background: var(--color-primary); color: #fff; }
-.btn.large { padding: 14px 48px; font-size: 16px; }
-.hint { font-size: 13px; color: #999; }
+/* 选中态明细 */
+.dp-summary { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid #f0f0f0; }
+.dps-code { font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; background: #e8f0fe; color: #4A90D9; font-family: monospace; }
+.dps-name { font-size: 14px; font-weight: 600; color: #222; flex: 1; }
+.dps-score { font-size: 18px; font-weight: 700; color: #4A90D9; }
+
+.dp-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; flex: 1; min-height: 0; }
+.dp-fact { padding: 10px 12px; background: #fafbfc; border-radius: 8px; }
+.dpf-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+.dpf-name { font-size: 13px; font-weight: 600; color: #333; }
+.dpf-score { font-size: 15px; font-weight: 700; color: #2e8b57; }
+.dpf-score.zero { color: #bbb; }
+.dpf-meta { font-size: 12px; color: #999; }
 </style>

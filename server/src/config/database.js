@@ -51,6 +51,10 @@ async function initDatabase() {
       "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
       "ALTER TABLE rule_sources ADD COLUMN file_hash CHAR(64) DEFAULT NULL",
       "ALTER TABLE rule_sources ADD COLUMN is_frozen TINYINT(1) DEFAULT 0",
+      // ★ fact_rule_matches 补列（V2 匹配管线需要）
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_current TINYINT(1) DEFAULT 1 AFTER review_status",
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_selected TINYINT(1) DEFAULT 1 AFTER is_current",
+      "ALTER TABLE fact_rule_matches ADD COLUMN preview_data JSON DEFAULT NULL AFTER is_selected",
     ];
     // rule_set_documents 列名迁移（兼容旧表 source_document_id）
     try {

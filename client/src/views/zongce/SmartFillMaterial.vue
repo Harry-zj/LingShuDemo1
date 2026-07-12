@@ -143,13 +143,20 @@
             </div>
 
             <!-- ★ 单条确认 -->
-            <div style="margin-top:10px; display:flex; align-items:center; gap:8px">
+            <div v-if="f.match" style="margin-top:10px; display:flex; align-items:center; gap:8px">
+              <!-- 已确认：显示状态 -->
+              <span v-if="f.match.review_status === 'confirmed'" class="badge ok">已确认</span>
+              <!-- 可确认：显示确认按钮 -->
               <button
-                v-if="f.match && f.match.fact_rule_match_id && f.match.review_status !== 'confirmed' && f.match.score_status !== 'candidate_pending_review' && f.match.score_status !== 'lookup_failed'"
+                v-else-if="canConfirm(f)"
                 class="btn primary sm"
                 @click="confirmMatch(mat.id, f)"
               >确认该条</button>
-              <span v-if="f.match?.review_status === 'confirmed'" class="badge ok">已确认</span>
+              <!-- 不可确认：显示禁用按钮 + 原因提示 -->
+              <template v-else>
+                <button class="btn sm btn-disabled" disabled>{{ confirmBlockLabel(f) }}</button>
+                <span class="block-hint">{{ confirmBlockReason(f) }}</span>
+              </template>
             </div>
           </div>
           </div>  <!-- v-show -->
@@ -263,6 +270,38 @@ function recalcPreviewSummary(mat) {
   })
 }
 
+function canConfirm(f) {
+  const m = f.match
+  if (!m || !m.fact_rule_match_id) return false
+  if (m.review_status === 'confirmed') return false
+  if (m.score_preview === null || m.score_preview === undefined) return false
+  if (m.match_condition === 'fail') return false
+  if (m.error_type === 'ambiguous_lookup_table') return false
+  if (m.score_status === 'lookup_failed') return false
+  return true
+}
+function confirmBlockReason(f) {
+  const m = f.match
+  if (!m || !m.fact_rule_match_id) return '缺少匹配记录，请重新执行识别'
+  if (m.score_preview === null || m.score_preview === undefined) {
+    if (m.error_type) return '无法计分：' + m.error_type
+    return '无法计分，请补充必要信息后重新匹配'
+  }
+  if (m.error_type === 'ambiguous_lookup_table') return '存在查分表歧义，请明确选择规则分类后重新匹配'
+  if (m.match_condition === 'fail') return '匹配验证未通过，请调整信息后重新匹配'
+  if (m.score_status === 'lookup_failed') return '查分未命中，请调整信息后重新匹配'
+  return '暂不可确认'
+}
+function confirmBlockLabel(f) {
+  const m = f.match
+  if (!m || !m.fact_rule_match_id) return '不可确认'
+  if (m.score_preview === null || m.score_preview === undefined) return '不可确认'
+  if (m.error_type === 'ambiguous_lookup_table') return '需解决歧义'
+  if (m.match_condition === 'fail') return '验证未过'
+  if (m.score_status === 'lookup_failed') return '查分失败'
+  return '不可确认'
+}
+
 async function confirmMatch(matId, fact) {
   const matchId = fact.match?.fact_rule_match_id
   const efId = fact.fact_id
@@ -273,20 +312,57 @@ async function confirmMatch(matId, fact) {
       extracted_fact_id: efId,
     })
     if (res.code === 200) {
+      // ★ 乐观更新：立即标记为已确认
       if (res.data?.fact) {
-        // ★ 只更新 match + review_status，不碰 fact_data
-        //    否则 Object.assign 替换 fact_data 会触发 v-model @change → doPreview → 覆盖确认结果
         fact.match = res.data.fact.match || fact.match
         fact.review_status = res.data.fact.review_status || 'confirmed'
-        fact.match.review_status = fact.review_status
-      } else { fact.match.review_status = 'confirmed' }
+        if (fact.match) fact.match.review_status = fact.review_status
+      } else {
+        if (fact.match) fact.match.review_status = 'confirmed'
+        fact.review_status = 'confirmed'
+      }
       const mat = props.materials.find(m => m.id === matId)
       if (mat) {
         recalcPreviewSummary(mat)
         collapsedMap.value[matId] = allConfirmed(mat)
       }
-    } else { alert(res.msg) }
-  } catch (e) { alert('确认失败，请稍后重试') }
+      // ★ 后台刷新验证（失败不影响确认结果）
+      refreshFactFromServer(matId, efId, fact)
+    } else {
+      // ★ 确认失败：按钮状态不变
+      alert(res.msg || '确认失败')
+    }
+  } catch (e) {
+    // ★ 网络异常：按钮状态不变
+    alert('确认失败，请稍后重试')
+  }
+}
+
+// 后台刷新单条 fact，用服务端权威数据验证确认状态
+async function refreshFactFromServer(matId, efId, fact) {
+  try {
+    const res = await api.getMaterials()
+    if (res.code !== 200) { console.warn('[confirm] 后台刷新失败: code=' + res.code); return }
+    const mat = res.data.find(m => m.id === matId)
+    if (!mat) return
+    const refreshed = mat.facts?.find(f => f.fact_id === efId)
+    if (!refreshed) return
+    // ★ 用服务端权威数据更新
+    const oldMatch = fact.match
+    if (refreshed.match) fact.match = refreshed.match
+    fact.review_status = refreshed.review_status || fact.review_status
+    if (fact.match) fact.match.review_status = fact.review_status
+    // 如果序列化返回 null match 但之前有，保留旧的 match 防止 UI 闪烁
+    if (!fact.match && oldMatch) fact.match = oldMatch
+    const localMat = props.materials.find(m => m.id === matId)
+    if (localMat) {
+      recalcPreviewSummary(localMat)
+      collapsedMap.value[matId] = allConfirmed(localMat)
+    }
+  } catch (_) {
+    // ★ 刷新失败：UI 保持乐观更新结果，不弹错误
+    console.warn('[confirm] 确认成功但后台刷新失败，UI 使用乐观更新结果')
+  }
 }
 </script>
 
@@ -344,13 +420,6 @@ async function confirmMatch(matId, fact) {
 .score-hint { font-size: 12px; color: #b86500; background: #fef7e0; padding: 1px 6px; border-radius: 4px; }
 .rule-type-tag { font-size: 10px; padding: 1px 5px; border-radius: 3px; background: #e8f0fe; color: #1A73E8; margin-left: 4px; }
 
-.done-card { margin-top: 14px; border: 1px solid #ceead6; border-radius: 8px; overflow: hidden; }
-.done-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: #e6f4ea; cursor: pointer; user-select: none; font-size: 13px; }
-.done-header:hover { background: #d2ebd8; }
-.done-badge { font-weight: 700; color: #1e7e34; }
-.done-summary { color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.done-body { padding: 12px 14px; background: #fff; font-size: 13px; color: #333; line-height: 1.6; border-top: 1px solid #ceead6; }
-
 .btn { padding: 8px 20px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn.primary { background: var(--color-primary); color: #fff; }
@@ -358,4 +427,6 @@ async function confirmMatch(matId, fact) {
 .btn-text { padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: #fff; cursor: pointer; font-size: 13px; font-family: inherit; }
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .btn-text.sm { font-size: 12px; padding: 2px 8px; }
+.btn-disabled { background: #e8e8e8; color: #999; cursor: not-allowed; border: 1px solid #d0d0d0; }
+.block-hint { font-size: 12px; color: #b86500; max-width: 260px; line-height: 1.4; }
 </style>

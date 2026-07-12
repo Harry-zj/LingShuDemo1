@@ -94,6 +94,7 @@
         v-if="activeCard === 'score'"
         :materials="materials"
         :evaluation="evaluation"
+        :scoreList="scoreList"
         @calculate="calculateScore"
       />
 
@@ -135,6 +136,7 @@ const ruleSources = ref([])
 const ruleSets = ref([])
 const materials = ref([])
 const evaluation = ref(null)
+const scoreList = ref(null)
 const templates = ref([])
 const fillResults = ref([])
 
@@ -166,6 +168,7 @@ async function refreshTemplates() {
 }
 onMounted(async () => {
   await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()]);
+  refreshScoreList();
 });
 
 // ========== 规则 ==========
@@ -195,11 +198,29 @@ async function removeMaterial(id) {
   if (res.code === 200) refreshMaterials()
 }
 
+const publishedRuleSetId = computed(() => {
+  const pub = ruleSets.value.find(r => r.status === 'published')
+  return pub ? pub.id : null
+})
+
 // ========== 评分 ==========
 async function calculateScore() {
-  const res = await api.calculateScore()
-  if (res.code === 200) { alert(res.msg); refreshEval() }
-  else alert(res.msg)
+  const rsId = publishedRuleSetId.value
+  if (!rsId) { alert('请先发布规则集'); return }
+  const res = await api.calculateScoreV2(rsId, materials.value.map(m => m.id))
+  if (res.code === 200) {
+    alert(res.msg)
+    refreshEval()
+    // ★ 同时拉取评分清单
+    const sl = await api.getScoreList(rsId)
+    if (sl.code === 200) scoreList.value = sl.data
+  } else { alert(res.msg) }
+}
+async function refreshScoreList() {
+  const rsId = publishedRuleSetId.value
+  if (!rsId) return
+  const sl = await api.getScoreList(rsId)
+  if (sl.code === 200) scoreList.value = sl.data
 }
 
 // ========== 填表 ==========

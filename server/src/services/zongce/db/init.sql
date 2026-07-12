@@ -406,7 +406,7 @@ CREATE TABLE IF NOT EXISTS material_analysis_runs (
   input_hash CHAR(64) NOT NULL,
   output_hash CHAR(64) DEFAULT '',
   raw_ai_response LONGTEXT,
-  status ENUM('running','completed','failed') DEFAULT 'running',
+  status ENUM('running','completed','failed','needs_review') DEFAULT 'running',
   started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   completed_at TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -441,7 +441,7 @@ CREATE TABLE IF NOT EXISTS rule_match_runs (
   prompt_version VARCHAR(20) DEFAULT '',
   input_hash CHAR(64) DEFAULT '',
   raw_ai_response LONGTEXT,
-  status ENUM('running','completed','failed') DEFAULT 'running',
+  status ENUM('running','completed','failed','needs_review') DEFAULT 'running',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   completed_at TIMESTAMP NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -455,6 +455,9 @@ CREATE TABLE IF NOT EXISTS fact_rule_matches (
   confidence DECIMAL(5,4) DEFAULT NULL,
   reason TEXT,
   review_status ENUM('pending','confirmed','rejected') DEFAULT 'pending',
+  is_current TINYINT(1) DEFAULT 1,
+  is_selected TINYINT(1) DEFAULT 1,
+  preview_data JSON DEFAULT NULL,
   UNIQUE KEY uk_frm (match_run_id, extracted_fact_id, executable_rule_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

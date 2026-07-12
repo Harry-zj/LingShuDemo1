@@ -320,9 +320,10 @@ exports.previewScore = async (req, res) => {
       selected_block: selectedBlock || null,
       matched_rule_ids: phase2.matched_rule_ids || [],
       evidence: phase2.evidence || [],
-      // ★ match 对象（含预览信息，正式 ID 后续填充）
+      // ★ match 子对象（与 serializer 输出字段对齐，正式 ID 后续填充）
       match: {
         fact_rule_match_id: null,
+        rule_match_run_id: null,
         is_current: false,
         is_selected: false,
         indicator: preview.indicator_code ? { code: preview.indicator_code, name: preview.indicator_name } : null,
@@ -333,8 +334,12 @@ exports.previewScore = async (req, res) => {
         normalized_dimensions: matchNormFields,
         score_preview: preview.score_preview,
         score_status: scoreStatus,
+        match_condition: preview.score_preview !== null && !preview.error_type ? 'pass' : 'uncertain',
         review_status: 'pending',
+        needs_review: preview.needs_review || matchResult.status === 'needs_review',
         error_type: preview.error_type || null,
+        confidence: phase2.confidence || null,
+        reason: phase2.review_reason || matchResult.reason || null,
       },
       _debug: preview._debug || {},
     };
@@ -373,9 +378,12 @@ exports.previewScore = async (req, res) => {
           lookup_table: responseData.lookup_table,
           lookup_cell: responseData.lookup_cell,
           lookup_dimensions: responseData.lookup_dimensions,
+          normalized_dimensions: responseData.normalized_dimensions,
+          raw_dimensions: responseData.raw_dimensions,
           needs_review: responseData.needs_review,
           review_reason: responseData.review_reason,
           error_type: responseData.error_type,
+          confidence: responseData.confidence,
           generated_at: new Date().toISOString(),
         };
 
@@ -413,20 +421,31 @@ exports.previewScore = async (req, res) => {
             { score_preview: preview.score_preview, score_status: scoreStatus,
               indicator: responseData.indicator,
               rule: responseData.rule, lookup_table: responseData.lookup_table,
+              lookup_cell: responseData.lookup_cell,
               lookup_dimensions: responseData.lookup_dimensions,
-              error_type: preview.error_type, dimension_status: preview.dimension_status }
+              normalized_dimensions: responseData.normalized_dimensions,
+              raw_dimensions: responseData.raw_dimensions,
+              error_type: preview.error_type, dimension_status: preview.dimension_status,
+              needs_review: responseData.needs_review,
+              review_reason: responseData.review_reason,
+              confidence: responseData.confidence }
           );
           responseData.match_validation = vResult;
 
-          // ★ 回读 fact_rule_match_id，构建 match 对象供前端使用
+          // ★ 回读 fact_rule_match_id，同步持久化后的字段到 match 对象
           const [frmRows] = await pool.execute(
-            "SELECT id FROM fact_rule_matches WHERE match_run_id = ? AND extracted_fact_id = ? AND is_current = 1 AND is_selected = 1 LIMIT 1",
+            "SELECT id, match_condition, confidence, reason FROM fact_rule_matches WHERE match_run_id = ? AND extracted_fact_id = ? AND is_current = 1 AND is_selected = 1 LIMIT 1",
             [vResult.match_run_id, efRows[0].id]
           );
           if (frmRows.length) {
             responseData.match.fact_rule_match_id = frmRows[0].id;
+            responseData.match.rule_match_run_id = vResult.match_run_id;
             responseData.match.is_current = true;
             responseData.match.is_selected = true;
+            responseData.match.match_condition = frmRows[0].match_condition;
+            responseData.match.needs_review = frmRows[0].match_condition !== 'pass';
+            responseData.match.confidence = frmRows[0].confidence;
+            responseData.match.reason = frmRows[0].reason || responseData.match.reason;
             responseData.match.review_status = 'pending';
           }
         }
@@ -483,12 +502,13 @@ exports.matchMaterial = async (req, res) => {
       }, "已确认（无需重复操作）"));
     }
 
-    // ★ 双表精确 UPDATE
+    // ★ Phase 1: 事务更新确认状态（独立错误处理，失败即回滚）
     const conn = await pool.getConnection();
+    let frmResult;
     try {
       await conn.beginTransaction();
 
-      const [frmResult] = await conn.execute(
+      [frmResult] = await conn.execute(
         `UPDATE fact_rule_matches SET review_status = 'confirmed'
          WHERE id = ? AND extracted_fact_id = ? AND is_current = 1`,
         [fact_rule_match_id, extracted_fact_id]
@@ -505,9 +525,21 @@ exports.matchMaterial = async (req, res) => {
       );
 
       await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      conn.release();
+      console.error('[Material] 确认事务失败:', e.message);
+      return res.json(Res.error("确认失败，请稍后重试"));
+    }
+    conn.release();
 
-      // ★ 回读序列化
-      const [efRows] = await conn.execute("SELECT * FROM extracted_facts WHERE id = ?", [extracted_fact_id]);
+    // ★ Phase 2: 回读序列化（独立错误处理，失败不回滚、不误报）
+    //   事务已提交，确认已生效；序列化失败仅影响返回数据的可读性
+    try {
+      const [efRows] = await pool.execute(
+        "SELECT * FROM extracted_facts WHERE id = ?",
+        [extracted_fact_id]
+      );
       const fact = efRows.length ? await serializeFact(efRows[0]) : null;
 
       res.json(Res.success({
@@ -516,12 +548,20 @@ exports.matchMaterial = async (req, res) => {
         fact: fact,
       }, "已确认"));
     } catch (e) {
-      await conn.rollback();
-      throw e;
-    } finally {
-      conn.release();
+      console.error('[Material] 确认后序列化失败:', e.message);
+      // ★ 确认已生效，序列化失败不应报为"确认失败"
+      //   前端会通过 refreshFactFromServer 重试获取权威数据
+      res.json(Res.success({
+        affectedRows: frmResult.affectedRows,
+        match_id: fact_rule_match_id,
+        fact: null,
+        _serialize_error: e.message,
+      }, "已确认（数据刷新异常，请刷新页面查看）"));
     }
-  } catch (e) { console.error('[Material] 确认失败:', e.message); res.json(Res.error("确认失败，请稍后重试")); }
+  } catch (e) {
+    console.error('[Material] 确认失败:', e.message);
+    res.json(Res.error("确认失败，请稍后重试"));
+  }
 };
 
 // 删除材料（级联删除附件和识别结果）

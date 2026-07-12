@@ -56,6 +56,7 @@ export const dismissRecognition = (id) =>
 export const calculateScore = () =>
   request.post("/zongce/evaluation/calculate");
 
+export const getScoreList = (ruleSetId) => request.get("/zongce/evaluation/score-list", { params: { rule_set_id: ruleSetId } });
 export const getEvaluation = () =>
   request.get("/zongce/evaluation/result");
 
