@@ -55,7 +55,7 @@ exports.doFill = async (req, res) => {
     const tpl = tplRows[0];
     const templatePath = path.join(__dirname, "../../../uploads", tpl.file_path);
     if (!fs.existsSync(templatePath)) return res.json(Res.error("模板文件丢失，请重新上传"));
-    const fillData = getFillData(req.user.id);
+    const fillData = await getFillData(pool, req.user.id);
     const templateBuffer = fs.readFileSync(templatePath);
     const outputBuffer = smartFill(templateBuffer, fillData);
     const outputFileName = "filled_" + Date.now() + "_" + tpl.file_path;
@@ -115,6 +115,8 @@ exports.downloadFill = async (req, res) => {
 };
 
 exports.getMockData = async (req, res) => {
-  try { res.json(Res.success(getMockData())); }
-  catch (e) { res.json(Res.error(e.message)); }
+  try {
+    const data = await getMockData(pool, req.user.id);
+    res.json(Res.success(data));
+  } catch (e) { res.json(Res.error(e.message)); }
 };

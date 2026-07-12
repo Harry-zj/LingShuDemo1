@@ -9,38 +9,35 @@
       </div>
     </template>
 
-    <!-- 1个学期：首次评定引导 -->
-    <div class="card glass-card reveal" v-else-if="semesters.length === 1">
-      <div class="card-accent" style="background: var(--color-primary)"></div>
-      <h3><VIcon icon="mdi:chart-line-variant" /> 历史发展</h3>
-      <div class="first-time-guide">
-        <div class="ft-emoji-wrap">
-          <span class="ft-emoji ft-float">🎉</span>
-          <span class="ft-spark ft-s1">✨</span>
-          <span class="ft-spark ft-s2">⭐</span>
-          <span class="ft-spark ft-s3">💫</span>
-        </div>
-        <p class="ft-title">欢迎来到你的第一次综测评定！</p>
-        <p class="ft-subtitle">这是你成长旅程的起点，每个维度都值得被记录</p>
-        <div class="ft-dims">
-          <div class="ft-dim-card" v-for="(d, i) in DIM_CONFIG" :key="d.key"
-            :style="{ animationDelay: (0.3 + i * 0.1) + 's', borderColor: d.color }">
-            <div class="ftd-dot" :style="{ background: d.color }"></div>
-            <span class="ftd-name">{{ d.name }}</span>
-            <span class="ftd-score" :style="{ color: d.color }">{{ currentScores[d.key] || "--" }}</span>
-            <span class="ftd-unit">分</span>
-          </div>
-        </div>
-        <div class="ft-footer">
-          <span class="ft-arrow ft-bounce">👇</span>
-          <p class="ft-hint">下个学年回来看你的成长轨迹！</p>
-        </div>
+    <!-- 1个学期：方案B空白引导视图 -->
+    <div class="single-guide" v-else-if="semesters.length === 1">
+      <div class="sg-icon-wrap">
+        <svg class="sg-chart-icon" viewBox="0 0 80 64" fill="none">
+          <polyline points="4,52 24,36 44,44 64,20 76,28" stroke="#C4C7CC" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          <line x1="4" y1="56" x2="76" y2="56" stroke="#DDE0E4" stroke-width="1"/>
+          <line x1="4" y1="4" x2="4" y2="56" stroke="#DDE0E4" stroke-width="1"/>
+          <circle cx="4" cy="52" r="2.5" fill="#DDE0E4" class="sg-node" style="animation-delay:0s"/>
+          <circle cx="24" cy="36" r="2.5" fill="#DDE0E4" class="sg-node" style="animation-delay:0.6s"/>
+          <circle cx="44" cy="44" r="2.5" fill="#DDE0E4" class="sg-node" style="animation-delay:1.2s"/>
+          <circle cx="64" cy="20" r="2.5" fill="#DDE0E4" class="sg-node" style="animation-delay:1.8s"/>
+          <circle cx="76" cy="28" r="2.5" fill="#DDE0E4" class="sg-node" style="animation-delay:2.4s"/>
+        </svg>
+      </div>
+      <p class="sg-title">暂无可对比的历年综测数据</p>
+      <p class="sg-desc">当前仅存在本学年测评记录，无法生成跨学年趋势分析</p>
+      <div class="sg-preview">
+        <span class="sg-preview-label">下一学年将自动解锁：</span>
+        <span class="sg-preview-item">总分变化</span>
+        <span class="sg-preview-div">/</span>
+        <span class="sg-preview-item">五维升降幅</span>
+        <span class="sg-preview-div">/</span>
+        <span class="sg-preview-item">排名走势</span>
       </div>
     </div>
 
-    <!-- ≥2个学期：完整展示 -->
+    <!-- ≥2个学期：摘要卡片始终可见 + 详情折叠 -->
     <template v-else>
-      <!-- 模块1：统计摘要卡片 -->
+      <!-- 模块1：统计摘要卡片（始终可见） -->
       <div class="stats-row">
         <div class="stat-card glass-card reveal" v-for="(s, i) in summaryCards" :key="s.label"
           :style="{ animationDelay: (0.1 + i * 0.07) + 's' }">
@@ -50,62 +47,64 @@
         </div>
       </div>
 
-      <!-- 模块2+3：五维发展折线图 + 总分排名变化（左右布局） -->
-      <div class="card glass-card reveal" style="animation-delay: 0.3s;">
-        <div class="card-accent" style="background: var(--color-primary)"></div>
-        <h3><VIcon icon="mdi:chart-line-variant" /> 五维发展与排名变化</h3>
-        <div class="charts-grid">
-          <div class="charts-left">
-            <div class="chart-subtitle">五维发展</div>
-            <div ref="dimLineRef" class="chart-box"></div>
-          </div>
-          <div class="charts-right">
-            <div class="chart-subtitle">总分与排名</div>
-            <div ref="scoreRankRef" class="chart-box"></div>
-            <div class="chart-note" v-if="trendNote">{{ trendNote }}</div>
-          </div>
+      <!-- 详情折叠区 -->
+      <div class="history-fold" :class="{ expanded: showDetail }">
+        <div class="history-fold-bar" @click="showDetail = !showDetail">
+          <span>查看详细历史数据</span>
+          <VIcon icon="mdi:chevron-down" class="hf-arrow" :class="{ rotated: showDetail }" />
         </div>
-      </div>
+        <div class="history-fold-body" v-show="showDetail">
+          <!-- 模块2+3：五维发展折线图 + 总分排名变化 -->
+          <div class="card glass-card reveal" style="animation-delay: 0.1s;">
+            <div class="card-accent" style="background: var(--color-primary)"></div>
+            <h3><VIcon icon="mdi:chart-line-variant" /> 五维发展与排名变化</h3>
+            <div class="charts-grid">
+              <div class="charts-left">
+                <div class="chart-subtitle">五维发展</div>
+                <div ref="dimLineRef" class="chart-box"></div>
+              </div>
+              <div class="charts-right">
+                <div class="chart-subtitle">总分与排名</div>
+                <div ref="scoreRankRef" class="chart-box"></div>
+                <div class="chart-note" v-if="trendNote">{{ trendNote }}</div>
+              </div>
+            </div>
+          </div>
 
-      <!-- 模块4：各维度变化明细表 -->
-      <div class="card glass-card reveal" style="animation-delay: 0.4s;">
-        <div class="card-accent" style="background: var(--color-meiyu)"></div>
-        <h3><VIcon icon="mdi:table-large" /> 各维度变化明细</h3>
-        <div class="detail-table-wrap">
-          <table class="detail-table">
-            <thead>
-              <tr>
-                <th>维度</th>
-                <th v-for="s in semesters" :key="s.year">{{ s.year }}</th>
-                <th>总变化</th>
-                <th>趋势</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="d in dimDetailRows" :key="d.key">
-                <td><span class="td-dot" :style="{ background: d.color }"></span>{{ d.icon }} {{ d.name }}</td>
-                <td v-for="(v, idx) in d.values" :key="idx">
-                  {{ v.score }}
-                  <span v-if="idx > 0" :class="v.change > 0 ? 'arrow-up' : v.change < 0 ? 'arrow-down' : 'arrow-flat'">
-                    {{ v.change > 0 ? '↑' + v.change : v.change < 0 ? '↓' + Math.abs(v.change) : '→' }}
-                  </span>
-                </td>
-                <td :class="d.totalChange > 0 ? 'text-green' : d.totalChange < 0 ? 'text-red' : 'text-gray'">
-                  {{ d.totalChange > 0 ? '+' : '' }}{{ d.totalChange }}
-                </td>
-                <td>{{ d.trend }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <!-- 模块4：各维度变化明细表 -->
+          <div class="card glass-card reveal" style="animation-delay: 0.2s;">
+            <div class="card-accent" style="background: var(--color-meiyu)"></div>
+            <h3><VIcon icon="mdi:table-large" /> 各维度变化明细</h3>
+            <div class="detail-table-wrap">
+              <table class="detail-table">
+                <thead>
+                  <tr><th>维度</th><th v-for="s in semesters" :key="s.year">{{ shortYear(s.year) }}</th><th>总变化</th><th>趋势</th></tr>
+                </thead>
+                <tbody>
+                  <tr v-for="d in dimDetailRows" :key="d.key">
+                    <td><span class="td-dot" :style="{ background: d.color }"></span>{{ d.icon }} {{ d.name }}</td>
+                    <td v-for="(v, idx) in d.values" :key="idx">
+                      {{ v.score }}
+                      <span v-if="idx > 0" :class="v.change > 0 ? 'arrow-up' : v.change < 0 ? 'arrow-down' : 'arrow-flat'">
+                        {{ v.change > 0 ? '↑' + v.change : v.change < 0 ? '↓' + Math.abs(v.change) : '→' }}
+                      </span>
+                    </td>
+                    <td :class="d.totalChange > 0 ? 'text-green' : d.totalChange < 0 ? 'text-red' : 'text-gray'">
+                      {{ d.totalChange > 0 ? '+' : '' }}{{ d.totalChange }}
+                    </td>
+                    <td>{{ d.trend }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-      <!-- 模块5：趋势总结 -->
-      <div class="card glass-card reveal trend-summary" style="animation-delay: 0.5s;">
-        <div class="card-accent" style="background: var(--color-primary-gradient-bright)"></div>
-        <h3><VIcon icon="mdi:text-box-check-outline" /> 趋势总结</h3>
-        <div class="ts-section" v-for="(part, i) in trendParts" :key="i">
-          <p>{{ part }}</p>
+          <!-- 模块5：趋势总结 -->
+          <div class="card glass-card reveal trend-summary" style="animation-delay: 0.3s;">
+            <div class="card-accent" style="background: var(--color-primary-gradient-bright)"></div>
+            <h3><VIcon icon="mdi:text-box-check-outline" /> 趋势总结</h3>
+            <div class="ts-section" v-for="(part, i) in trendParts" :key="i"><p>{{ part }}</p></div>
+          </div>
         </div>
       </div>
     </template>
@@ -120,28 +119,40 @@ import { DIMENSION_CONFIG } from "../utils/scoreHelper"
 
 const props = defineProps({
   currentDimensions: { type: Object, default: () => ({}) },
-  selectedYear: { type: String, default: null },  // "大一" | "大二" | "大三"
+  activeBatchTitle: { type: String, default: null },
 })
-
-const yearOrder = ["大一", "大二", "大三"]
 
 // 常量
 const DIM_CONFIG = DIMENSION_CONFIG
-const dimLineColors = { de: "#EF4444", zhi: "#3B82F6", ti: "#10B981", mei: "#8B5CF6", lao: "#F59E0B" }
+const dimLineColors = { de: "#D97706", zhi: "#4F46E5", ti: "#059669", mei: "#7C3AED", lao: "#EA580C" }
 const dimIcons = { de: "⭐", zhi: "📚", ti: "🏃", mei: "🎨", lao: "🔧" }
+function shortYear(title) { const m = (title || '').match(/(\d{4}-\d{4})/); return m ? m[1] : title }
 
 // 数据
 const history = ref(null)
 const dimLineRef = ref(null)
 const scoreRankRef = ref(null)
+const showDetail = ref(false)
 let dimChart = null, scoreRankChart = null
 const currentScores = computed(() => props.currentDimensions || {})
 
+// 所有学期数据，按学年升序排列（大一在前）
+const allSemesters = computed(() => {
+  const raw = history.value?.semesters || []
+  return [...raw].sort((a, b) => {
+    const ya = parseInt(a.year) || 0
+    const yb = parseInt(b.year) || 0
+    return ya - yb
+  })
+})
+
+// 按选中批次截断：仅展示 ≤ 选中批次学年的数据
 const semesters = computed(() => {
-  const all = history.value?.semesters || []
-  if (!props.selectedYear) return all
-  const idx = yearOrder.indexOf(props.selectedYear)
-  return idx >= 0 ? all.filter(s => yearOrder.indexOf(s.year) <= idx) : all
+  const all = allSemesters.value
+  if (!props.activeBatchTitle) return all
+  const targetYear = parseInt(props.activeBatchTitle) || 0
+  if (!targetYear) return all
+  return all.filter(s => (parseInt(s.year) || 0) <= targetYear)
 })
 
 // ---- 模块1：统计摘要 ----
@@ -164,13 +175,32 @@ const summaryCards = computed(() => {
 // ---- 模块2：五维折线图 ----
 function buildDimLineChart() {
   if (!dimLineRef.value || semesters.value.length < 2) return
-  if (!dimChart) dimChart = echarts.init(dimLineRef.value)
+  // 容器不可见时跳过（display:none 会导致零尺寸）
+  if (dimLineRef.value.offsetWidth === 0 || dimLineRef.value.offsetHeight === 0) return
+  if (dimChart) dimChart.dispose()
+  dimChart = echarts.init(dimLineRef.value)
   dimChart.setOption({
     tooltip: { trigger: "axis" },
-    legend: { data: DIM_CONFIG.map(d => d.name), bottom: 0, textStyle: { fontSize: 12 } },
-    grid: { left: 12, right: 24, top: 16, bottom: 50 },
-    xAxis: { type: "category", data: semesters.value.map(s => s.year), axisLabel: { fontSize: 12 } },
-    yAxis: { type: "value", min: 40, max: 100, axisLabel: { fontSize: 11 } },
+    legend: {
+      data: DIM_CONFIG.map(d => d.name),
+      bottom: 0,
+      left: "center",
+      textStyle: { fontSize: 11, color: "#5F6368" },
+      itemWidth: 14, itemHeight: 8,
+      padding: [8, 0, 0, 0],
+    },
+    grid: { left: 44, right: 20, top: 20, bottom: 56 },
+    xAxis: {
+      type: "category", data: semesters.value.map(s => s.year),
+      axisLabel: { fontSize: 12, color: "#5F6368" },
+      axisLine: { lineStyle: { color: "rgba(15,10,30,0.08)" } },
+    },
+    yAxis: {
+      type: "value", min: 40, max: 100,
+      axisLabel: { fontSize: 11, color: "#5F6368" },
+      splitLine: { lineStyle: { color: "rgba(15,10,30,0.04)" } },
+      name: "分", nameTextStyle: { fontSize: 10, color: "#9AA0A6" },
+    },
     series: DIM_CONFIG.map(d => ({
       name: d.name, type: "line",
       data: semesters.value.map(s => s.scores[d.key] || 0),
@@ -194,19 +224,53 @@ const trendNote = computed(() => {
 
 function buildScoreRankChart() {
   if (!scoreRankRef.value || semesters.value.length < 2) return
-  if (!scoreRankChart) scoreRankChart = echarts.init(scoreRankRef.value)
+  if (scoreRankRef.value.offsetWidth === 0 || scoreRankRef.value.offsetHeight === 0) return
+  if (scoreRankChart) scoreRankChart.dispose()
+  scoreRankChart = echarts.init(scoreRankRef.value)
   scoreRankChart.setOption({
     tooltip: { trigger: "axis" },
-    legend: { data: ["总分", "专业排名"], bottom: 0, textStyle: { fontSize: 12 } },
-    grid: { left: 12, right: 50, top: 16, bottom: 50 },
-    xAxis: { type: "category", data: semesters.value.map(s => s.year), axisLabel: { fontSize: 12 } },
+    legend: {
+      data: ["总分", "专业排名"],
+      bottom: 0, left: "center",
+      textStyle: { fontSize: 11, color: "#5F6368" },
+      itemWidth: 14, itemHeight: 8,
+      padding: [8, 0, 0, 0],
+    },
+    grid: { left: 48, right: 56, top: 20, bottom: 56 },
+    xAxis: {
+      type: "category", data: semesters.value.map(s => s.year),
+      axisLabel: { fontSize: 12, color: "#5F6368" },
+      axisLine: { lineStyle: { color: "rgba(15,10,30,0.08)" } },
+    },
     yAxis: [
-      { type: "value", name: "总分", min: 60, max: 100, axisLabel: { fontSize: 11 } },
-      { type: "value", name: "排名", min: 1, inverse: true, axisLabel: { fontSize: 11 } }
+      {
+        type: "value", name: "总分", min: 60, max: 100,
+        axisLabel: { fontSize: 11, color: "#5F6368" },
+        splitLine: { lineStyle: { color: "rgba(15,10,30,0.04)" } },
+        nameTextStyle: { fontSize: 10, color: "#9AA0A6" },
+      },
+      {
+        type: "value", name: "排名", min: 1, inverse: true,
+        axisLabel: { fontSize: 11, color: "#5F6368" },
+        splitLine: { show: false },
+        nameTextStyle: { fontSize: 10, color: "#9AA0A6" },
+      }
     ],
     series: [
-      { name: "总分", type: "line", data: semesters.value.map(s => s.scores.total), yAxisIndex: 0, itemStyle: { color: "#4F46E5" }, lineStyle: { color: "#4F46E5", width: 2 }, symbol: "circle", symbolSize: 6 },
-      { name: "专业排名", type: "line", data: semesters.value.map(s => s.ranking.majorRank), yAxisIndex: 1, itemStyle: { color: "#F59E0B" }, lineStyle: { color: "#F59E0B", width: 2, type: "dashed" }, symbol: "diamond", symbolSize: 8 },
+      {
+        name: "总分", type: "line", yAxisIndex: 0,
+        data: semesters.value.map(s => s.scores.total),
+        itemStyle: { color: "#4F46E5" },
+        lineStyle: { color: "#4F46E5", width: 2 },
+        symbol: "circle", symbolSize: 7,
+      },
+      {
+        name: "专业排名", type: "line", yAxisIndex: 1,
+        data: semesters.value.map(s => s.ranking.majorRank),
+        itemStyle: { color: "#F59E0B" },
+        lineStyle: { color: "#F59E0B", width: 2, type: "dashed" },
+        symbol: "diamond", symbolSize: 9,
+      },
     ]
   })
 }
@@ -274,6 +338,8 @@ async function loadHistory() {
 }
 
 watch(() => history.value, initCharts)
+// 展开折叠时重新初始化图表（延迟确保 DOM 布局完成）
+watch(showDetail, (v) => { if (v) { setTimeout(() => { buildDimLineChart(); buildScoreRankChart() }, 100) } })
 onMounted(() => { window.addEventListener("resize", handleResize); loadHistory() })
 onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart?.dispose(); scoreRankChart?.dispose() })
 </script>
@@ -291,43 +357,27 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart
 .empty-state p { font-size: 18px; color: var(--color-text); margin-bottom: 8px; }
 .empty-state span { font-size: 14px; color: var(--color-text-secondary); }
 
-/* 首次评定引导 */
-.first-time-guide { text-align: center; padding: 40px 16px 24px; }
-
-.ft-emoji-wrap { position: relative; display: inline-block; margin-bottom: 20px; }
-.ft-emoji { font-size: 56px; display: block; }
-.ft-float { animation: float 3s ease-in-out infinite; }
-.ft-spark { position: absolute; font-size: 22px; animation: sparkFloat 2s ease-in-out infinite; }
-.ft-s1 { top: -10px; right: -20px; animation-delay: 0s; }
-.ft-s2 { bottom: 5px; left: -25px; animation-delay: 0.7s; }
-.ft-s3 { top: 10px; left: -10px; animation-delay: 1.4s; }
-@keyframes sparkFloat {
-  0%, 100% { opacity: 0; transform: translateY(0) scale(0.5); }
-  50% { opacity: 1; transform: translateY(-12px) scale(1.1); }
-}
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+/* 单学年空白引导视图（方案B） */
+.single-guide { text-align: center; padding: 48px 24px 40px; }
+.sg-icon-wrap { margin-bottom: 20px; opacity: 0; animation: sgFadeUp 0.4s ease-out forwards; }
+.sg-chart-icon { width: 100px; height: 80px; }
+.sg-node { animation: sgBreath 2.5s ease-in-out infinite; }
+@keyframes sgBreath {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
 }
 
-.ft-title { font-size: 22px; font-weight: var(--font-weight-bold); color: var(--color-text); margin-bottom: 8px; }
-.ft-subtitle { font-size: 14px; color: var(--color-text-secondary); margin-bottom: 28px; }
+.sg-title { font-size: 16px; font-weight: 600; color: var(--color-text); margin: 0 0 8px 0; opacity: 0; animation: sgFadeUp 0.4s ease-out 0.15s forwards; }
+.sg-desc { font-size: 13px; color: var(--color-text-secondary); margin: 0 0 24px 0; opacity: 0; animation: sgFadeUp 0.4s ease-out 0.3s forwards; }
+.sg-preview { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; opacity: 0; animation: sgFadeUp 0.4s ease-out 0.45s forwards; }
+.sg-preview-label { font-size: 12px; color: var(--color-text-tertiary); }
+.sg-preview-item { font-size: 12px; color: #9AA0A6; font-weight: 500; }
+.sg-preview-div { font-size: 11px; color: #DDE0E4; }
 
-.ft-dims { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 28px; }
-.ft-dim-card { display: flex; align-items: center; gap: 8px; padding: 16px 20px; border: 2px solid; border-radius: var(--radius-lg); background: var(--color-white); opacity: 0; animation: scaleIn 0.5s var(--easing-spring) forwards; min-width: 100px; }
-.ftd-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.ftd-name { font-size: 14px; color: var(--color-text-secondary); }
-.ftd-score { font-size: 28px; font-weight: var(--font-weight-bold); }
-.ftd-unit { font-size: 13px; color: var(--color-text-secondary); }
-
-.ft-footer { margin-top: 8px; }
-.ft-arrow { font-size: 24px; display: block; }
-.ft-bounce { animation: bounce 1.5s ease-in-out infinite; }
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(8px); }
+@keyframes sgFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-.ft-hint { font-size: 14px; color: var(--color-text-secondary); margin-top: 8px; }
 
 /* 统计卡片 */
 .stats-row { display: flex; gap: 12px; }
@@ -345,9 +395,9 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart
 
 /* 明细表 */
 .detail-table-wrap { overflow-x: auto; }
-.detail-table { width: 100%; border-collapse: collapse; font-size: 14px; }
-.detail-table th, .detail-table td { padding: 12px 10px; text-align: center; border-bottom: 1px solid var(--color-border); }
-.detail-table th { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); font-size: 13px; }
+.detail-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.detail-table th, .detail-table td { padding: 13px 10px; text-align: center; border-bottom: 1px solid var(--color-border); }
+.detail-table th { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); font-size: 14px; }
 .detail-table td:first-child { text-align: left; font-weight: var(--font-weight-medium); }
 .td-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .arrow-up { color: #059669; font-size: 12px; margin-left: 3px; }
@@ -360,6 +410,15 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart
 /* 趋势总结 */
 .trend-summary .ts-section { padding: 8px 0; font-size: 14px; line-height: 1.8; color: var(--color-text); }
 .trend-summary .ts-section p { margin: 0; }
+
+/* 历史详情折叠 */
+.history-fold { margin-top: 16px; }
+.history-fold-bar { display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 0; cursor:pointer; font-size:13px; color:var(--color-primary); user-select:none; border-top:1px solid var(--color-border); transition:color 0.2s; }
+.history-fold-bar:hover { color:var(--color-text); }
+.hf-arrow { font-size:18px; transition:transform 0.3s; }
+.hf-arrow.rotated { transform:rotate(180deg); }
+.history-fold-body { display:flex; flex-direction:column; gap:24px; padding-top:4px; }
+.history-fold:not(.expanded) .history-fold-body { display:none; }
 
 @media (max-width: 768px) { .stats-row { flex-wrap: wrap; } .stat-card { flex: 1 1 45%; } .charts-grid { grid-template-columns: 1fr; } }
 </style>

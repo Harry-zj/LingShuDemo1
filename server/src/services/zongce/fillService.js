@@ -1,7 +1,7 @@
 /**
  * 综测自动填表引擎
  * - Word (.docx): docxtemplater + pizzip 占位符替换
- * - 开发期使用内置 MOCK_DATA 模拟前三个模块的输出
+ * - 从数据库读取用户真实评定数据
  */
 
 const fs = require("fs");
@@ -10,115 +10,151 @@ const PizZip = require("pizzip");
 const Docxtemplater = require("docxtemplater");
 
 // ============================================================
-// 模拟数据（开发期）
+// 从数据库构建填表数据（替代硬编码 MOCK_DATA）
 // ============================================================
-const MOCK_DATA = {
-  // === 基本信息 ===
-  real_name: "张三",
-  student_id: "2024001001",
-  academic_year: "2024-2025",
-  grade: "优",
 
-  // === F1 基本素质（减分制，A1~A5 各 20 分基准分） ===
-  F1_A1_score: 20,  F1_A1_base: 20,
-  F1_A1_detail: "思想政治表现良好，全勤参加政治学习及形势与政策课",
-  F1_A2_score: 18,  F1_A2_base: 20,
-  F1_A2_detail: "道德品质良好，寝室卫生1次不合格扣2分",
-  F1_A3_score: 20,  F1_A3_base: 20,
-  F1_A3_detail: "学习态度端正，无旷课迟到早退记录",
-  F1_A4_score: 20,  F1_A4_base: 20,
-  F1_A4_detail: "严格遵守校纪校规，无任何违纪处分",
-  F1_A5_score: 20,  F1_A5_base: 20,
-  F1_A5_detail: "积极参加体育锻炼和班级活动，体测达标",
-  F1_total: 98,  // A1+A2+A3+A4+A5 = 20+18+20+20+20
-  F1_weighted: 9.8,  // F1×10%
+/**
+ * 从 assessment_forms + assessment_form_items + users 表中构建填表数据
+ * @param {import('mysql2/promise').Pool} pool - 数据库连接池
+ * @param {number} userId - 用户ID
+ * @returns {object} 填表数据
+ */
+async function buildFillDataFromDB(pool, userId) {
+  // 1) 查询用户基本信息
+  const [users] = await pool.execute(
+    "SELECT real_name, student_no, grade, college, major, class_name FROM users WHERE id = ?",
+    [userId]
+  );
+  if (users.length === 0) {
+    throw new Error("用户不存在");
+  }
+  const user = users[0];
 
-  // === F2 课程学习成绩（加权平均分） ===
-  F2_weighted_avg: 90.21,
-  F2_weighted: 58.64,  // F2×65%
-  F2_courses: [
-    { name: "高等数学（上）",   credit: 5, score: 92 },
-    { name: "大学英语（三）",   credit: 4, score: 88 },
-    { name: "C语言程序设计",    credit: 4, score: 95 },
-    { name: "大学物理（上）",   credit: 3, score: 85 },
-    { name: "思想道德与法治",   credit: 2, score: 90 },
-    { name: "数据结构",         credit: 4, score: 91 },
-    { name: "线性代数",         credit: 3, score: 87 },
-    { name: "马克思主义原理",   credit: 2, score: 86 },
-    { name: "体育（1）",        credit: 1, score: 90 },
-  ],
+  // 2) 查询最新 assessment_form
+  const [forms] = await pool.execute(
+    "SELECT * FROM assessment_forms WHERE student_id = ? ORDER BY id DESC LIMIT 1",
+    [userId]
+  );
 
-  // === F3 创新素质与实践能力（加分制，B1~B8） ===
-  // B1 职业技能类
-  F3_B1_score: 8.0,  F3_B1_max: 30,
-  F3_B1_detail: "CET-6通过（+4分），国家计算机二级证书（+4分）",
-  F3_B1_items: [
-    { desc: "CET-6 通过", score: "4.0" },
-    { desc: "国家计算机二级证书", score: "4.0" },
-  ],
+  let scores = {};
+  if (forms.length > 0) {
+    const raw = forms[0].scores;
+    scores = typeof raw === "string" ? JSON.parse(raw) : (raw || {});
+  }
 
-  // B2 科技学术类
-  F3_B2_score: 18.0,  F3_B2_max: 30,
-  F3_B2_detail: "全国大学生数学建模竞赛省级二等奖（+8分），SCI二区论文第二作者（+10分）",
-  F3_B2_items: [
-    { desc: "全国大学生数学建模竞赛二等奖（省级）", score: "8.0" },
-    { desc: "SCI二区论文发表（第二作者）", score: "10.0" },
-  ],
+  // 3) 查询 assessment_form_items
+  let items = [];
+  if (forms.length > 0) {
+    const [itemRows] = await pool.execute(
+      "SELECT * FROM assessment_form_items WHERE form_id = ? ORDER BY sort_order ASC",
+      [forms[0].id]
+    );
+    items = itemRows;
+  }
 
-  // B3 社会工作类
-  F3_B3_score: 6.0,  F3_B3_max: 30,
-  F3_B3_detail: "院学生会学习部副部长（+4分），班级团支书（+2分）",
-  F3_B3_items: [
-    { desc: "院学生会学习部副部长", score: "4.0" },
-    { desc: "班级团支书", score: "2.0" },
-  ],
+  // 4) 查询课程成绩（从 evaluation_results.dimension_scores 中提取）
+  let courses = [];
+  if (forms.length > 0) {
+    const [evalRows] = await pool.execute(
+      "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = ? ORDER BY id DESC LIMIT 1",
+      [userId, forms[0].batch_id]
+    );
+    if (evalRows.length > 0) {
+      const ds = evalRows[0].dimension_scores;
+      const dimData = typeof ds === "string" ? JSON.parse(ds) : (ds || {});
+      courses = dimData.courses || [];
+    }
+  }
 
-  // B4 宣传报道类
-  F3_B4_score: 3.0,  F3_B4_max: 30,
-  F3_B4_detail: "校报发表新闻稿2篇（+3分）",
-  F3_B4_items: [
-    { desc: "校报发表新闻稿2篇", score: "3.0" },
-  ],
+  // 5) 构建与旧 MOCK_DATA 兼容的数据结构
+  const f1 = scores.F1_details || {};
+  const f3 = scores.F3_details || {};
 
-  // B5 文学艺术创作类
-  F3_B5_score: 0,  F3_B5_max: 30,
-  F3_B5_detail: "本学年无相关成果",
-  F3_B5_items: [],
+  const F1_A1 = f1.A1 ?? 0;
+  const F1_A2 = f1.A2 ?? 0;
+  const F1_A3 = f1.A3 ?? 0;
+  const F1_A4 = f1.A4 ?? 0;
+  const F1_A5 = f1.A5 ?? 0;
+  const F1_total = F1_A1 + F1_A2 + F1_A3 + F1_A4 + F1_A5;
 
-  // B6 文艺与体育竞赛类
-  F3_B6_score: 8.0,  F3_B6_max: 30,
-  F3_B6_detail: "校运会100米第二名（+5分），校园歌手大赛一等奖（+3分）",
-  F3_B6_items: [
-    { desc: "校运会100米第二名", score: "5.0" },
-    { desc: "校园歌手大赛一等奖", score: "3.0" },
-  ],
+  const F3_B1 = f3.B1 ?? 0;
+  const F3_B2 = f3.B2 ?? 0;
+  const F3_B3 = f3.B3 ?? 0;
+  const F3_B4 = f3.B4 ?? 0;
+  const F3_B5 = f3.B5 ?? 0;
+  const F3_B6 = f3.B6 ?? 0;
+  const F3_B7 = f3.B7 ?? 0;
+  const F3_B8 = f3.B8 ?? 0;
+  const F3_total = F3_B1 + F3_B2 + F3_B3 + F3_B4 + F3_B5 + F3_B6 + F3_B7 + F3_B8;
 
-  // B7 其他实践活动类
-  F3_B7_score: 7.5,  F3_B7_max: 30,
-  F3_B7_detail: "青马小组组长（+3分），阳光长跑两学期完成（+3分），单词打卡270天以上（+1.5分）",
-  F3_B7_items: [
-    { desc: "青马小组组长", score: "3.0" },
-    { desc: "阳光长跑两学期均完成", score: "3.0" },
-    { desc: "英语单词/听力打卡270天以上", score: "1.5" },
-  ],
+  // 从 items 中获取详情描述
+  const itemMap = {};
+  for (const it of items) {
+    itemMap[it.sub_key] = { reason: it.reason || "", score: it.score || 0 };
+  }
 
-  // B8 劳育类
-  F3_B8_score: 6.3,  F3_B8_max: 30,
-  F3_B8_detail: "暑期社会实践优秀团队（+3分），校级优秀寝室（+1分），教务办值班6次（+1.8分），社区劳动2次（+0.5分）",
-  F3_B8_items: [
-    { desc: "暑期社会实践优秀团队", score: "3.0" },
-    { desc: "优秀寝室（校级）", score: "1.0" },
-    { desc: "教务办值班（6次×0.3分）", score: "1.8" },
-    { desc: "社区劳动活动（2次）", score: "0.5" },
-  ],
+  function detail(key) {
+    return itemMap[key]?.reason || "";
+  }
 
-  F3_total: 56.8,
-  F3_weighted: 14.2,  // F3×25%
+  function itemList(key) {
+    const i = itemMap[key];
+    return i ? [{ desc: i.reason, score: String(i.score) }] : [];
+  }
 
-  // === 综测总分 ===
-  // F = F1×10% + F2×65% + F3×25% = 9.8 + 58.64 + 14.2
-  total_score: 82.64,
-};
+  const f2WeightedAvg = scores.f2_course_learning ?? (courses.length > 0
+    ? (courses.reduce((s, c) => s + c.score * c.credit, 0) / courses.reduce((s, c) => s + c.credit, 0)).toFixed(2)
+    : 0);
+
+  const totalScore = scores.total
+    ?? (F1_total * 0.1 + Number(f2WeightedAvg) * 0.65 + F3_total * 0.25).toFixed(2);
+
+  const gradeLevels = [
+    { min: 90, label: "优" },
+    { min: 80, label: "良" },
+    { min: 70, label: "中" },
+    { min: 60, label: "合格" },
+    { min: 0,  label: "待提升" },
+  ];
+  const gradeLabel = (gradeLevels.find(g => Number(totalScore) >= g.min) || gradeLevels[gradeLevels.length - 1]).label;
+
+  return {
+    // 基本信息
+    real_name: user.real_name || "",
+    student_id: user.student_no || "",
+    academic_year: forms.length > 0 ? forms[0].batch_title || "" : "",
+    grade: gradeLabel,
+
+    // F1
+    F1_A1_score: F1_A1, F1_A1_base: 20, F1_A1_detail: detail("A1"),
+    F1_A2_score: F1_A2, F1_A2_base: 20, F1_A2_detail: detail("A2"),
+    F1_A3_score: F1_A3, F1_A3_base: 20, F1_A3_detail: detail("A3"),
+    F1_A4_score: F1_A4, F1_A4_base: 20, F1_A4_detail: detail("A4"),
+    F1_A5_score: F1_A5, F1_A5_base: 20, F1_A5_detail: detail("A5"),
+    F1_total,
+    F1_weighted: parseFloat((F1_total * 0.1).toFixed(2)),
+
+    // F2
+    F2_weighted_avg: Number(f2WeightedAvg),
+    F2_weighted: parseFloat((Number(f2WeightedAvg) * 0.65).toFixed(2)),
+    F2_courses: courses.length > 0 ? courses : [],
+
+    // F3
+    F3_B1_score: F3_B1, F3_B1_max: 30, F3_B1_detail: detail("B1"), F3_B1_items: itemList("B1"),
+    F3_B2_score: F3_B2, F3_B2_max: 30, F3_B2_detail: detail("B2"), F3_B2_items: itemList("B2"),
+    F3_B3_score: F3_B3, F3_B3_max: 30, F3_B3_detail: detail("B3"), F3_B3_items: itemList("B3"),
+    F3_B4_score: F3_B4, F3_B4_max: 30, F3_B4_detail: detail("B4"), F3_B4_items: itemList("B4"),
+    F3_B5_score: F3_B5, F3_B5_max: 30, F3_B5_detail: detail("B5"), F3_B5_items: itemList("B5"),
+    F3_B6_score: F3_B6, F3_B6_max: 30, F3_B6_detail: detail("B6"), F3_B6_items: itemList("B6"),
+    F3_B7_score: F3_B7, F3_B7_max: 30, F3_B7_detail: detail("B7"), F3_B7_items: itemList("B7"),
+    F3_B8_score: F3_B8, F3_B8_max: 30, F3_B8_detail: detail("B8"), F3_B8_items: itemList("B8"),
+    F3_total,
+    F3_weighted: parseFloat((F3_total * 0.25).toFixed(2)),
+
+    // 总分
+    total_score: Number(totalScore),
+  };
+}
 
 // ============================================================
 // 填表引擎
@@ -127,16 +163,16 @@ const MOCK_DATA = {
 /**
  * 填充 Word (.docx) 模板
  * @param {string} templatePath - 模板文件路径
- * @param {object} data - 填充数据（默认使用 MOCK_DATA）
+ * @param {object} data - 填充数据
  * @returns {Buffer} 填充后的 docx 文件 buffer
  */
-function fillDocx(templatePath, data = null) {
-  const fillData = data || MOCK_DATA;
+function fillDocx(templatePath, data) {
+  if (!data) throw new Error("填表数据不能为空");
 
   // 读取模板文件
   const content = fs.readFileSync(templatePath);
 
-  // ===== 预检查：扫描模板中是否有花括号占位符 =====
+  // 预检查：扫描模板中是否有花括号占位符
   const text = content.toString("utf-8");
   const braceMatches = text.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) || [];
   console.log("[fillDocx] 模板中检测到花括号标记:", braceMatches.length, "个");
@@ -162,7 +198,7 @@ function fillDocx(templatePath, data = null) {
     console.warn("[fillDocx] 无法解析 document.xml:", e.message);
   }
 
-  // 配置 docxtemplater（默认分隔符就是 { }，不显式设置避免潜在冲突）
+  // 配置 docxtemplater
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
@@ -170,10 +206,9 @@ function fillDocx(templatePath, data = null) {
 
   // 设置数据并渲染
   try {
-    doc.render(fillData);
+    doc.render(data);
     console.log("[fillDocx] 渲染完成");
   } catch (e) {
-    // 整理错误信息，方便调试
     const errMsg = e.properties?.errors
       ? e.properties.errors.map((err) => "占位符 \"" + err.tag + "\" 替换失败: " + (err.explanation || err.message)).join("；")
       : e.message;
@@ -186,7 +221,7 @@ function fillDocx(templatePath, data = null) {
     compression: "DEFLATE",
   });
 
-  // ===== 后检查：验证输出中是否还有未替换的占位符 =====
+  // 后检查：验证输出中是否还有未替换的占位符
   const outZip = new PizZip(buffer);
   try {
     const outXml = outZip.files["word/document.xml"].asText();
@@ -202,20 +237,23 @@ function fillDocx(templatePath, data = null) {
 }
 
 /**
- * 获取填充数据（开发期返回 MOCK_DATA，上线后从数据库读取）
+ * 获取填表数据（从数据库读取）
+ * @param {import('mysql2/promise').Pool} pool - 数据库连接池
+ * @param {number} userId - 用户ID
  */
-function getFillData(userId = null) {
-  // TODO: 上线后从 evaluation_results 表读取真实数据
-  // const [rows] = await pool.execute("SELECT * FROM evaluation_results WHERE user_id = ?", [userId]);
-  // if (rows.length > 0) return transformEvalToFillData(rows[0]);
-  return { ...MOCK_DATA };
+async function getFillData(pool, userId) {
+  if (!userId) throw new Error("用户ID不能为空");
+  return buildFillDataFromDB(pool, userId);
 }
 
 /**
- * 获取模拟数据（供前端预览）
+ * 获取模拟数据（从数据库读取，供前端预览）
+ * @param {import('mysql2/promise').Pool} pool - 数据库连接池
+ * @param {number} userId - 用户ID
  */
-function getMockData() {
-  return { ...MOCK_DATA };
+async function getMockData(pool, userId) {
+  if (!userId) throw new Error("用户ID不能为空");
+  return buildFillDataFromDB(pool, userId);
 }
 
-module.exports = { fillDocx, getFillData, getMockData, MOCK_DATA };
+module.exports = { fillDocx, getFillData, getMockData };

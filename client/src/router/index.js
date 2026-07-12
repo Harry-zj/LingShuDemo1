@@ -10,9 +10,10 @@ const routes = [
   { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
   { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
   /* 模块二 */
-  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "评定结果" } },
+  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "数据总览" } },
   { path: "/module2/profile", name: "PersonalProfile", component: () => import("../views/module2/PersonalProfile.vue"), meta: { layout: "main", title: "个人画像" } },
   { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告" } },
+{ path: "/module2/dimension/:key", name: "DimensionDetail", component: () => import("../views/module2/DimensionDetail.vue"), meta: { layout: "main", title: "维度活动指南" } },
   /* 模块三 */
   { path: "/module3/student", name: "StudentDashboard", component: () => import("../views/module3/StudentDashboard.vue"), meta: { layout: "main", title: "我的综测" } },
   { path: "/module3/class-leader", name: "ClassLeaderDesk", component: () => import("../views/module3/ClassLeaderDesk.vue"), meta: { layout: "main", title: "评价学生列表", roles: ["admin", "class_committee", "counselor", "student_affairs"] } },

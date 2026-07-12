@@ -28,7 +28,7 @@
 
         <router-link to="/module2/evaluation" class="nav-item" active-class="active">
           <VIcon icon="mdi:chart-pie-outline" class="nav-icon" />
-          <span class="nav-text">个性评定</span>
+          <span class="nav-text">数据总览</span>
         </router-link>
 
         <router-link to="/module3/student" class="nav-item" active-class="active">
