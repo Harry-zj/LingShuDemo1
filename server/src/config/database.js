@@ -48,6 +48,20 @@ async function initDatabase() {
 
     console.log("[DB] 建表完成，开始种子数据...");
 
+    // 报告缓存表（跨设备同步 AI 内容 + 用户数据）
+    await conn.query(`CREATE TABLE IF NOT EXISTS report_cache (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      batch_id INT NOT NULL,
+      report_data JSON,
+      dim_profiles JSON,
+      goals JSON,
+      plan_done JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_user_batch (user_id, batch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
     // 迁移：evaluation_results 表结构升级（兼容旧表）
     const migrations = [
       "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",

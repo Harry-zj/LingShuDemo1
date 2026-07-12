@@ -354,8 +354,31 @@ function fillDocx(templatePath, data) {
   // 读取模板文件
   const content = fs.readFileSync(templatePath);
 
+  // 预检查：扫描模板中是否有花括号占位符
+  const text = content.toString("utf-8");
+  const braceMatches = text.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) || [];
+  console.log("[fillDocx] 模板中检测到花括号标记:", braceMatches.length, "个");
+  if (braceMatches.length > 0) {
+    console.log("[fillDocx] 标记列表:", [...new Set(braceMatches)].slice(0, 20).join(", "));
+  }
+
   // 用 pizzip 加载 docx（本质是 zip）
   const zip = new PizZip(content);
+
+  // 查看 document.xml 中的标签情况
+  try {
+    const docXml = zip.files["word/document.xml"].asText();
+    const xmlBraces = docXml.match(/\{[a-zA-Z_][a-zA-Z0-9_]*\}/g) || [];
+    console.log("[fillDocx] document.xml 中检测到标记:", xmlBraces.length, "个");
+    if (xmlBraces.length > 0) {
+      console.log("[fillDocx] XML标记:", [...new Set(xmlBraces)].slice(0, 20).join(", "));
+    } else {
+      console.warn("[fillDocx] WARNING: document.xml 中未检测到任何 {tag} 占位符！");
+      console.warn("[fillDocx] 请确保模板中使用了 {real_name} {student_id} 等占位符格式");
+    }
+  } catch (e) {
+    console.warn("[fillDocx] 无法解析 document.xml:", e.message);
+  }
 
   // 配置 docxtemplater
   const doc = new Docxtemplater(zip, {

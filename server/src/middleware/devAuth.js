@@ -34,5 +34,9 @@ module.exports = (req, res, next) => {
     username: 'admin',
     role: 'admin',
   };
+  const u = users[as] || users.zhangsan;
+  req.user = u;
+  // 不污染后续请求
+  delete req.query.as;
   next();
 };

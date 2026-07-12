@@ -228,8 +228,8 @@ const modules = [
     stage: 'Chat'
   },
   {
-    title: '评定结果',
-    desc: '查看五维评分、画像分析与评定结果。',
+    title: '数据总览',
+    desc: '查看五维评分、画像分析与综测数据。',
     path: '/module2/evaluation',
     icon: 'mdi:chart-box-outline',
     color: '#D97706',
