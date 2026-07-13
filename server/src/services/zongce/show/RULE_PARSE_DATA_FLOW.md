@@ -6,7 +6,7 @@
 
 规则解析是将用户上传的 **DOCX 综测规则文件**（如《湖南师范大学学生综合素质测评办法》）自动拆解为结构化计分规则的过程。
 
-**一句话概括**：DOCX → 文档结构提取 → 章节拆分 → AI 并行解析 → 合并去重校验 → 写入数据库。
+**一句话概括**：DOCX → 文档结构提取 → 章节拆分 → AI 并行解析 → 直接写入数据库。
 
 ```
 前端 SmartFillRule.vue
@@ -146,27 +146,72 @@ splitLargeTasks(blocks, parseTasks)
 
 **代码**：[deepseek.js](../ai/deepseek.js) `chatStreamJson()` + [prompts.js](../ai/prompts.js) `V3_RULE_PARSE_SYSTEM`
 
+#### 3.1 为什么只让 AI 解析 F3？
+
+综测分数的三个维度中，只有 F3 需要 AI 参与：
+
+| 维度 | 分值来源 | 解析方式 | 为什么不需要 AI |
+|------|----------|----------|-----------------|
+| **F1 基本素质** | A1-A5 五项评分（每项0-20分） | 人工打分 | 主观评价，评委会手动给分 |
+| **F2 课程成绩** | 各科成绩 × 学分 / 总学分 | 数学公式 | 加权平均，确定性计算 |
+| **F3 创新实践** | B1-B8 八类竞赛/活动加分 | **AI 解析** | 规则散落在政策文档的表格和段落中 |
+
+F3 的规则藏在几十页的 DOCX 文档里——表格、标注、括号说明、补充条款——没有固定格式，纯靠正则匹配会漏掉大量内容。这是 AI 唯一能发挥长处的环节。
+
+#### 3.2 提示词如何限制 AI 只输出 F3
+
+**文件**：[prompts.js](../ai/prompts.js) 第 44-58 行
+
+```js
+const V3_RULE_PARSE_SYSTEM = `Extract ONLY F3 (innovation & practice) scoring rules.
+Ignore F1/F2. Only extract "level + rank = score" rules.
+
+Output:
+{ "f3_rules": [
+    { "item_key":"B2", "item_name":"discipline competition", "score_level":"national",
+      "score_rank":"first prize", "score":10, "keywords":"math modeling challenge cup",
+      "description":"National discipline competition first prize" }
+  ], "notes": [] }
+
+Fields: item_key(B1~B8), score_level(national/provincial/school/college),
+score_rank(original text), score(integer), keywords(space-separated), description
+Only extract rules with explicit scores. Split lookup tables by cell.
+Only output JSON.`;
 ```
-13 个任务，每批 6 个并行 → DeepSeek API
+
+这是**提示词级别的约束**，不是代码过滤。这段文本作为 System Message 直接发给 DeepSeek，AI 读了 `Extract ONLY F3` 和 `Ignore F1/F2` 后，就不会在返回的 JSON 中包含 F1/F2 相关内容。
+
+提示词中的关键约束：
+- `Extract ONLY F3` / `Ignore F1/F2` — 排除 F1/F2
+- `item_key(B1~B8)` — 限定输出字段为 B1-B8 八个子类别
+- `Only extract rules with explicit scores` — 只提取明确标注了分值的行
+- `Split lookup tables by cell` — 表格的每个单元格单独作为一条规则
+- `Only output JSON` — 禁止 AI 输出解释文字
+
+#### 3.3 并行执行流程
+
+```
+13 个任务，每批 6 个并行 → DeepSeek API（v4-flash）
   每个任务的请求体:
-    System: V3_RULE_PARSE_SYSTEM
-      "只提取 F3（创新实践）计分规则。
-       字段: item_key(B1~B8), score_level(national/provincial/school/college),
-             score_rank, score(整数), keywords, description
-       只提取明确有分数的规则。表格按单元格拆分。"
-    User: "=== 第四章 > （一）职业技能类（B1）===\n[该章节 DOCX 文本]"
-      
-  单个任务重试策略（最多 3 次）:
-    重试条件: terminated / ETIMEDOUT / ECONNRESET / 格式异常
-    不重试:   API 401/403 等认证错误
+    System: V3_RULE_PARSE_SYSTEM     ← 上面那段提示词
+    User:   "=== 第四章 > B1 ===\n"   ← 对应章节的原始文本
+           + taskText
 
   AI 返回 → chatStreamJson 处理:
     ├─ 流式接收 DeepSeek SSE → 累积完整文本
-    ├─ extractAndCleanJson(): 去掉 code block、找 JSON 边界、修复尾逗号
-    ├─ repairTruncatedJson(): 补全未闭合括号/字符串
-    ├─ 5 种清洗策略依次尝试 → JSON.parse()
-    └→ 返回 { f3_rules: [...] }
+    ├─ extractAndCleanJson(): 去掉 markdown code block、找 JSON 边界、修复尾逗号
+    ├─ repairTruncatedJson(): 补全被 maxTokens 截断的 JSON（未闭合的括号/字符串）
+    ├─ 5 种清洗策略依次尝试（standard → repair → clean+repair → no_codeblock → raw）
+    └→ 任一策略 JSON.parse 成功即返回 { f3_rules: [...] }
 ```
+
+**单个任务重试策略（最多 3 次）**：
+| 错误类型 | 是否重试 | 原因 |
+|----------|----------|------|
+| `terminated`（模型内部中断） | ✅ 重试 | 瞬时故障，通常秒级恢复 |
+| `ETIMEDOUT` / `ECONNRESET` | ✅ 重试 | 网络波动 |
+| `格式异常` / `JSON解析` | ✅ 重试 | 可能这次返回格式不同 |
+| `401` / `403` 认证错误 | ❌ 不重试 | API Key 问题，重试没用 |
 
 **每个任务返回格式**：
 ```json
@@ -187,22 +232,39 @@ splitLargeTasks(blocks, parseTasks)
 
 ---
 
-### Step 4：单任务去重 + 跨任务合并
+### Step 4：汇总写入（无去重）
 
-**代码**：[ruleParser.js](../ai/parsing/ruleParser.js) `dedupPerTask()` + `mergeAndDedupResults()`
+**代码**：[ruleParser.js](../ai/parsing/ruleParser.js) 第 585-619 行
 
+V3 的处理非常直接——**不做去重，不做合并**。所有成功任务的 `f3_rules` 数组直接拼接，逐条写入 `scoring_rules`：
+
+```js
+// 第 587-593 行：把 13 个任务的 f3_rules 拼成一个数组
+const allResult = { f3_rules: [] };
+for (const r of validResults) {
+    if (r.f3_rules) for (const rule of r.f3_rules) {
+        if (rule.item_key && rule.score != null) allResult.f3_rules.push(rule);
+    }
+}
+
+// 第 602-618 行：逐条 INSERT，没有任何去重
+for (const r of f3Rules) {
+    await conn.execute("INSERT INTO scoring_rules (...) VALUES (...)");
+}
 ```
-每个任务的 AI 结果
-  └→ dedupPerTask(result)
-      单任务内去重: 按 canonical_key 去重
 
-所有任务结果
-  └→ mergeAndDedupResults(allResults, allTasks)
-      ├─ indicators: 递归树合并
-      ├─ packages: 按 canonical_key 合并 rules
-      ├─ lookup_tables + uncertainties: 按 key 合并
-      └→ 输出: { merged, sourceRefs, duplicates }
-```
+**为什么不需要去重？**
+
+AI 返回的每条规则都带有 `item_key`（B1-B8），这个字段天然区分了不同的加分类型：
+
+| 任务 | 章节 | AI 提取的规则 | item_key | 会重复吗？ |
+|------|------|-------------|----------|-----------|
+| Task 5 | 第四章 > B2 学术竞赛 | 国家级一等奖 +10分 | B2 | — |
+| Task 8 | 第四章 > B7 文体竞赛 | 国家级一等奖 +10分 | **B7** | ❌ item_key 不同 |
+
+两条规则虽然分数和等级相同，但 `item_key` 不同（B2 vs B7），写入 `scoring_rules` 后是不同的行，不会互相覆盖。但如果两个任务恰好在同一章节的边界处都识别到了同一条 B2 规则，确实会写入两条几乎相同的记录——这在当前 V3 中是已知行为，不影响评分引擎的计算结果（评分时会自然去重）。
+
+后续如需优化，可以在写入前加一步 `item_key + score_level + score_rank + score` 的去重检查。
 
 ---
 
@@ -268,17 +330,16 @@ VALUES (?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
            └──────────────┘
                     │
                     ▼
-           ┌───────────────────┐
-           │  13 个解析任务     │  每批 6 个并行
-           │  每任务 1 次 AI 调用│  DeepSeek v4-flash
-           └────────┬──────────┘
-                    │
-                    ▼
-           ┌───────────────────┐
-           │  AI 返回 f3_rules │  5 种 JSON 清洗策略
-           │  单任务去重        │
-           │  跨任务合并        │
-           └────────┬──────────┘
+                        ┌───────────────────┐
+                        │  13 个解析任务     │  每批 6 个并行
+                        │  每任务 1 次 AI 调用│  DeepSeek v4-flash
+                        └────────┬──────────┘
+                                 │
+                                 ▼
+                        ┌───────────────────┐
+                        │  AI 返回 f3_rules │  5 种 JSON 清洗策略
+                        │  汇总拼接（不合并）│  不跨任务去重
+                        └────────┬──────────┘
                     │
                     ▼
            ┌───────────────────┐
@@ -396,8 +457,9 @@ VALUES (?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
 ## 六、关键设计决策
 
 1. **文档结构确定性解析**：Chapter 识别不依赖 AI，用正则和样式信息，100% 可重现
-2. **大任务智能拆分**：4000 字阈值，按业务块（B1-B8）或表格语义单元切分，避免 AI 上下文窗口溢出
-3. **每任务独立 AI 调用 + 跨任务合并**：并行 6 路提升速度，事后按 canonical_key 去重合并
-4. **JSON 多策略清洗**：AI 返回格式不可控，5 层降级策略保证鲁棒性
-5. **V3 简化**：AI 只做"文字理解"输出 `f3_rules[]`，不做规则匹配（匹配交给后续的匹配管线）
-6. **SSE 进度推送**：前端通过 `/stream` 端点实时获取解析进度
+2. **大任务智能拆分**：4000 字阈值，按业务块（B1-B8）或表格语义单元切分，避免 AI 超出上下文窗口
+3. **提示词限制 F3**：通过自然语言 System Prompt 告诉 AI 只提取 F3 规则，无需代码层面过滤
+4. **并行 6 路直写**：每批 6 个任务并行调 AI，所有 `f3_rules` 汇总后直接写入 DB，不跨任务去重
+5. **JSON 多策略清洗**：AI 返回格式不可控，5 层降级策略（standard → repair → clean+repair → no_codeblock → raw）保证鲁棒性
+6. **V3 简化**：AI 只做"文字理解"输出 `f3_rules[]`，不做规则匹配（匹配交给后续的匹配管线）
+7. **SSE 进度推送**：前端通过 `/stream` 端点实时获取解析进度

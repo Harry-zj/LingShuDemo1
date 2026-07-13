@@ -45,14 +45,57 @@ exports.getRuleSources = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 删除规则来源
+// 删除规则来源（事务级联删除）
 exports.deleteRuleSource = async (req, res) => {
+  const { id } = req.params;
+  const conn = await pool.getConnection();
   try {
-    const { id } = req.params;
-    await pool.execute("DELETE FROM rule_set_documents WHERE rule_source_id = ?", [id]);
-    await pool.execute("DELETE FROM rule_sources WHERE id = ? AND user_id = ?", [id, req.user.id]);
+    // 1. 查关联信息
+    const [sources] = await conn.execute("SELECT * FROM rule_sources WHERE id = ? AND user_id = ?", [id, req.user.id]);
+    if (!sources.length) return res.json(Res.error("规则来源不存在"));
+    const source = sources[0];
+
+    // 2. 找关联的 rule_set
+    const [docs] = await conn.execute("SELECT rule_set_id FROM rule_set_documents WHERE rule_source_id = ?", [id]);
+    const ruleSetIds = docs.map(d => d.rule_set_id);
+
+    await conn.beginTransaction();
+
+    // 3. 级联删除 scoring_rules
+    if (ruleSetIds.length) {
+      await conn.execute(`DELETE FROM scoring_rules WHERE rule_set_id IN (${ruleSetIds.map(() => '?').join(',')})`, ruleSetIds);
+    }
+    // 4. 删除 rule_set_documents
+    await conn.execute("DELETE FROM rule_set_documents WHERE rule_source_id = ?", [id]);
+    // 5. 删除关联的 rule_sets（已无文档关联的）
+    if (ruleSetIds.length) {
+      await conn.execute(`DELETE FROM rule_sets WHERE id IN (${ruleSetIds.map(() => '?').join(',')})`, ruleSetIds);
+    }
+    // 6. 删除 doc_blocks
+    await conn.execute("DELETE FROM doc_blocks WHERE rule_source_id = ?", [id]);
+    // 7. 删除 document_parse_runs
+    await conn.execute("DELETE FROM document_parse_runs WHERE rule_source_id = ?", [id]);
+    // 8. 删除 ai_tasks（rule_parse 类型）
+    await conn.execute("DELETE FROM ai_tasks WHERE target_type = 'rule_parse' AND target_id = ?", [id]);
+    // 9. 删除 rule_sources 本身
+    await conn.execute("DELETE FROM rule_sources WHERE id = ?", [id]);
+
+    await conn.commit();
+
+    // 10. 删除物理文件
+    if (source.file_path) {
+      const fs = require("fs");
+      const filePath = require("path").join(__dirname, "../../../uploads", source.file_path);
+      try { fs.unlinkSync(filePath); } catch (_) { /* 文件可能已不存在 */ }
+    }
+
     res.json(Res.success(null, "已删除"));
-  } catch (e) { res.json(Res.error(e.message)); }
+  } catch (e) {
+    await conn.rollback();
+    res.json(Res.error(e.message));
+  } finally {
+    conn.release();
+  }
 };
 
 const activeParses = new Map();

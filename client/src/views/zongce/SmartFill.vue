@@ -199,7 +199,7 @@ onMounted(async () => {
 })
 
 async function removeRuleSource(id) {
-  if (!confirm('删除该规则来源？')) return
+  if (!confirm('确定删除该规则文件吗？\n\n相关的文档结构、解析记录、规则集和计分规则将一并删除，此操作不可恢复。')) return
   const res = await api.deleteRuleSource(id)
   if (res.code === 200) refreshRules()
   else alert(res.msg)
