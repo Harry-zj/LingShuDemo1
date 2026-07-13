@@ -121,6 +121,20 @@ async function initDatabase() {
     try { await conn.execute("ALTER TABLE scoring_rules ADD INDEX idx_sr_batch (batch_id)"); }
     catch (e) { if (e.errno !== 1061) console.warn("[DB] V5迁移 idx_sr_batch:", e.message); }
 
+    // ★ V6 迁移：rule_sources 直接关联批次
+    try { await conn.execute("ALTER TABLE rule_sources ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V6迁移 rule_sources.batch_id:", e.message); }
+    try { await conn.execute("ALTER TABLE rule_sources ADD INDEX idx_rsrc_batch (batch_id)"); }
+    catch (e) { if (e.errno !== 1061) console.warn("[DB] V6迁移 idx_rsrc_batch:", e.message); }
+
+    // ★ V7 迁移：扩大 scoring_rules 字段容量防止 AI 输出超长
+    try { await conn.execute("ALTER TABLE scoring_rules MODIFY score_level VARCHAR(100)"); }
+    catch (e) { console.warn("[DB] V7迁移 score_level:", e.message); }
+    try { await conn.execute("ALTER TABLE scoring_rules MODIFY item_name VARCHAR(100)"); }
+    catch (e) { console.warn("[DB] V7迁移 item_name:", e.message); }
+
+
+
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 

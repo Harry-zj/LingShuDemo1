@@ -1,20 +1,29 @@
-import request from "./request";
+﻿import request from "./request";
 
 // ===== 测评批次（智能填表模块使用） =====
 export const getBatches = () =>
   request.get("/zongce/batches");
 
 // ===== 规则 =====
-export const uploadRuleFiles = (formData) =>
-  request.post("/zongce/rules/upload", formData, {
+export const uploadRuleFiles = (formData, batchId) => {
+    const url = batchId ? `/zongce/rules/upload?batch_id=${batchId}` : "/zongce/rules/upload";
+  return request.post(url, formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+};
 
 export const addRuleText = (text) =>
   request.post("/zongce/rules/text", { text });
 
-export const getRuleSources = () =>
-  request.get("/zongce/rules/sources");
+export const getRuleSources = (batchId) =>
+  request.get("/zongce/rules/sources", { params: batchId ? { batch_id: batchId } : {} });
+
+export const moveRulesBatch = (fromBatchId, toBatchId) =>
+  request.put("/zongce/rules/move-batch", { from_batch_id: fromBatchId, to_batch_id: toBatchId });
+
+export const cancelParse = (taskId) =>
+  request.post(`/zongce/rules/parse/${taskId}/cancel`);
+
 
 export const deleteRuleSource = (id) =>
   request.delete(`/zongce/rules/sources/${id}`);

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="rule-page">
     <!-- 上传区 -->
     <div class="upload-row">
@@ -22,7 +22,7 @@
       <div class="progress-bar">
         <div class="progress-fill" :style="{ width: parsePercent + '%' }"></div>
       </div>
-      <span class="progress-text">{{ progressLabel }}</span>
+      <span class="progress-text">{{ progressLabel }}</span><button class="btn-text danger sm" @click="cancelCurrentParse">取消</button>
     </div>
 
     <!-- 已上传的文件 -->
@@ -33,10 +33,23 @@
         <span class="badge" :class="src.status">
           {{ parsingId === src.id ? (phaseLabels[parseProgress.phase] || '解析中') : (src.status === 'parsed' ? '已解析' : '待解析') }}
         </span>
-        <button v-if="src.status !== 'parsed'" class="btn-text primary" :disabled="!!parsingId" @click="doParse(src.id)">
-          {{ parsingId === src.id ? '⏳ 解析中...' : '🔍 解析' }}
+        <button class="btn-text primary" :disabled="!!parsingId" @click="doParse(src.id)">
+          {{ parsingId === src.id ? '解析中...' : '解析' }}
         </button>
         <button class="btn-text danger" @click="$emit('remove-source', src.id)">删除</button>
+      </div>
+    </div>
+
+    <!-- 重新解析确认弹窗 -->
+    <div v-if="reparseDialog.show" class="modal-overlay" @click.self="confirmReparse('cancel')">
+      <div class="modal-card">
+        <h4>该文件已有解析记录</h4>
+        <p>请选择操作方式：</p>
+        <div class="modal-actions">
+          <button class="btn primary" @click="confirmReparse('overwrite')">🔄 覆盖现有规则集</button>
+          <button class="btn" @click="confirmReparse('new')">➕ 新增规则集</button>
+          <button class="btn-text" @click="confirmReparse('cancel')">取消</button>
+        </div>
       </div>
     </div>
 
@@ -62,34 +75,23 @@
 
         <!-- 展开详情 -->
         <div v-if="rs._open && rs._detail" class="ruleset-body">
-          <!-- 指标树 -->
           <div class="detail-section">
-            <h5>指标结构</h5>
-            <div v-for="row in flatIndicators(rs._detail.indicators || [])" :key="row.id" class="ind-node" :style="{ paddingLeft: (row._depth * 20 + 8) + 'px' }">
-              <span class="ind-code">{{ row.code || '-' }}</span>
-              <span class="ind-name">{{ row.name }}</span>
-              <span class="ind-meta">{{ row.calc_method }} | max={{ row.max_score }} | w={{ row.weight }}</span>
+            <h5>F3 评分规则 ({{ (rs._detail.f3_rules || []).length }} 条)</h5>
+            <div class="rule-table-wrap" v-if="rs._detail.f3_rules?.length">
+              <table class="rule-table">
+                <thead><tr><th>编号</th><th>名称</th><th>等级</th><th>分值</th><th>上限</th></tr></thead>
+                <tbody>
+                  <tr v-for="r in rs._detail.f3_rules" :key="r.id">
+                    <td class="code-cell">{{ r.item_key }}</td>
+                    <td class="name-cell">{{ r.item_name }}</td>
+                    <td>{{ r.score_level || '-' }}</td>
+                    <td class="score-cell">{{ r.score }}</td>
+                    <td>{{ r.max_score || '-' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </div>
-
-          <!-- 规则包 -->
-          <div class="detail-section">
-            <h5>规则包 & 规则 ({{ rs._detail.packages?.length || 0 }})</h5>
-            <div v-for="pkg in (rs._detail.packages || [])" :key="pkg.id" class="pkg-card">
-              <div class="pkg-header">
-                <span class="pkg-name">{{ pkg.name }}</span>
-                <span class="pkg-key">{{ pkg.canonical_key }}</span>
-                <span class="pkg-level">{{ pkg.auto_level === 'manual_required' ? '⚠ 需人工' : pkg.auto_level }}</span>
-              </div>
-              <div class="pkg-rules" v-if="pkg.rules?.length">
-                <div v-for="r in pkg.rules" :key="r.id" class="rule-row">
-                  <span class="rule-type">{{ r.rule_type }}</span>
-                  <span class="rule-name">{{ r.name }}</span>
-                  <span class="rule-stage">{{ r.execution_stage }}</span>
-                  <span class="rule-scope">{{ r.application_scope }}</span>
-                </div>
-              </div>
-            </div>
+            <p v-else class="text-muted">暂无F3规则</p>
           </div>
         </div>
       </div>
@@ -103,13 +105,14 @@ import { useUserStore } from '../../stores/user'
 import * as api from '../../api/zongce'
 
 const props = defineProps({ ruleSources: Array, ruleSets: Array, batchId: { type: [Number, String], default: '' } })
-const emit = defineEmits(['remove-source', 'refresh'])
+const emit = defineEmits(['remove-source', 'refresh', 'parse-start', 'parse-end'])
 
 const ruleText = ref('')
 const fileInput = ref(null)
 const uploading = ref(false)
 const uploadingFiles = ref([])
 const parsingId = ref(null)
+const parsingTaskId = ref(null)
 const parseProgress = ref({ completed: 0, total: 0 })
 
 const parsePercent = computed(() => {
@@ -174,7 +177,7 @@ async function batchDelete() {
     catch (_) {}
   }
   selected.value = new Set()
-  emit('refresh')
+  emit('refresh'); emit('parse-end')
   alert(`已删除 ${ok}/${ids.length} 个`)
 }
 
@@ -183,8 +186,10 @@ async function deleteSet(rs) {
   if (!confirm('确定删除该规则集？')) return
   try {
     const res = await api.deleteRuleSet(rs.id)
-    if (res.code === 200) emit('refresh')
-    else alert(res.msg)
+    if (res.code === 200) {emit('refresh'); emit('parse-end')}
+    else{
+      alert(res.msg)
+   } 
   } catch (e) { alert('删除失败: ' + (e.response?.data?.msg || e.message)) }
 }
 
@@ -194,7 +199,7 @@ async function publishSet(rs) {
     const res = await api.publishRuleSet(rs.id)
     if (res.code === 200) {
       rs.status = 'published'
-      emit('refresh')
+      emit('refresh'); emit('parse-end')
     } else {
       alert(res.msg)
     }
@@ -210,9 +215,9 @@ async function onFiles(e) {
   uploading.value = true
   const fd = new FormData()
   for (const f of files) fd.append('files', f)
-  const res = await api.uploadRuleFiles(fd)
+  const res = await api.uploadRuleFiles(fd, props.batchId || undefined)
   alert(res.msg)
-  if (res.code === 200) emit('refresh')
+  if (res.code === 200) emit('refresh'); emit('parse-end')
   uploading.value = false
   uploadingFiles.value = []
 }
@@ -220,19 +225,39 @@ async function sendText() {
   if (!ruleText.value.trim()) return
   const res = await api.addRuleText(ruleText.value)
   alert(res.msg)
-  if (res.code === 200) emit('refresh')
+  if (res.code === 200) emit('refresh'); emit('parse-end')
   ruleText.value = ''
 }
 
-// 解析
+// 重新解析确认弹窗
+const reparseDialog = ref({ show: false, sourceId: null })
+
+// 解析 - 如果已解析则弹窗，否则直接解析
 async function doParse(sourceId) {
+  const src = props.ruleSources.find(s => s.id === sourceId)
+  if (src && src.status === 'parsed') {
+    reparseDialog.value = { show: true, sourceId }
+    return
+  }
+  startParse(sourceId, false)
+}
+
+function confirmReparse(action) {
+  const sid = reparseDialog.value.sourceId
+  reparseDialog.value = { show: false, sourceId: null }
+  if (action === 'cancel') return
+  startParse(sid, action === 'new')
+}
+
+async function startParse(sourceId, forceNew) {
   parsingId.value = sourceId
   parseProgress.value = { completed: 0, total: 1 }
   try {
-    const startRes = await api.parseRuleSource(sourceId, props.batchId || undefined)
+    const startRes = await api.parseRuleSource(sourceId, props.batchId || undefined, forceNew)
     if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
+    emit('parse-start')
 
-    const taskId = startRes.data.taskId
+    const taskId = startRes.data.taskId; parsingTaskId.value = taskId
     const token = useUserStore().token
     const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`)
     es.addEventListener('progress', (e) => {
@@ -241,18 +266,32 @@ async function doParse(sourceId) {
     es.addEventListener('done', async (e) => {
       es.close()
       try { const p = JSON.parse(e.data); parseProgress.value = { ...p, completed: p.total || p.task_count || 1 } } catch (_) {}
-      emit('refresh')
+      emit('refresh'); emit('parse-end')
       parsingId.value = null
+      emit('parse-end')
     })
     es.addEventListener('error', () => {
       es.close()
       alert('解析失败')
       parsingId.value = null
+      emit('parse-end')
     })
   } catch (e) {
     alert('启动解析失败: ' + (e.response?.data?.msg || e.message))
     parsingId.value = null
   }
+}
+
+async function cancelCurrentParse() {
+  if (!parsingId.value) return
+  const taskId = parsingTaskId.value
+  if (!taskId) return
+  try {
+    await api.cancelParse(taskId)
+    parsingId.value = null
+    parsingTaskId.value = null
+    emit('parse-end')
+  } catch (e) { alert(e.response?.data?.msg || '取消失败') }
 }
 
 function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
@@ -271,7 +310,7 @@ function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
 .upload-icon { font-size: 32px; }
 .hint { font-size: 12px; color: var(--color-text-tertiary); }
 
-.progress-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.progress-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; } .progress-bar-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
 .progress-bar { flex: 1; height: 8px; background: var(--color-bg); border-radius: 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--color-primary); border-radius: 4px; transition: width 0.3s; }
 .progress-text { font-size: 13px; color: var(--color-primary); white-space: nowrap; }
@@ -323,4 +362,14 @@ function truncate(s, n) { return s?.length > n ? s.slice(0, n) + '...' : s }
 .sub-label { font-size: 13px; font-weight: 500; color: var(--color-text-secondary); }
 .sub-count { font-size: 12px; color: var(--color-text-tertiary); }
 .btn-text.sm { padding: 2px 10px; font-size: 12px; }
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:100; }
+.modal-card { background:var(--color-surface); border-radius:var(--radius-xl); padding:28px; min-width:340px; text-align:center; box-shadow:var(--shadow-level-3); }
+.modal-card h4 { margin-bottom:8px; font-size:17px; }
+.modal-card p { color:var(--color-text-secondary); margin-bottom:20px; font-size:14px; }
+.modal-actions { display:flex; flex-direction:column; gap:10px; }
+.modal-actions .btn { width:100%; }
+.text-muted { color:var(--color-text-tertiary); font-size:13px; }
+.detail-section { margin-bottom:20px; }
+.detail-section h5 { font-size:14px; margin-bottom:8px; color:var(--color-text-secondary); }
+
 </style>

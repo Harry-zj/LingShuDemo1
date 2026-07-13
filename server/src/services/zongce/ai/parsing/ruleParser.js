@@ -1,4 +1,4 @@
-const { pool } = require("../../../../config/database");
+﻿const { pool } = require("../../../../config/database");
 const { chatStreamJson } = require("../deepseek");
 const { V3_RULE_PARSE_SYSTEM } = require("../prompts");
 const { validateV2RuleParse } = require("../schemas");
@@ -456,7 +456,7 @@ function validateMergedResult(merged) {
 // ============================================================
 //  V2 规则解析
 // ============================================================
-async function parseRuleSourceV2(sourceId, userId, onProgress, batchId) {
+async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelToken, forceNew) {
   const [sources] = await pool.execute("SELECT * FROM rule_sources WHERE id = ?", [sourceId]);
   if (!sources.length) throw new Error("规则来源不存在");
   const source = sources[0];
@@ -476,12 +476,33 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId) {
   }
   if (!blocks.length) throw new Error("文档无内容");
 
-  if (onProgress) await onProgress('extracting', { blocks: blocks.length, headings: blocks.filter(b=>b.block_type==='heading').length });
-
-  // ===== 2. 创建 rule_set + 写 doc_blocks =====
-  const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, batch_id, version_label, status) VALUES (?, ?, ?, 'draft')", [userId, batchId || null, source.file_name || '规则集']);
-  const ruleSetId = rs.insertId;
-  await pool.execute("INSERT INTO rule_set_documents (rule_set_id, rule_source_id, document_role) VALUES (?, ?, 'primary')", [ruleSetId, sourceId]);
+  // ===== 2. 查找或创建 rule_set =====
+  let ruleSetId;
+  let isReuse = false;
+  const [existing] = await pool.execute(
+    `SELECT rs.id FROM rule_sets rs
+     INNER JOIN rule_set_documents rsd ON rs.id = rsd.rule_set_id
+     WHERE rsd.rule_source_id = ? AND (rs.batch_id = ? OR (? IS NULL AND rs.batch_id IS NULL))
+     LIMIT 1`,
+    [sourceId, batchId || null, batchId || null]
+  );
+  if (existing.length && !forceNew) {
+    isReuse = true;
+    ruleSetId = existing[0].id;
+    // 不在此处删除旧规则——等新规则写入事务中再做，防止取消解析后规则丢失
+    await pool.execute("DELETE FROM doc_blocks WHERE rule_source_id = ?", [sourceId]);
+    await pool.execute("DELETE FROM document_parse_runs WHERE rule_source_id = ?", [sourceId]);
+    await pool.execute("UPDATE rule_sets SET status = 'draft', version_label = ?, batch_id = COALESCE(?, batch_id) WHERE id = ?",
+      [source.file_name || '规则集', batchId || null, ruleSetId]);
+  } else {
+    const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, batch_id, version_label, status) VALUES (?, ?, ?, 'draft')",
+      [userId, batchId || null, source.file_name || '规则集']);
+    ruleSetId = rs.insertId;
+  }
+  await pool.execute(
+    "INSERT INTO rule_set_documents (rule_set_id, rule_source_id, document_role) VALUES (?, ?, 'primary') ON DUPLICATE KEY UPDATE document_role = 'primary'",
+    [ruleSetId, sourceId]
+  );
   const [parseRun] = await pool.execute(
     "INSERT INTO document_parse_runs (rule_source_id, parser_version, model_name, prompt_version, input_hash, status) VALUES (?, 'v2', 'mammoth', 'v1', ?, 'running')",
     [sourceId, inputHash || '']
@@ -599,13 +620,17 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // 复用规则集时，在事务中先删后写，防止取消解析丢失旧规则
+    if (isReuse) {
+      await conn.execute("DELETE FROM scoring_rules WHERE rule_set_id = ?", [ruleSetId]);
+    }
     const f3Rules = allResult.f3_rules || allResult.rule_items || [];
     let ruleCount = 0;
     for (const r of f3Rules) {
       const itemKey = r.item_key || r.category || 'B2';
       const itemName = r.item_name || r.description || '';
-      const scoreLevel = r.score_level || r.level || null;
-      const scoreRank = r.score_rank || null;
+      const scoreLevel = (r.score_level || r.level || "").slice(0, 100);
+      const scoreRank = (r.score_rank || "").slice(0, 50);
       const score = parseInt(r.score) || 0;
       const keywords = r.keywords || '';
       const description = r.description || '';

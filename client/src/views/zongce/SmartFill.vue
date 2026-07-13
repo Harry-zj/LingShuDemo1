@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="dashboard">
     <!-- ★ 批次选择器 -->
     <div class="batch-selector-bar">
@@ -64,7 +64,7 @@
       </div>
       <SmartFillF1 v-if="activeCard === 'f1'" />
       <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
-      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" />
+      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
       <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
       <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
       <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" />
@@ -85,6 +85,8 @@ import * as api from '../../api/zongce'
 // ========== 批次选择 ==========
 const batches = ref([])
 const selectedBatchId = ref('')
+const previousBatchId = ref('')
+const isParsing = ref(false)
 const selectedBatch = computed(() => batches.value.find(b => b.id === selectedBatchId.value) || null)
 const batchStatusLabel = computed(() => {
   const s = selectedBatch.value?.status
@@ -102,8 +104,20 @@ async function loadBatches() {
 
 async function onBatchChange() {
   if (!selectedBatchId.value) return
-  await refreshAll()
+  if (isParsing.value) {
+    alert('规则正在解析中，请等待解析完成后再切换批次')
+    selectedBatchId.value = previousBatchId.value;
+    return;
+  }
+  if (previousBatchId.value && previousBatchId.value !== selectedBatchId.value) {
+    try { const r = await api.moveRulesBatch(previousBatchId.value, selectedBatchId.value); if (r.code === 200) console.log('[SmartFill] 规则已从批次 ' + previousBatchId.value + ' 迁移至 ' + selectedBatchId.value); } catch (_) {}
+  }
+  previousBatchId.value = selectedBatchId.value;
+  await refreshAll();
 }
+
+function onParseStart() { isParsing.value = true }
+function onParseEnd() { isParsing.value = false }
 
 // ========== 导航 ==========
 const activeCard = ref(null)
@@ -152,7 +166,7 @@ async function refreshAll() {
 
 async function refreshRules() {
   const [s, rs] = await Promise.all([
-    api.getRuleSources(),
+    api.getRuleSources(selectedBatchId.value || undefined),
     api.getRuleSets(selectedBatchId.value || undefined)
   ])
   if (s.code === 200) ruleSources.value = s.data || []
@@ -179,6 +193,7 @@ onMounted(async () => {
   await loadBatches()
   if (batches.value.length > 0) {
     selectedBatchId.value = batches.value[0].id
+    previousBatchId.value = batches.value[0].id
     await refreshAll()
   }
 })
