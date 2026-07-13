@@ -5,12 +5,6 @@
 
 const VERSION = "3.0.0";
 
-// ===== V1 Rule Parsing (flat, legacy) =====
-const RULE_PARSE_SYSTEM = `You are a scoring rule parser. Extract structured rules.
-
-Output: { "rule_items": [{ "category":"intellectual", "description":"...", "level":"national", "score":10, "rule_type":"scoring" }] }
-Only output JSON.`;
-
 // ===== Fact Extraction =====
 const FACT_EXTRACT_SYSTEM = `You are a certificate reader. Extract objective facts from proof documents.
 Do NOT match rules or judge scores.
@@ -59,8 +53,6 @@ Only output JSON.`;
 
 module.exports = {
   VERSION,
-  RULE_PARSE_SYSTEM, V3_RULE_PARSE_SYSTEM,
+  V3_RULE_PARSE_SYSTEM,
   FACT_EXTRACT_SYSTEM, MATERIAL_EXTRACT_SYSTEM,
 };
-
-﻿
