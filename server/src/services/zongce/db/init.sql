@@ -8,7 +8,6 @@ CREATE DATABASE IF NOT EXISTS lingshu_zongce CHARACTER SET utf8mb4 COLLATE utf8m
 USE lingshu_zongce;
 
 -- ============================================================
--- ============================================================
 -- 一、用户表（扩展版：支持多角色 + 学生信息字段）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
@@ -43,18 +42,14 @@ CREATE TABLE IF NOT EXISTS rule_sources (
   status ENUM('pending','parsed') DEFAULT 'pending',
   file_hash CHAR(64) DEFAULT NULL,
   is_frozen TINYINT(1) DEFAULT 0,
-  file_hash CHAR(64) DEFAULT NULL,
-  is_frozen TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===========================================================-- 简化的计分规则表（V3 替代 V1/V2 多表体系）
--- ===========================================================-- 简化的计分规则表（V3 替代 V1/V2 多表体系）
+-- ============================================================
+-- 三、简化的计分规则表（V3 替代 V1/V2 多表体系）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS scoring_rules (
-CREATE TABLE IF NOT EXISTS scoring_rules (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
   rule_set_id INT NOT NULL,
   user_id INT NOT NULL,
   section VARCHAR(10) DEFAULT 'F3',
@@ -73,12 +68,9 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   INDEX idx_sr_user (user_id),
   INDEX idx_sr_item_key (item_key),
   INDEX idx_sr_level_rank (score_level, score_rank)
-  INDEX idx_sr_rule_set (rule_set_id),
-  INDEX idx_sr_user (user_id),
-  INDEX idx_sr_item_key (item_key),
-  INDEX idx_sr_level_rank (score_level, score_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ============================================================
 -- 四、材料表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS materials (
@@ -292,23 +284,6 @@ CREATE TABLE IF NOT EXISTS smart_fill_data (
 
 
 -- ============================================================
--- 十四点五、智能填表数据缓存表
--- ============================================================
-CREATE TABLE IF NOT EXISTS smart_fill_data (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  rule_set_id INT NOT NULL,
-  section VARCHAR(10) NOT NULL COMMENT 'F1/F2/F3',
-  item_key VARCHAR(20) NOT NULL COMMENT 'A1/B1/COURSE等',
-  score DECIMAL(5,2) DEFAULT 0,
-  description TEXT COMMENT '理由/评语',
-  extra_data JSON DEFAULT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY uk_user_rule_item (user_id, rule_set_id, section, item_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-
--- ============================================================
 -- 十五、评估审核记录表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS assessment_review_records (
@@ -440,8 +415,6 @@ CREATE TABLE IF NOT EXISTS assessment_review_tasks (
   KEY idx_task_batch_status_stage (batch_id, status, stage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-
-
 CREATE TABLE IF NOT EXISTS assessment_item_reviews (
   id INT AUTO_INCREMENT PRIMARY KEY,
   form_id INT NOT NULL,
@@ -523,279 +496,6 @@ CREATE TABLE IF NOT EXISTS chat_fill_sessions (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
--- V2 规则系统（与 V1 表共存，增量升级）
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS rule_sets (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  user_id INT NOT NULL,
-  version_label VARCHAR(100) DEFAULT '',
-  cloned_from_id INT DEFAULT NULL,
-  status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft',
-  published_at TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_set_documents (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  rule_source_id INT NOT NULL,
-  document_role ENUM('primary','supplement','amendment','appendix','interpretation') DEFAULT 'primary',
-  priority INT DEFAULT 0,
-  merge_mode ENUM('append','override','replace','clarify') DEFAULT 'append',
-  scope_config JSON DEFAULT NULL,
-  parse_run_id INT DEFAULT NULL,
-  UNIQUE KEY uk_rsd (rule_set_id, rule_source_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS document_parse_runs (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_source_id INT NOT NULL,
-  parser_version VARCHAR(20) DEFAULT 'v1',
-  model_name VARCHAR(50) DEFAULT '',
-  prompt_version VARCHAR(20) DEFAULT '',
-  input_hash CHAR(64) DEFAULT '',
-  raw_ai_response LONGTEXT,
-  status ENUM('running','completed','failed','parse_structure_failed') DEFAULT 'running',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS doc_blocks (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_source_id INT NOT NULL,
-  parse_run_id INT NOT NULL,
-  block_type ENUM('heading','paragraph','table','list','note','formula','image'),
-  title VARCHAR(500) DEFAULT '',
-  content LONGTEXT,
-  structured_content JSON DEFAULT NULL,
-  source_location VARCHAR(200) DEFAULT '',
-  parent_id INT DEFAULT NULL,
-  order_index INT DEFAULT 0,
-  is_frozen TINYINT(1) DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS doc_block_relations (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  source_block_id INT NOT NULL,
-  target_block_id INT NOT NULL,
-  relation_type ENUM('annotates','describes','continues','belongs_to') NOT NULL,
-  confidence DECIMAL(5,4) DEFAULT NULL,
-  UNIQUE KEY uk_dbr (source_block_id, target_block_id, relation_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS material_analysis_runs (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  material_id INT NOT NULL,
-  model_name VARCHAR(50) DEFAULT '',
-  prompt_version VARCHAR(20) DEFAULT '',
-  parser_version VARCHAR(20) DEFAULT 'v1',
-  input_hash CHAR(64) NOT NULL,
-  output_hash CHAR(64) DEFAULT '',
-  raw_ai_response LONGTEXT,
-  status ENUM('running','completed','failed','needs_review') DEFAULT 'running',
-  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS extracted_facts (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  analysis_run_id INT NOT NULL,
-  fact_key VARCHAR(100) NOT NULL,
-  fact_type ENUM('award','position','activity','certificate','score','duration','count','text','other'),
-  fact_data JSON NOT NULL,
-  semantic_hash CHAR(64) DEFAULT '',
-  confidence DECIMAL(5,4) DEFAULT NULL,
-  status ENUM('active','superseded') DEFAULT 'active',
-  UNIQUE KEY uk_ef (analysis_run_id, fact_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS extracted_fact_sources (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  extracted_fact_id INT NOT NULL,
-  attachment_id INT NOT NULL,
-  source_locator VARCHAR(200) DEFAULT '',
-  raw_excerpt TEXT,
-  confidence DECIMAL(5,4) DEFAULT NULL,
-  UNIQUE KEY uk_efs (extracted_fact_id, attachment_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS rule_match_runs (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  analysis_run_id INT NOT NULL,
-  model_name VARCHAR(50) DEFAULT '',
-  prompt_version VARCHAR(20) DEFAULT '',
-  input_hash CHAR(64) DEFAULT '',
-  raw_ai_response LONGTEXT,
-  status ENUM('running','completed','failed','needs_review') DEFAULT 'running',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS fact_rule_matches (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  match_run_id INT NOT NULL,
-  extracted_fact_id INT NOT NULL,
-  executable_rule_id INT NOT NULL,
-  match_condition ENUM('pass','fail','uncertain') NOT NULL,
-  confidence DECIMAL(5,4) DEFAULT NULL,
-  reason TEXT,
-  review_status ENUM('pending','confirmed','rejected') DEFAULT 'pending',
-  is_current TINYINT(1) DEFAULT 1,
-  is_selected TINYINT(1) DEFAULT 1,
-  preview_data JSON DEFAULT NULL,
-  UNIQUE KEY uk_frm (match_run_id, extracted_fact_id, executable_rule_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_tasks (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT NOT NULL,
-  student_id INT NOT NULL,
-  requested_by INT NOT NULL,
-  current_stage VARCHAR(50) DEFAULT NULL,
-  checkpoint JSON DEFAULT NULL,
-  engine_version VARCHAR(20) DEFAULT 'v2.0',
-  input_snapshot_hash CHAR(64) DEFAULT '',
-  status ENUM('pending','running','waiting_review','resuming','completed','failed','cancelled') DEFAULT 'pending',
-  total_score DECIMAL(8,2) DEFAULT NULL,
-  outcome_status VARCHAR(50) DEFAULT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_task_inputs (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  calculation_task_id INT NOT NULL,
-  material_id INT NOT NULL,
-  analysis_run_id INT NOT NULL,
-  match_run_id INT NOT NULL,
-  input_hash CHAR(64) DEFAULT '',
-  UNIQUE KEY uk_cti (calculation_task_id, material_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_rule_applications (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  calculation_task_id INT NOT NULL,
-  executable_rule_id INT NOT NULL,
-  application_scope ENUM('per_fact','per_material','per_group','per_indicator','global') NOT NULL,
-  fact_id INT DEFAULT NULL,
-  material_id INT DEFAULT NULL,
-  group_key VARCHAR(200) DEFAULT NULL,
-  indicator_id INT DEFAULT NULL,
-  application_key CHAR(64) NOT NULL,
-  status ENUM('pending','executing','applied','skipped','blocked','failed') DEFAULT 'pending',
-  UNIQUE KEY uk_cra (calculation_task_id, application_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_rule_results (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  calculation_task_id INT NOT NULL,
-  rule_application_id INT NOT NULL,
-  execution_key CHAR(64) NOT NULL,
-  exec_rule_id INT NOT NULL,
-  indicator_id INT DEFAULT NULL,
-  material_id INT DEFAULT NULL,
-  fact_id VARCHAR(50) DEFAULT '',
-  group_key VARCHAR(100) DEFAULT '',
-  matched BOOLEAN DEFAULT FALSE,
-  executed BOOLEAN DEFAULT FALSE,
-  score_before DECIMAL(12,4) DEFAULT NULL,
-  score_change DECIMAL(12,4) DEFAULT NULL,
-  score_after DECIMAL(12,4) DEFAULT NULL,
-  input_snapshot JSON DEFAULT NULL,
-  output_snapshot JSON DEFAULT NULL,
-  exec_status ENUM('applied','skipped','blocked','failed','pending_manual') DEFAULT 'applied',
-  attempt_no INT DEFAULT 1,
-  UNIQUE KEY uk_crr (calculation_task_id, execution_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_rule_attempts (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_result_id INT NOT NULL,
-  attempt_no INT NOT NULL,
-  started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  completed_at TIMESTAMP NULL,
-  error_msg TEXT,
-  status ENUM('running','success','failed') DEFAULT 'running'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_metric_results (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  task_id INT NOT NULL,
-  indicator_id INT NOT NULL,
-  raw_score DECIMAL(12,4) DEFAULT NULL,
-  adjusted_score DECIMAL(12,4) DEFAULT NULL,
-  final_score DECIMAL(8,2) NOT NULL,
-  status ENUM('normal','capped','overridden','excluded') DEFAULT 'normal',
-  explanation TEXT,
-  UNIQUE KEY uk_cmr (task_id, indicator_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS calculation_steps (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  task_id INT NOT NULL,
-  step_order INT NOT NULL,
-  execution_stage VARCHAR(50) DEFAULT '',
-  indicator_id INT DEFAULT NULL,
-  exec_rule_id INT DEFAULT NULL,
-  input_facts JSON DEFAULT NULL,
-  matched_rule JSON DEFAULT NULL,
-  computation JSON DEFAULT NULL,
-  output_value DECIMAL(12,4) DEFAULT NULL,
-  explanation TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
-CREATE TABLE IF NOT EXISTS manual_review_tasks (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  rule_set_id INT DEFAULT NULL,
-  calculation_task_id INT DEFAULT NULL,
-  material_id INT DEFAULT NULL,
-  target_type ENUM('rule_package','executable_rule','rule_conflict','material_recognition') NOT NULL,
-  target_id INT NOT NULL,
-  review_stage ENUM('rule_parsing','scoring') NOT NULL,
-  question TEXT NOT NULL,
-  suggested_decision TEXT,
-  decision TEXT,
-  review_comment TEXT,
-  status ENUM('pending','resolved','escalated') DEFAULT 'pending',
-  resolved_by INT DEFAULT NULL,
-  reviewed_at TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- ============================================================
---  综测配置表（可动态修改的学院政策）
--- ============================================================
-CREATE TABLE IF NOT EXISTS zongce_config (
-  config_key VARCHAR(100) PRIMARY KEY,
-  config_value JSON NOT NULL,
-  enabled TINYINT(1) DEFAULT 1,
-  description VARCHAR(500) DEFAULT '',
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 默认奖项认定政策
-INSERT IGNORE INTO zongce_config (config_key, config_value, enabled, description) VALUES (
-  'college_default_award_policy',
-  '{"participation_tier_ranks":["优秀奖","参与奖","鼓励奖","纪念奖","入围奖"],"maps_to":"encouragement"}',
-  1,
-  '学院默认奖项认定: 优秀奖/参与奖/鼓励奖/纪念奖/入围奖 → participation_tier → encouragement'
-);
-
--- ============================================================
---  升级已有数据库的 ALTER TABLE 语句
---  如果表已存在，需要手动执行以下语句增加新枚举值
--- ============================================================
-
--- ALTER TABLE rule_sets
---   MODIFY COLUMN status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft';
-
--- ALTER TABLE document_parse_runs
---   MODIFY COLUMN status ENUM('running','completed','failed','parse_structure_failed') DEFAULT 'running';
 
 -- ============================================================
 -- V2 规则系统（与 V1 表共存，增量升级）

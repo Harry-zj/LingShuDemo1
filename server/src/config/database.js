@@ -10,7 +10,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "135246",
+  password: process.env.DB_PASSWORD || "kk18360",
   database: "lingshu_zongce",
   charset: "utf8mb4",
   multipleStatements: true,
@@ -25,7 +25,7 @@ async function initDatabase() {
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "135246",
+    password: process.env.DB_PASSWORD || "kk18360",
     charset: "utf8mb4",
     multipleStatements: true,
   });
@@ -42,27 +42,12 @@ async function initDatabase() {
   try {
     const sqlPath = path.join(__dirname, "../services/zongce/db/init.sql");
     const sql = fs.readFileSync(sqlPath, "utf-8").replace(/^\uFEFF/, "");
-    const sql = fs.readFileSync(sqlPath, "utf-8").replace(/^\uFEFF/, "");
     const tableSql = sql
       .replace(/CREATE DATABASE IF NOT EXISTS[^;]*;\s*/i, "")
       .replace(/USE\s+lingshu_zongce\s*;\s*/i, "");
     await conn.query(tableSql);
 
     console.log("[DB] 建表完成，开始种子数据...");
-
-    // 报告缓存表（跨设备同步 AI 内容 + 用户数据）
-    await conn.query(`CREATE TABLE IF NOT EXISTS report_cache (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      user_id INT NOT NULL,
-      batch_id INT NOT NULL,
-      report_data JSON,
-      dim_profiles JSON,
-      goals JSON,
-      plan_done JSON,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      UNIQUE KEY uk_user_batch (user_id, batch_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
 
     // 报告缓存表（跨设备同步 AI 内容 + 用户数据）
     await conn.query(`CREATE TABLE IF NOT EXISTS report_cache (
@@ -105,7 +90,6 @@ async function initDatabase() {
     // 模块三：先兼容升级旧数据库，再执行使用新字段的幂等种子数据。
     await migrateModule3(conn);
 
-    // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 
