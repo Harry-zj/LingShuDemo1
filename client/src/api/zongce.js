@@ -95,7 +95,9 @@ export const getTemplates = () =>
   request.get("/zongce/templates");
 
 export const doFill = (templateId, batchId) =>
-  request.post(`/zongce/fill/${templateId}`);
+  request.post(`/zongce/fill/${templateId}`, null, {
+    params: batchId ? { batch_id: batchId } : {},
+  });
 
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });

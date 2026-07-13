@@ -108,7 +108,7 @@ import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
-const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array })
+const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: Number })
 const smartFillStore = useSmartFillStore()
 
 const emit = defineEmits(['update:uploadedTemplate','upload-template','fill','download','score-changed'])
@@ -146,7 +146,7 @@ function onFieldChange(s,ik)
 {clearTimeout(saveTimer);saveTimer=setTimeout(function()
 {var items=[];
 if(s=="F3")items.push({section:s,item_key:ik,score:fillData.value["F3_"+ik+"_score"],description:fillData.value["F3_"+ik+"_detail"],rule_set_id:props.ruleSetId||0});
-if(items.length)api.saveFillData(items).then(function(){emit("score-changed")}).catch(function(){})},800)};
+if(items.length)api.saveFillData(items, props.batchId).then(function(){emit("score-changed")}).catch(function(){})},800)};
 async function generateDesc(section,ik,label)
 {try{var r=await api.generateF1Description(section,ik,label);
 if(r.code===200&&r.data&&r.data.description)
@@ -157,7 +157,7 @@ function removeCourse(i){fillData.value.F2_courses.splice(i,1);onFieldChange("F2
 function flushSave(){if(saveTimer){clearTimeout(saveTimer);saveTimer=null}};
 async function loadFillData() {
   try {
-    const r = await api.getFillPreview()
+    const r = await api.getFillPreview(props.batchId)
     if (r.code === 200 && r.data) {
       for (const k in r.data) {
         if (!(k in fillData.value)) continue
@@ -297,7 +297,7 @@ async function handleDoFill(){
     const fd=new FormData();fd.append('file',props.uploadedTemplate.file);
     const upRes=await api.uploadTemplate(fd);
     if(upRes.code!==200){fillError.value=upRes.msg;return}
-    const fillRes=await api.doFill(upRes.data.id);
+    const fillRes=await api.doFill(upRes.data.id, props.batchId);
     if(fillRes.code!==200){fillError.value=fillRes.msg;return}
     currentFillId=fillRes.data.fillId;fillDone.value=true
   }catch(e){fillError.value='失败:'+(e.response?.data?.msg||e.message)}
@@ -306,7 +306,7 @@ async function handleDoFill(){
 function handleDownload(){if(currentFillId)emit('download',currentFillId)}
 function resetFill(){fillDone.value=false;fillError.value='';currentFillId=null}
 function formatSize(b){if(!b)return'';return b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(2)+' MB'}
-async function submitToReview(){try{const r=await api.getFillPreview();if(r.code!==200){alert("获取填表数据失败");return};const d=r.data;const items=[];const titles={A1:"思想政治表现",A2:"道德品质修养",A3:"学习态度作风",A4:"组织纪律观念",A5:"身心健康素质",B1:"职业技能类",B2:"学科竞赛类",B3:"科研学术活动类",B4:"文学艺术创作与宣传报道类",B5:"社会工作类",B6:"社会实践类",B7:"文体艺术活动类",B8:"劳育类"};["A1","A2","A3","A4","A5"].forEach(k=>items.push({section:"F1",subKey:k,title:titles[k]||k,reason:d["F1_"+k+"_detail"]||"",score:d["F1_"+k+"_score"]||0}));["B1","B2","B3","B4","B5","B6","B7","B8"].forEach(k=>items.push({section:"F3",subKey:k,title:titles[k]||k,reason:d["F3_"+k+"_detail"]||"",score:d["F3_"+k+"_score"]||0}));const f2Courses=d.F2_courses||[];items.push({section:"F2",subKey:"COURSE",title:"课程成绩",reason:(f2Courses.map(c=>c.name+"("+c.credit+"学分)").join("；")),score:d.F2_weighted_avg||0});const res=await updateSmartResult({items});if(res.code===200){alert("已提交到审核流程，可在信息管理页查看")}else{alert(res.msg)}}catch(e){alert("提交失败"+(e.message||e))}}
+async function submitToReview(){try{const r=await api.getFillPreview(props.batchId);if(r.code!==200){alert("获取填表数据失败");return};const d=r.data;const items=[];const titles={A1:"思想政治表现",A2:"道德品质修养",A3:"学习态度作风",A4:"组织纪律观念",A5:"身心健康素质",B1:"职业技能类",B2:"学科竞赛类",B3:"科研学术活动类",B4:"文学艺术创作与宣传报道类",B5:"社会工作类",B6:"社会实践类",B7:"文体艺术活动类",B8:"劳育类"};["A1","A2","A3","A4","A5"].forEach(k=>items.push({section:"F1",subKey:k,title:titles[k]||k,reason:d["F1_"+k+"_detail"]||"",score:d["F1_"+k+"_score"]||0}));["B1","B2","B3","B4","B5","B6","B7","B8"].forEach(k=>items.push({section:"F3",subKey:k,title:titles[k]||k,reason:d["F3_"+k+"_detail"]||"",score:d["F3_"+k+"_score"]||0}));const f2Courses=d.F2_courses||[];items.push({section:"F2",subKey:"COURSE",title:"课程成绩",reason:(f2Courses.map(c=>c.name+"("+c.credit+"学分)").join("；")),score:d.F2_weighted_avg||0});const res=await updateSmartResult({items});if(res.code===200){alert("已提交到审核流程，可在信息管理页查看")}else{alert(res.msg)}}catch(e){alert("提交失败"+(e.message||e))}}
 </script>
 
 <style scoped>

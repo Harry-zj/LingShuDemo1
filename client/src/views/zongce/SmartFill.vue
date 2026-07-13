@@ -67,7 +67,7 @@
       <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
       <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
       <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" />
+      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :batchId="selectedBatchId" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" />
     </div>
   </div>
 </template>

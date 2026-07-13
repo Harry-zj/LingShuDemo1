@@ -191,10 +191,12 @@ CREATE TABLE IF NOT EXISTS ai_tasks (
 CREATE TABLE IF NOT EXISTS fill_results (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   template_id INT NOT NULL,
   result_path VARCHAR(500) NOT NULL,
   original_name VARCHAR(300) DEFAULT '',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_fill_results_user_batch (user_id, batch_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 

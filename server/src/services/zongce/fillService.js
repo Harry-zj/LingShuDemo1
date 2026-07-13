@@ -81,7 +81,8 @@ async function getFillData(userId, batchId) {
 
     // 2. 查询已发布的规则集
     const [ruleSets] = await conn.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1", [userId]
+      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1",
+      [userId, batchId || null, batchId || null]
     );
 
     // 3. 构建基础数据
@@ -132,8 +133,9 @@ async function getFillData(userId, batchId) {
        WHERE frm.review_status = 'confirmed'
          AND frm.is_current = 1 AND frm.is_selected = 1
          AND m.user_id = ?
+         AND rmr.rule_set_id = ?
        ORDER BY m.id, ef.id`,
-      [userId]
+      [userId, ruleSetId]
     );
 
     console.log(`[fillService] 查询到 ${rows.length} 条已确认事实匹配`);
