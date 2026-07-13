@@ -2,6 +2,14 @@
 const Res = require("../utils/response");
 const module3Service = require("../services/module3/service");
 
+function calcLevel(total) {
+  if (total >= 90) return '优秀';
+  if (total >= 80) return '良好';
+  if (total >= 70) return '中等';
+  if (total >= 60) return '合格';
+  return '待提升';
+}
+
 exports.getSmartResult = async (req, res) => {
   try {
     res.json(Res.success(await module3Service.getSmartResult(req.user.id, req.query.batch_id)));

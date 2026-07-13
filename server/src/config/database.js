@@ -10,7 +10,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "kk18360",
+  password: process.env.DB_PASSWORD || "135246",
   database: "lingshu_zongce",
   charset: "utf8mb4",
   multipleStatements: true,
@@ -25,7 +25,7 @@ async function initDatabase() {
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "kk18360",
+    password: process.env.DB_PASSWORD || "135246",
     charset: "utf8mb4",
     multipleStatements: true,
   });
@@ -74,6 +74,7 @@ async function initDatabase() {
       "ALTER TABLE fact_rule_matches ADD COLUMN is_current TINYINT(1) DEFAULT 1 AFTER review_status",
       "ALTER TABLE fact_rule_matches ADD COLUMN is_selected TINYINT(1) DEFAULT 1 AFTER is_current",
       "ALTER TABLE fact_rule_matches ADD COLUMN preview_data JSON DEFAULT NULL AFTER is_selected",
+      "ALTER TABLE scoring_rules MODIFY COLUMN item_name VARCHAR(200)",
     ];
     // rule_set_documents 列名迁移（兼容旧表 source_document_id）
     try {
