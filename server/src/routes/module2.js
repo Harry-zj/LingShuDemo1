@@ -6,4 +6,8 @@ router.post("/report", auth, ctrl.generateReport);
 router.get("/class-stats", auth, ctrl.getClassStats);
 router.get("/advice", auth, ctrl.getAdvice);
 router.get("/history", auth, ctrl.getHistory);
+router.get("/dimension-profiles", auth, ctrl.getDimensionProfiles);
+router.get("/report-cache", auth, ctrl.getReportCache);
+router.post("/report-cache", auth, ctrl.saveReportCache);
+router.post("/generate-summary", auth, ctrl.generateSummary);
 module.exports = router;

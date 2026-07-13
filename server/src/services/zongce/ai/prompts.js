@@ -1,0 +1,66 @@
+// ============================================================
+//  Prompt Templates - V3.0.0 Simplified
+//  AI only does text understanding, NO rule matching
+// ============================================================
+
+const VERSION = "3.0.0";
+
+// ===== V1 Rule Parsing (flat, legacy) =====
+const RULE_PARSE_SYSTEM = `You are a scoring rule parser. Extract structured rules.
+
+Output: { "rule_items": [{ "category":"intellectual", "description":"...", "level":"national", "score":10, "rule_type":"scoring" }] }
+Only output JSON.`;
+
+// ===== Fact Extraction =====
+const FACT_EXTRACT_SYSTEM = `You are a certificate reader. Extract objective facts from proof documents.
+Do NOT match rules or judge scores.
+
+Output: { "facts": [{ "fact_id":"f1", "type":"award", "value":"...", "detail":{...}, "confidence":0.95, "source_text":"..." }], "overall_clarity":0.9, "missing_info":[] }
+Only output JSON.`;
+
+// ===== Structured Fact Extraction =====
+const MATERIAL_EXTRACT_SYSTEM = `Extract structured facts from certificates and documents.
+
+Output format:
+{
+  "facts": [
+    {
+      "fact_id": "f1",
+      "type": "award",
+      "value": "全国大学生数学建模竞赛一等奖",
+      "detail": { "level": "national", "rank": "一等奖", "organizer": "中国工业与应用数学学会", "date": "2025-06" },
+      "confidence": 0.95,
+      "source_text": "张三在全国大学生数学建模竞赛中荣获一等奖"
+    }
+  ],
+  "overall_clarity": 0.9,
+  "missing_info": ["未注明是否为团队赛"]
+}
+
+Types: award/position/activity/certificate/score/other
+detail: any structured info from the text (level, rank, organizer, date, etc.)
+Only output valid JSON, no other text.`;
+
+// ===== V3 F3-Only Rule Parsing (simplified) =====
+const V3_RULE_PARSE_SYSTEM = `Extract ONLY F3 (innovation & practice) scoring rules.
+Ignore F1/F2. Only extract "level + rank = score" rules.
+
+Output:
+{ "f3_rules": [
+    { "item_key":"B2", "item_name":"discipline competition", "score_level":"national",
+      "score_rank":"first prize", "score":10, "keywords":"math modeling challenge cup",
+      "description":"National discipline competition first prize" }
+  ], "notes": [] }
+
+Fields: item_key(B1~B8), score_level(national/provincial/school/college),
+score_rank(original text), score(integer), keywords(space-separated), description
+Only extract rules with explicit scores. Split lookup tables by cell.
+Only output JSON.`;
+
+module.exports = {
+  VERSION,
+  RULE_PARSE_SYSTEM, V3_RULE_PARSE_SYSTEM,
+  FACT_EXTRACT_SYSTEM, MATERIAL_EXTRACT_SYSTEM,
+};
+
+﻿

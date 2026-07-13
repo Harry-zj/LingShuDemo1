@@ -1,6 +1,6 @@
 const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
-const { parseRuleSource } = require("../../services/zongce/ai/ruleParser");
+const { parseRuleSourceV2 } = require("../../services/zongce/ai/parsing/ruleParser");
 
 // 上传规则文件
 exports.uploadRuleFiles = async (req, res) => {
@@ -44,43 +44,12 @@ exports.getRuleSources = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 获取规则项列表
-exports.getRuleItems = async (req, res) => {
-  try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM rule_items WHERE user_id = ? ORDER BY category, rule_type, id",
-      [req.user.id]
-    );
-    res.json(Res.success(rows));
-  } catch (e) { res.json(Res.error(e.message)); }
-};
-
-// 切换规则项确认状态
-exports.toggleRuleItem = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const [rows] = await pool.execute("SELECT status FROM rule_items WHERE id = ? AND user_id = ?", [id, req.user.id]);
-    if (!rows.length) return res.json(Res.error("规则项不存在"));
-    const newStatus = rows[0].status === 'confirmed' ? 'pending_confirm' : 'confirmed';
-    await pool.execute("UPDATE rule_items SET status = ? WHERE id = ?", [newStatus, id]);
-    res.json(Res.success({ status: newStatus }));
-  } catch (e) { res.json(Res.error(e.message)); }
-};
-
-// 删除规则来源（级联删除其 rule_items）
+// 删除规则来源
 exports.deleteRuleSource = async (req, res) => {
   try {
     const { id } = req.params;
     await pool.execute("DELETE FROM rule_items WHERE source_id = ? AND user_id = ?", [id, req.user.id]);
     await pool.execute("DELETE FROM rule_sources WHERE id = ? AND user_id = ?", [id, req.user.id]);
-    res.json(Res.success(null, "已删除"));
-  } catch (e) { res.json(Res.error(e.message)); }
-};
-
-// 删除规则项
-exports.deleteRuleItem = async (req, res) => {
-  try {
-    await pool.execute("DELETE FROM rule_items WHERE id = ? AND user_id = ?", [req.params.id, req.user.id]);
     res.json(Res.success(null, "已删除"));
   } catch (e) { res.json(Res.error(e.message)); }
 };
@@ -96,7 +65,7 @@ exports.parseRuleSource = async (req, res) => {
     const taskId = r.insertId;
 
     // 后台执行（不 await），通过 ai_tasks 表追踪进度
-    runParseInBackground(taskId, req.params.id);
+    runParseV2InBackground(taskId, req.params.id, req.user.id);
 
     res.json(Res.success({ taskId }, "解析任务已启动"));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -159,20 +128,31 @@ exports.streamParseProgress = async (req, res) => {
   req.on("close", () => { clearInterval(timer); });
 };
 
-async function runParseInBackground(taskId, sourceId) {
+async function runParseV2InBackground(taskId, sourceId, userId) {
+  console.log(`[V2Parse] 开始解析 sourceId=${sourceId} userId=${userId} taskId=${taskId}`);
+
+  // 进度回调：更新 ai_tasks.result 供 SSE 轮询
+  const reportProgress = async (phase, detail) => {
+    try {
+      await pool.execute(
+        "UPDATE ai_tasks SET result = ? WHERE id = ?",
+        [JSON.stringify({ phase, ...detail, _ts: Date.now() }), taskId]
+      );
+    } catch (_) { /* 进度更新失败不阻塞主流程 */ }
+  };
+
   try {
-    const result = await parseRuleSource(sourceId, (progress) => {
-      pool.execute("UPDATE ai_tasks SET result = ? WHERE id = ?",
-        [JSON.stringify(progress), taskId]);
-    });
+    const result = await parseRuleSourceV2(sourceId, userId, reportProgress);
+    console.log(`[V2Parse] 解析成功: ${JSON.stringify(result)}`);
     await pool.execute(
       "UPDATE ai_tasks SET status = 'completed', result = ? WHERE id = ?",
       [JSON.stringify({ ...result, done: true }), taskId]
     );
   } catch (e) {
+    console.error(`[V2Parse] 解析失败:`, e.message, e.stack);
     await pool.execute(
       "UPDATE ai_tasks SET status = 'failed', error_msg = ? WHERE id = ?",
-      [e.message, taskId]
+      [e.message.slice(0, 1000), taskId]
     );
   }
 }

@@ -1,6 +1,12 @@
-const { pool } = require("../../config/database");
+﻿const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
-const { analyzeMaterial } = require("../../services/zongce/ai/materialService");
+const { calculateScorePreview, generateDescription } = require("../../services/zongce/ai/materialPipeline");
+// Legacy: ruleBlockMatcher used by previewScore/matchMaterial (V3 migration target)
+const { matchFactPipeline, validateAndPersistMatch } = require("../../services/zongce/ai/ruleBlockMatcher");
+// New: text similarity matcher for simplified pipeline
+const { matchFactsToRulesBatch } = require("../../services/zongce/ai/textSimilarityMatcher");
+const { extractStructuredFacts } = require("../../services/zongce/ai/factExtractor");
+const { serializeMaterial, serializeFact } = require("../../services/zongce/serializer");
 
 // 创建材料
 exports.createMaterial = async (req, res) => {
@@ -26,23 +32,20 @@ exports.getMaterials = async (req, res) => {
     const ids = materials.map((m) => m.id);
     const placeholders = ids.map(() => "?").join(",");
 
-    // 批量查附件和识别结果
+    // 批量查附件
     const [atts] = await pool.execute(
       `SELECT * FROM attachments WHERE material_id IN (${placeholders})`, ids
     );
-    const [recs] = await pool.execute(
-      `SELECT * FROM material_recognitions WHERE material_id IN (${placeholders})`, ids
-    );
-
-    // 按 material_id 分组
     const attMap = {}; for (const a of atts) { (attMap[a.material_id] ||= []).push(a); }
-    const recMap = {}; for (const r of recs) { recMap[r.material_id] = r; }
 
+    // ★ 统一序列化（不再依赖 material_recognitions）
+    const result = [];
     for (const m of materials) {
       m.attachments = attMap[m.id] || [];
-      m.recognition = recMap[m.id] || null;
+      const serialized = await serializeMaterial(m);
+      result.push(serialized);
     }
-    res.json(Res.success(materials));
+    res.json(Res.success(result));
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
@@ -66,13 +69,365 @@ exports.uploadAttachments = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// AI 分析材料
+// 阶段 1：提取结构化事实（★ 幂等: 已有结果且未 force 时直接返回）
+exports.extractMaterial = async (req, res) => {
+  let runId = null;
+  try {
+    const { id } = req.params;
+    const [mats] = await pool.execute("SELECT * FROM materials WHERE id = ? AND user_id = ?", [id, req.user.id]);
+    if (!mats.length) return res.json(Res.error("材料不存在"));
+
+    // ★ 幂等保护: 已有正式 facts 或 raw_ai_response 缓存 → 直接返回
+    if (!req.query.force) {
+      // 优先检查正式表
+      const [latestRun] = await pool.execute(
+        "SELECT id FROM material_analysis_runs WHERE material_id = ? AND status IN ('completed','needs_review') ORDER BY id DESC LIMIT 1", [id]
+      );
+      if (latestRun.length) {
+        const [efs] = await pool.execute(
+          "SELECT * FROM extracted_facts WHERE analysis_run_id = ? AND status = 'active' ORDER BY id", [latestRun[0].id]
+        );
+        if (efs.length) {
+          const facts = await Promise.all(efs.map(ef => serializeFact(ef)));
+// V3: also run score matching on cache hit
+          console.log('[Extract] Cache hit, running V3 auto-match...');
+          let spCache = [];
+          try {
+            const [spRsCache] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+            if (spRsCache.length) {
+              for (const ef of efs) {
+                try {
+                  let fd = {}; try { fd = JSON.parse(ef.fact_data || "{}"); } catch(_){}
+                  const fo = { fact_id: String(ef.id), type: ef.fact_type || "other", value: fd.award_name || fd.competition_name || fd.value || "", detail: fd };
+                  const sp = await calculateScorePreview(fo, spRsCache[0].id, req.user.id); if (sp) { sp._ef_id = ef.id; sp.ai_description = sp.ai_description || await generateDescription(fo, sp.matched_rule, sp.score_preview); spCache.push(sp); }
+                } catch(e2){}
+              }
+            }
+          } catch(e3){ console.warn('[Extract] cache match fail:', e3.message); }
+          // Persist match results
+          for (const sp of spCache) {
+            try {
+              const efId = efs.find(ef => String(ef.id) === sp._ef_id) || efs[0];
+              if (efId) await pool.execute("UPDATE extracted_facts SET fact_data = JSON_SET(COALESCE(fact_data,'{}'), '$.match_score', ?, '$.match_rule', ?, '$.match_sim', ?) WHERE id = ?", [sp.score_preview, sp.matched_rule?.name || '', sp.similarity_score || 0, efId.id]);
+            } catch(_) {}
+          }
+          return res.json(Res.success({ facts, needs_review: false, from_cache: true, score_previews: spCache }, `已有 ${facts.length} 条识别结果，匹配到 ${spCache.length} 条计分规则（缓存）`));
+        }
+      }
+    }
+
+    const [attachments] = await pool.execute("SELECT * FROM attachments WHERE material_id = ?", [id]);
+    if (!attachments.length) return res.json(Res.error("请先上传证明文件"));
+
+    // ★ 创建 analysis run（状态=processing）
+    const crypto = require('crypto');
+    const inputHash = crypto.createHash('sha256')
+      .update(attachments.map(a => `${a.id}:${a.file_size}`).join('|'))
+      .digest('hex').slice(0, 64);
+    const [run] = await pool.execute(
+      "INSERT INTO material_analysis_runs (material_id, model_name, prompt_version, parser_version, input_hash, status) VALUES (?, 'kimi+deepseek', 'v2.2', 'v2', ?, 'running')",
+      [id, inputHash]
+    );
+    runId = run.insertId;
+
+    // 调 AI 提取
+    const result = await extractStructuredFacts(attachments);
+    console.log("[Extract] result.facts count:", result?.facts?.length||0);
+    if (result?.facts?.length) console.log("[Extract] first fact:", JSON.stringify(result.facts[0]).slice(0,200)); else console.log("[Extract] WARN: ZERO facts!");
+    // ★ 事务写入: extracted_facts + sources
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const factIds = [];
+      for (let i = 0; i < result.facts.length; i++) {
+        const f = result.facts[i];
+        const legacyKey = f.fact_id || `f${i + 1}`;
+        const fHash = crypto.createHash('sha256')
+          .update(JSON.stringify({
+            award_name: f.award_name, competition_name: f.competition_name,
+            award_rank: f.award_rank, inferred_level: f.inferred_level,
+            organizer: f.organizer, fact_type: f.fact_type,
+          })).digest('hex').slice(0, 64);
+
+        const [ef] = await conn.execute(
+          `INSERT INTO extracted_facts (analysis_run_id, fact_key, fact_type, fact_data, semantic_hash, confidence, status)
+           VALUES (?, ?, ?, ?, ?, ?, 'active')`,
+          [runId, legacyKey, f.fact_type || 'other', JSON.stringify(f), fHash, f.confidence || 0.5]
+        );
+        const factId = ef.insertId;
+        factIds.push(factId);
+
+        // 写入来源（不伪造页码/坐标）
+        const attId = f.attachment_id || (attachments[0]?.id);
+        if (attId) {
+          await conn.execute(
+            "INSERT INTO extracted_fact_sources (extracted_fact_id, attachment_id, source_locator, raw_excerpt) VALUES (?, ?, ?, ?)",
+            [factId, attId, f.source_file || '', (f.source_text || '').slice(0, 1000)]
+          );
+        }
+      }
+
+      // 更新 run 状态
+      const runStatus = result.needs_review ? 'needs_review' : 'completed';
+      await conn.execute(
+        "UPDATE material_analysis_runs SET status = ?, completed_at = NOW(), output_hash = ? WHERE id = ?",
+        [runStatus, crypto.createHash('sha256').update(JSON.stringify(factIds)).digest('hex').slice(0, 64), runId]
+      );
+
+      await conn.commit();
+
+      // ★ 不再写 material_recognitions.raw_ai_response（正式表为权威源）
+    } catch (txErr) {
+      await conn.rollback();
+      // 更新 run 为 failed，保留旧成功结果
+      await pool.execute("UPDATE material_analysis_runs SET status = 'failed', completed_at = NOW() WHERE id = ?", [runId]);
+      throw txErr;
+    } finally {
+      conn.release();
+    }
+
+    // 更新 title
+    const label = result.facts.map(f => f.award_name || f.competition_name || '').filter(Boolean).join(', ').slice(0, 200) || '未识别';
+    await pool.execute("UPDATE materials SET title = ? WHERE id = ?", [label, id]);
+
+    // ★ 回读序列化格式（fact_id=DB id, fact_data 嵌套, match 对象等）
+    const [efRows] = await pool.execute(
+      "SELECT * FROM extracted_facts WHERE analysis_run_id = ? AND status = 'active' ORDER BY id",
+      [runId]
+    );
+    const facts = await Promise.all(efRows.map(ef => serializeFact(ef)));
+    // V3: auto-match facts to scoring_rules
+    console.log('[Extract] V3 auto-match starting, efRows:', efRows.length);
+    let scorePreviews = [];
+    try {
+      const [spRs] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+      console.log('[Extract] published ruleSet found:', spRs.length > 0);
+      if (spRs.length) {
+        const spRid = spRs[0].id;
+        for (const ef of efRows) {
+          try {
+            let fd = {}; try { fd = JSON.parse(ef.fact_data || "{}"); } catch(_){}
+            const fo = { fact_id: String(ef.id), type: ef.fact_type || "other", value: fd.award_name || fd.competition_name || fd.value || "", detail: fd };
+            const sp = await calculateScorePreview(fo, spRid, req.user.id);
+            if (sp) { sp._ef_id = ef.id; sp.ai_description = await generateDescription(fo, sp.matched_rule, sp.score_preview); scorePreviews.push(sp); }
+          } catch(e2){}
+        }
+      }
+    } catch(e3){}
+    // Persist match to extracted_facts
+    for (const sp of scorePreviews) {
+      try {
+        if (sp._ef_id) await pool.execute("UPDATE extracted_facts SET fact_data = JSON_SET(COALESCE(fact_data,'{}'), '$.match_score', ?, '$.match_rule', ?, '$.match_sim', ?) WHERE id = ?", [sp.score_preview, sp.matched_rule?.name || '', sp.similarity_score || 0, sp._ef_id]);
+      } catch(_) {}
+    }
+    res.json(Res.success({ facts, analysis_run_id: runId, needs_review: result.needs_review, score_previews: scorePreviews }, `识别到 ${facts.length} 条事实，匹配到 ${scorePreviews.length} 条计分规则`));
+  } catch (e) {
+    console.error('[Material] 提取失败:', e.message);
+    if (runId) {
+      try { await pool.execute("UPDATE material_analysis_runs SET status = 'failed', completed_at = NOW() WHERE id = ?", [runId]); } catch (_) {}
+    }
+    res.json(Res.error("识别失败，请稍后重试"));
+  }
+};
+
+// PREVIEW ONLY — 阶段 2：规则匹配 + 分数预览（两阶段 Kimi 管线）
+// 不写入 rule_match_runs / fact_rule_matches / calculation_rule_applications
+exports.previewScore = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fact } = req.body;
+    if (!fact) return res.json(Res.error("请提供事实数据"));
+
+    const [ruleSets] = await pool.execute(
+      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+      [req.user.id]
+    );
+    if (!ruleSets.length) return res.json(Res.error("请先发布有效规则集"));
+    const ruleSetId = ruleSets[0].id;
+
+    // 跑完整匹配管线 (Phase 1+2: AI)
+    // V3.0 simplified preview: text similarity matching
+    const preview = await calculateScorePreview(fact, ruleSetId, req.user.id);
+
+    const v3status = preview.needs_review ? 'needs_review' : 'completed';
+    const v3scoreStatus = preview.score_preview != null ? 'confirmed' : 'lookup_failed';
+
+    return res.json(Res.success({
+      status: v3status, score_preview: preview.score_preview, score_status: v3scoreStatus,
+      needs_review: preview.needs_review, indicator: preview.matched_rule,
+      rule: preview.matched_rule, matched_rule_id: preview.matched_rule_id,
+      indicator_code: preview.indicator_code, indicator_name: preview.indicator_name,
+      confidence: preview.confidence || 0, similarity_score: preview.similarity_score || 0,
+      candidates: preview.candidates || [], match_method: 'tfidf_similarity',
+      failure_reason: preview.needs_review ? 'low_similarity' : null,
+      reason: preview.human_readable || preview.explanation || '',
+      error_type: preview.needs_review ? 'low_similarity' : null,
+      missing_fields: [], calculation_steps: [],
+    }));
+
+  } catch (e) {
+    console.error('[Material] preview error:', e.message);
+    res.json(Res.error("Preview failed"));
+  }
+};
+// 一键分析（兼容旧接口）
 exports.analyzeMaterial = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await analyzeMaterial(id, req.user.id);
+    const [atts] = await pool.execute("SELECT * FROM attachments WHERE material_id = ?", [id]);
+    if (!atts.length) return res.json(Res.error("请先上传证明文件"));
+    const result = await extractStructuredFacts(atts);
     res.json(Res.success(result, "AI 分析完成"));
-  } catch (e) { res.json(Res.error(e.message)); }
+  } catch (e) { console.error('[Material] 分析失败:', e.message); res.json(Res.error("分析失败，请稍后重试")); }
+};
+
+// 阶段 3：确认单条匹配（★ 精确 UPDATE 单条 fact_rule_match）
+exports.matchMaterial = async (req, res) => {
+  try {
+    const { id } = req.params;  // material_id
+    const { fact_rule_match_id, extracted_fact_id } = req.body;
+
+    // ★ 必填校验
+    if (!fact_rule_match_id || !extracted_fact_id) {
+      return res.json(Res.error("缺少必要参数: fact_rule_match_id / extracted_fact_id"));
+    }
+
+    // ★ 校验 match 存在、属于该 material
+    const [matches] = await pool.execute(
+      `SELECT frm.*, mar.material_id
+       FROM fact_rule_matches frm
+       JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
+       JOIN material_analysis_runs mar ON rmr.analysis_run_id = mar.id
+       WHERE frm.id = ? AND frm.extracted_fact_id = ?`,
+      [fact_rule_match_id, extracted_fact_id]
+    );
+    if (!matches.length) {
+      return res.json(Res.error("匹配记录不存在"));
+    }
+    if (matches[0].material_id !== Number(id)) {
+      return res.json(Res.error("匹配记录不属于该材料"));
+    }
+
+    // ★ 幂等：已确认 → 直接返回
+    if (matches[0].review_status === 'confirmed') {
+      return res.json(Res.success({
+        match_id: fact_rule_match_id,
+        already_confirmed: true,
+      }, "已确认（无需重复操作）"));
+    }
+
+    // ★ Phase 1: 事务更新确认状态（独立错误处理，失败即回滚）
+    const conn = await pool.getConnection();
+    let frmResult;
+    try {
+      await conn.beginTransaction();
+
+      [frmResult] = await conn.execute(
+        `UPDATE fact_rule_matches SET review_status = 'confirmed'
+         WHERE id = ? AND extracted_fact_id = ? AND is_current = 1`,
+        [fact_rule_match_id, extracted_fact_id]
+      );
+      if (frmResult.affectedRows === 0) {
+        await conn.rollback();
+        conn.release();
+        return res.json(Res.error("更新失败：匹配不存在或已过期"));
+      }
+
+      await conn.execute(
+        "UPDATE extracted_facts SET review_status = 'confirmed' WHERE id = ?",
+        [extracted_fact_id]
+      );
+
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      conn.release();
+      console.error('[Material] 确认事务失败:', e.message);
+      return res.json(Res.error("确认失败，请稍后重试"));
+    }
+    conn.release();
+
+    // Phase 3: 识别 indicator 并写入 smart_fill_data
+    try {
+      const [cr] = await pool.execute(
+        'SELECT frm.reason, frm.preview_data FROM fact_rule_matches frm WHERE frm.id = ?', [fact_rule_match_id]
+      );
+      if (cr.length) {
+        let pv = {}; try { pv = typeof cr[0].preview_data === 'string' ? JSON.parse(cr[0].preview_data) : (cr[0].preview_data || {}); } catch (_) {}
+        const description = (cr[0].reason && !cr[0].reason.startsWith('非候选') && !cr[0].reason.startsWith('验证'))
+          ? cr[0].reason : (pv.human_readable || pv.explanation || '');
+
+        // P0修复: 统一使用最新已发布的 rule_set_id
+        let effectiveRuleSetId = pv.rule_set_id || 0;
+        try {
+          const [latestRs] = await pool.execute(
+            "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]
+          );
+          if (latestRs.length) effectiveRuleSetId = latestRs[0].id;
+        } catch (_) {}
+
+        // P0修复: 从DB indicator_nodes获取权威code
+        let indCode = pv.indicator?.code || '';
+        if (pv.indicator_id) {
+          try {
+            // V3: indicator_nodes removed, get code from scoring_rules
+            let indCode2 = '';
+            try {
+              const [srRows] = await pool.execute("SELECT item_key FROM scoring_rules WHERE rule_set_id = ? LIMIT 1", [effectiveRuleSetId]);
+              if (srRows.length) indCode2 = srRows[0].item_key || '';
+            } catch (_) {}
+            const indRows = [{ code: indCode2 }];
+            if (indRows.length) indCode = indRows[0].code || indCode;
+          } catch (_) {}
+        }
+
+        let sec = 'F3', ik = 'B1';
+        if (indCode.startsWith('F1') || indCode.startsWith('A')) {
+          sec = 'F1';
+          if (/^A\d+$/i.test(indCode)) ik = indCode.toUpperCase();
+          else if (indCode.includes('A')) ik = 'A' + (indCode.match(/A(\d+)/i)?.[1] || '1');
+          else ik = 'A1';
+        } else if (/^B\d+$/i.test(indCode)) { sec = 'F3'; ik = indCode.toUpperCase(); }
+        else if (indCode.startsWith('F2')) { sec = 'F2'; ik = 'COURSE'; }
+
+        await pool.execute(
+          'INSERT INTO smart_fill_data (user_id,rule_set_id,section,item_key,score,description) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE description=VALUES(description), score=VALUES(score)',
+          [req.user.id, effectiveRuleSetId, sec, ik, pv.score_preview || 0, description]
+        );
+      }
+    } catch (e) { console.warn('[Mat] sfw fail:', e.message); }
+
+
+    // ★ Phase 2: 回读序列化（独立错误处理，失败不回滚、不误报）
+    //   事务已提交，确认已生效；序列化失败仅影响返回数据的可读性
+    try {
+      const [efRows] = await pool.execute(
+        "SELECT * FROM extracted_facts WHERE id = ?",
+        [extracted_fact_id]
+      );
+      const fact = efRows.length ? await serializeFact(efRows[0]) : null;
+
+      res.json(Res.success({
+        affectedRows: frmResult.affectedRows,
+        match_id: fact_rule_match_id,
+        fact: fact,
+      }, "已确认"));
+    } catch (e) {
+      console.error('[Material] 确认后序列化失败:', e.message);
+      // ★ 确认已生效，序列化失败不应报为"确认失败"
+      //   前端会通过 refreshFactFromServer 重试获取权威数据
+      res.json(Res.success({
+        affectedRows: frmResult.affectedRows,
+        match_id: fact_rule_match_id,
+        fact: null,
+        _serialize_error: e.message,
+      }, "已确认（数据刷新异常，请刷新页面查看）"));
+    }
+  } catch (e) {
+    console.error('[Material] 确认失败:', e.message);
+    res.json(Res.error("确认失败，请稍后重试"));
+  }
 };
 
 // 删除材料（级联删除附件和识别结果）
@@ -87,10 +442,116 @@ exports.deleteMaterial = async (req, res) => {
 };
 
 // 删除单个附件
+// V3: confirm match + update F3 scoring + create fact_rule_matches for score list
+exports.confirmMatchV3 = async (req, res) => {
+  try {
+    const { material_id, ef_id, item_key, score, description } = req.body;
+    if (!ef_id) return res.json(Res.error("missing ef_id"));
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      // 1. Update extracted_facts
+      await conn.execute(
+        "UPDATE extracted_facts SET fact_data = JSON_SET(COALESCE(fact_data,'{}'), '$.match_score', ?, '$.match_desc', ?, '$.match_item_key', ?, '$.confirmed', true) WHERE id = ?",
+        [score, description, item_key, ef_id]
+      );
+
+      // 2. Find analysis_run and rule_set for this fact
+      const [efs] = await conn.execute(
+        "SELECT e.analysis_run_id, m.user_id FROM extracted_facts e JOIN material_analysis_runs mar ON e.analysis_run_id = mar.id JOIN materials m ON mar.material_id = m.id WHERE e.id = ?",
+        [ef_id]
+      );
+      if (!efs.length) { await conn.rollback(); conn.release(); return res.json(Res.error("fact not found")); }
+
+      const { analysis_run_id, user_id } = efs[0];
+      const [rsRows] = await conn.execute(
+        "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [user_id]
+      );
+      const ruleSetId = rsRows.length ? rsRows[0].id : 0;
+
+      // 3. Find or create rule_match_runs
+      let [rmrRows] = await conn.execute(
+        "SELECT id FROM rule_match_runs WHERE rule_set_id = ? AND analysis_run_id = ? ORDER BY id DESC LIMIT 1",
+        [ruleSetId, analysis_run_id]
+      );
+      let matchRunId;
+      if (rmrRows.length) {
+        matchRunId = rmrRows[0].id;
+      } else {
+        const [rmrInsert] = await conn.execute(
+          "INSERT INTO rule_match_runs (rule_set_id, analysis_run_id, model_name, status, created_at, completed_at) VALUES (?, ?, 'v3_confirm', 'completed', NOW(), NOW())",
+          [ruleSetId, analysis_run_id]
+        );
+        matchRunId = rmrInsert.insertId;
+      }
+
+      // 4. Build preview_data for score list display
+      const previewData = JSON.stringify({
+        score_preview: score,
+        score_status: 'confirmed',
+        indicator: { code: item_key || '', name: item_key || '' },
+        rule: { name: description || '', rule_type: 'scoring' },
+        human_readable: description || '',
+      });
+
+      // 5. Upsert fact_rule_matches (so getScoreList can read it)
+      const [existingFrm] = await conn.execute(
+        "SELECT id FROM fact_rule_matches WHERE match_run_id = ? AND extracted_fact_id = ?",
+        [matchRunId, ef_id]
+      );
+      if (existingFrm.length) {
+        await conn.execute(
+          "UPDATE fact_rule_matches SET review_status = 'confirmed', match_condition = 'pass', confidence = 1, is_current = 1, is_selected = 1, preview_data = ? WHERE id = ?",
+          [previewData, existingFrm[0].id]
+        );
+      } else {
+        await conn.execute(
+          "INSERT INTO fact_rule_matches (match_run_id, extracted_fact_id, executable_rule_id, match_condition, confidence, review_status, is_current, is_selected, preview_data) VALUES (?, ?, 0, 'pass', 1, 'confirmed', 1, 1, ?)",
+          [matchRunId, ef_id, previewData]
+        );
+      }
+
+      // 6. Write to smart_fill_data
+      if (item_key && score != null) {
+        await conn.execute(
+          "INSERT INTO smart_fill_data (user_id, rule_set_id, section, item_key, score, description) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE score=VALUES(score), description=VALUES(description)",
+          [user_id, ruleSetId, 'F3', item_key, score, description]
+        );
+      }
+
+      await conn.commit();
+      res.json(Res.success({ match_run_id: matchRunId }, "confirmed"));
+    } catch (e) {
+      await conn.rollback();
+      res.json(Res.error(e.message));
+    } finally {
+      conn.release();
+    }
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
 exports.deleteAttachment = async (req, res) => {
   try {
     const { matId, attId } = req.params;
     await pool.execute("DELETE FROM attachments WHERE id = ? AND material_id = ?", [attId, matId]);
     res.json(Res.success(null, "已删除"));
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
+// AI 生成加分描述
+exports.generateMatchDescription = async (req, res) => {
+  try {
+    const { ef_id, indicator_code, score } = req.body;
+    const [efs] = await pool.execute("SELECT * FROM extracted_facts WHERE id = ?", [ef_id]);
+    if (!efs.length) return res.json(Res.error("fact not found"));
+    const fd = typeof efs[0].fact_data === 'string' ? JSON.parse(efs[0].fact_data) : efs[0].fact_data;
+    const [rules] = await pool.execute("SELECT * FROM scoring_rules WHERE item_key = ? AND status = 'active' LIMIT 1", [indicator_code]);
+    const rule = rules[0] || { item_name: indicator_code };
+    const { generateDescription } = require("../../services/zongce/ai/materialPipeline");
+    const desc = await generateDescription(fd, rule, score);
+    res.json(Res.success({ description: desc }, "ok"));
   } catch (e) { res.json(Res.error(e.message)); }
 };

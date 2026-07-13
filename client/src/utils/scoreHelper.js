@@ -28,7 +28,7 @@ export function getGradeLevel(score) {
 // ============================================================
 
 export function calcDeRaw(a = {}) {
-  return (a.A1 || 0) * 0.4 + (a.A2 || 0) * 0.3 + (a.A4 || 0) * 0.3
+  return (a.A1 || 0) * 0.25 + (a.A2 || 0) * 0.25 + (a.A3 || 0) * 0.25 + (a.A4 || 0) * 0.25
 }
 export function calcZhiRaw(s = {}, b = {}) {
   return (s.F2 || 0) * 0.4 + (b.B1 || 0) * 0.2 + (b.B2 || 0) * 0.2 + (b.B3 || 0) * 0.2

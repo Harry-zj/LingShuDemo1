@@ -2,48 +2,12 @@
 //  AI 输出 JSON Schema 定义 — 严格校验，非法数据直接拒绝
 // ============================================================
 
-const VALID_CATEGORIES = ["moral", "intellectual", "physical", "aesthetic", "labor", ""];
-const VALID_RULE_TYPES = ["scoring", "limit", "conflict"];
-const VALID_LEVELS = ["national", "provincial", "school", "college"];
 const VALID_FACT_TYPES = ["award", "position", "activity", "certificate", "score", "other"];
 const VALID_CONDITIONS = ["pass", "fail", "uncertain"];
-const VALID_STRATEGIES = ["take_highest", "dedup", "cap"];
-const VALID_SCOPES = ["dimension", "global"];
 
 // ============================================================
 //  通用工具
 // ============================================================
-
-/** AI 经常返回字符串 "undefined"/"null" 或缺失字段，统一清洗 */
-function sanitize(item) {
-  const cleaned = {
-    category: null,
-    description: "",
-    level: null,
-    score: null,
-    rule_type: "scoring",
-    limit_value: null,
-    scope: null,
-    strategy: null,
-    max_times: 1,
-    conflict_group: null,
-    proof_required: [],
-    ...item,  // AI返回值覆盖默认值
-  };
-  // 清洗"undefined"/"null"字符串和NaN
-  for (const key of Object.keys(cleaned)) {
-    const v = cleaned[key];
-    if (v === "undefined" || v === "null" || v === "" || v === undefined || (typeof v === "number" && isNaN(v))) {
-      cleaned[key] = null;
-    }
-  }
-  // 不可为null的字段
-  if (!cleaned.max_times) cleaned.max_times = 1;
-  if (!cleaned.description) cleaned.description = "";
-  if (!cleaned.rule_type || !["scoring","limit","conflict"].includes(cleaned.rule_type)) cleaned.rule_type = "scoring";
-  if (!Array.isArray(cleaned.proof_required)) cleaned.proof_required = [];
-  return cleaned;
-}
 
 function checkExtraFields(obj, allowed, label) {
   const extra = Object.keys(obj).filter((k) => !allowed.has(k));
@@ -60,77 +24,6 @@ function inRange01(v, label) {
     return `${label} 超出 0~1 范围: ${v}`;
   }
   return null;
-}
-
-// ============================================================
-//  规则解析输出校验
-// ============================================================
-const RULE_ITEM_ALLOWED = new Set([
-  "category", "description", "level", "score", "rule_type",
-  "limit_value", "scope", "strategy",
-  "max_times", "conflict_group", "proof_required",
-]);
-const RULE_PARSE_TOP_ALLOWED = new Set(["rule_items"]);
-
-function validateRuleParse(data) {
-  if (!data || typeof data !== "object") return { ok: false, error: "非对象" };
-
-  const topExtra = checkExtraFields(data, RULE_PARSE_TOP_ALLOWED, "顶层");
-  if (topExtra.length) return { ok: false, error: topExtra[0] };
-
-  if (!Array.isArray(data.rule_items)) return { ok: false, error: "缺少 rule_items 数组" };
-
-  // ★ 清洗 AI 的字符串 "undefined"/"null"
-  data.rule_items = data.rule_items.map(sanitize);
-
-  const errors = [];
-  for (let i = 0; i < data.rule_items.length; i++) {
-    const item = data.rule_items[i];
-    const pre = `rule_items[${i}]`;
-
-    errors.push(...checkExtraFields(item, RULE_ITEM_ALLOWED, pre));
-
-    if (item.category !== null && !VALID_CATEGORIES.includes(item.category)) {
-      errors.push(`${pre}.category 非法: "${item.category}"`);
-    }
-    if (!item.description || typeof item.description !== "string") {
-      errors.push(`${pre}.description 缺失`);
-    }
-    if (item.level !== null && !VALID_LEVELS.includes(item.level)) {
-      errors.push(`${pre}.level 非法: "${item.level}"（允许: ${VALID_LEVELS.join(",")}）`);
-    }
-    if (item.score !== null && (typeof item.score !== "number" || isNaN(item.score))) {
-      errors.push(`${pre}.score 非法: ${item.score}`);
-    }
-    if (!VALID_RULE_TYPES.includes(item.rule_type)) {
-      errors.push(`${pre}.rule_type 非法: "${item.rule_type}"`);
-    }
-    if (item.rule_type === "limit") {
-      if (item.limit_value !== undefined && item.limit_value !== null && (typeof item.limit_value !== "number" || isNaN(item.limit_value))) {
-        errors.push(`${pre}.limit_value 非法: ${item.limit_value}`);
-      }
-      if (item.scope !== undefined && item.scope !== null && !VALID_SCOPES.includes(item.scope)) {
-        errors.push(`${pre}.scope 非法: "${item.scope}"`);
-      }
-    }
-    if (item.rule_type === "conflict") {
-      if (item.strategy !== undefined && item.strategy !== null && !VALID_STRATEGIES.includes(item.strategy)) {
-        errors.push(`${pre}.strategy 非法: "${item.strategy}"`);
-      }
-    }
-    if (item.max_times !== undefined && (!Number.isInteger(item.max_times) || item.max_times < 1)) {
-      errors.push(`${pre}.max_times 必须为正整数`);
-    }
-    if (item.conflict_group !== null && item.conflict_group !== undefined && typeof item.conflict_group !== "string") {
-      errors.push(`${pre}.conflict_group 必须为字符串或null`);
-    }
-    if (item.proof_required !== undefined && !Array.isArray(item.proof_required)) {
-      errors.push(`${pre}.proof_required 必须为数组`);
-    }
-  }
-
-  if (errors.length > 0) return { ok: false, error: errors.join("; ") };
-  return { ok: true, data };
 }
 
 // ============================================================
@@ -274,9 +167,84 @@ async function validateRuleIdsExist(pool, userId, ruleIds) {
   return { ok: true };
 }
 
+// ============================================================
+//  V2 规则解析输出校验
+// ============================================================
+function validateV2RuleParse(data) {
+  if (!data || typeof data !== "object") return { ok: false, error: "非对象" };
+  if (!Array.isArray(data.indicators)) return { ok: false, error: "缺少 indicators" };
+  if (!Array.isArray(data.packages)) return { ok: false, error: "缺少 packages" };
+
+  const errors = [];
+
+  // 校验指标
+  const allKeys = new Set();
+  const checkIndicators = (nodes, parentCode) => {
+    for (const n of nodes) {
+      if (!n.code || !n.name) errors.push(`indicator 缺 code/name`);
+      if (!n.canonical_key) errors.push(`indicator ${n.code} 缺 canonical_key`);
+      if (n.canonical_key && allKeys.has(n.canonical_key)) errors.push(`重复 canonical_key: ${n.canonical_key}`);
+      if (n.canonical_key) allKeys.add(n.canonical_key);
+      // calc_method 不严格限制枚举，AI 会给出语义合理的值
+      if (n.calc_method && typeof n.calc_method !== 'string')
+        errors.push(`indicator ${n.code} calc_method 非字符串`);
+      if (n.max_score != null && (typeof n.max_score !== 'number' || n.max_score < 0))
+        errors.push(`indicator ${n.code} max_score 非法`);
+      if (n.children) checkIndicators(n.children, n.code);
+    }
+  };
+  checkIndicators(data.indicators, null);
+
+  // 校验规则包
+  const pkgKeys = new Set();
+  for (const p of data.packages) {
+    if (!p.name || !p.canonical_key) errors.push(`package 缺 name/key`);
+    if (p.canonical_key && pkgKeys.has(p.canonical_key)) errors.push(`重复 pkg key: ${p.canonical_key}`);
+    if (p.canonical_key) pkgKeys.add(p.canonical_key);
+    if (p.auto_level && !['automatic','assisted','manual_required'].includes(p.auto_level))
+      errors.push(`pkg ${p.canonical_key} auto_level 非法`);
+    if (!Array.isArray(p.rules)) errors.push(`pkg ${p.canonical_key} 缺 rules`);
+  }
+
+  // 校验可执行规则
+  const VALID_V2_TYPES = ['fixed','per_unit','tiered','lookup','formula_ast','coefficient','cap','dedup','eligibility','manual','normalization','evidence_policy','override','outcome_constraint','adjustment'];
+  const VALID_STAGES = ['precheck','normalization','eligibility','base_score','adjustment','override','deduplication','cap','aggregation','post_aggregation','outcome'];
+  const VALID_SCOPES = ['per_fact','per_material','per_group','per_indicator','global'];
+
+  for (const p of data.packages) {
+    const ruleKeys = new Set();
+    for (const r of (p.rules || [])) {
+      if (!r.rule_type || !VALID_V2_TYPES.includes(r.rule_type))
+        errors.push(`rule ${r.canonical_key}: type 非法 "${r.rule_type}"`);
+      if (!r.canonical_key) errors.push(`rule in ${p.canonical_key} 缺 key`);
+      if (r.canonical_key && ruleKeys.has(r.canonical_key)) errors.push(`重复 rule key: ${r.canonical_key}`);
+      if (r.canonical_key) ruleKeys.add(r.canonical_key);
+      if (!r.execution_stage || !VALID_STAGES.includes(r.execution_stage))
+        errors.push(`rule ${r.canonical_key}: stage 非法 "${r.execution_stage}"`);
+      if (r.application_scope && !VALID_SCOPES.includes(r.application_scope))
+        errors.push(`rule ${r.canonical_key}: scope 非法`);
+      if (r.config && typeof r.config !== 'object')
+        errors.push(`rule ${r.canonical_key}: config 非对象`);
+      if (r.auto_level && !['automatic','assisted','manual_required'].includes(r.auto_level))
+        errors.push(`rule ${r.canonical_key}: auto_level 非法`);
+    }
+  }
+
+  // 校验查分表
+  if (data.lookup_tables) {
+    for (const t of data.lookup_tables) {
+      if (!t.name || !t.canonical_key) errors.push(`lookup 缺 name/key`);
+      if (t.dimensions && !Array.isArray(t.dimensions)) errors.push(`lookup ${t.canonical_key} dimensions 非数组`);
+    }
+  }
+
+  if (errors.length > 0) return { ok: false, error: errors.join("; ") };
+  return { ok: true, data };
+}
+
 module.exports = {
-  VALID_CATEGORIES, VALID_RULE_TYPES, VALID_LEVELS, VALID_FACT_TYPES,
-  VALID_CONDITIONS, VALID_STRATEGIES, VALID_SCOPES,
-  validateRuleParse, validateFactExtraction, validateRuleMatch,
+  VALID_FACT_TYPES, VALID_CONDITIONS,
+  validateFactExtraction, validateRuleMatch,
+  validateV2RuleParse,
   validateRuleIdsExist, clamp01, checkExtraFields, inRange01,
 };

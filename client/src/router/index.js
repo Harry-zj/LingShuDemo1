@@ -1,18 +1,21 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { useUserStore } from "../stores/user";
+const smartFillView = () => import("../views/zongce/SmartFill.vue");
+
 const routes = [
   { path: "/login", name: "Login", component: () => import("../views/auth/Login.vue"), meta: { layout: "auth" } },
   { path: "/register", name: "Register", component: () => import("../views/auth/Register.vue"), meta: { layout: "auth" } },
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
   /* 综测核心 */
-  { path: "/zongce/smart-fill", name: "SmartFill", component: () => import("../views/zongce/SmartFill.vue"), meta: { layout: "main", title: "智能填表" } },
+  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表" } },
   { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
   { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
   /* 模块二 */
-  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "评定结果" } },
+  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "数据总览" } },
   { path: "/module2/profile", name: "PersonalProfile", component: () => import("../views/module2/PersonalProfile.vue"), meta: { layout: "main", title: "个人画像" } },
   { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告" } },
+{ path: "/module2/dimension/:key", name: "DimensionDetail", component: () => import("../views/module2/DimensionDetail.vue"), meta: { layout: "main", title: "维度活动指南" } },
   /* 模块三 */
   { path: "/module3/profile", name: "Module3Profile", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "menu" }, meta: { layout: "main", title: "个人中心", roles: ["student", "admin", "counselor", "student_affairs"] } },
   { path: "/module3/profile/basic", name: "Module3ProfileBasic", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "basic" }, meta: { layout: "main", title: "基础信息", roles: ["student", "admin", "counselor", "student_affairs"] } },

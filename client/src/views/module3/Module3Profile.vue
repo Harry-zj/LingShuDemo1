@@ -222,7 +222,7 @@ onMounted(async () => {
 .profile-page { display: flex; flex-direction: column; gap: 22px; animation: fadeIn 0.35s var(--easing-decelerate); }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 4px; }
-.profile-alert, .profile-card { padding: 20px; border-radius: var(--radius-xl); }
+.profile-alert, .profile-card { padding: 20px; border-radius: 8px !important; }
 .profile-alert { display: flex; gap: 12px; align-items: flex-start; background: rgba(245, 158, 11, 0.12); }
 .profile-alert svg { font-size: 24px; color: #d97706; }
 .profile-alert p { margin-top: 4px; color: var(--color-text-secondary); }
@@ -231,13 +231,19 @@ onMounted(async () => {
 .section-head span { color: var(--color-text-secondary); font-size: 13px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .form-grid label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-text-secondary); }
-.form-grid input, .form-grid select { height: 40px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); outline: none; background: var(--color-surface); color: var(--color-text-primary); }
+.form-grid input, .form-grid select { height: 40px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 8px !important; outline: none; background: var(--color-surface); color: var(--color-text-primary); }
 .form-grid input:focus, .form-grid select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
 .form-grid input:disabled, .form-grid select:disabled { opacity: 0.7; cursor: not-allowed; }
 .actions { display: flex; justify-content: flex-end; margin-top: 18px; }
-.btn-primary, .btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 18px; border-radius: var(--radius-full); cursor: pointer; }
+.btn-primary, .btn-outline { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 18px; border-radius: 8px !important; cursor: pointer; }
 .btn-primary { border: none; color: #fff; background: var(--gradient-primary); }
 .btn-outline { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); }
 .btn-primary:disabled, .btn-outline:disabled { opacity: .6; cursor: not-allowed; }
 @media (max-width: 720px) { .form-grid { grid-template-columns: 1fr; } }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

@@ -1,5 +1,5 @@
-const { chatStreamJson } = require("./aiService");
-const { FACT_EXTRACT_SYSTEM, VERSION } = require("./promptTemplates");
+const { chatStreamJson } = require("./deepseek");
+const { FACT_EXTRACT_SYSTEM, VERSION } = require("./prompts");
 const { validateFactExtraction } = require("./schemas");
 const fs = require("fs");
 const path = require("path");
@@ -72,9 +72,9 @@ async function extractFromImage(filePath, ext, fileName) {
   const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
   const mime = mimeMap[ext] || "image/png";
 
-  // Step 1: OCR 提取文字（非流式）
-  const { ocrImage } = require("./aiService");
-  const text = await ocrImage(base64);
+  // Step 1: OCR 提取文字（用 Kimi vision 模型）
+  const { ocrWithKimi } = require("./deepseek");
+  const text = await ocrWithKimi(base64, mime);
   if (!text.trim()) return { facts: [], overall_clarity: 0, missing_info: ["图片中未识别到文字"] };
 
   // Step 2: 从 OCR 文字中提取事实（流式）
@@ -111,4 +111,80 @@ async function extractFromDocument(filePath, ext) {
   return await chatStreamJson(messages, { temperature: 0.1, maxTokens: 2048 });
 }
 
-module.exports = { extractFacts };
+// ============================================================
+//  结构化事实提取（材料分析新版：含规则分类建议）
+// ============================================================
+const { MATERIAL_EXTRACT_SYSTEM } = require("./prompts");
+
+async function extractStructuredFacts(attachments) {
+  const allFacts = [];
+  let totalClarity = 0;
+  let needsReview = false;
+  let reviewReason = null;
+
+  for (const att of attachments) {
+    const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+    const ext = path.extname(att.file_name).toLowerCase();
+
+    let result;
+    if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
+      // 图片 → Kimi OCR → 结构化提取
+      const buffer = fs.readFileSync(filePath);
+      const base64 = buffer.toString("base64");
+      const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
+      const mime = mimeMap[ext] || "image/png";
+
+      const { ocrWithKimi } = require("./deepseek");
+      const ocrText = await ocrWithKimi(base64, mime);
+      if (!ocrText.trim()) {
+        console.warn(`[FactExtract] ${att.file_name} OCR 无结果`);
+        continue;
+      }
+      result = await chatStreamJson(
+        [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下OCR文本中提取结构化事实：\n\n${ocrText}` }],
+        { temperature: 0.1, maxTokens: 2048 }
+      );
+    } else if (ext === ".docx") {
+      const mammoth = require("mammoth");
+      const text = (await mammoth.extractRawText({ path: filePath })).value;
+      if (!text.trim()) continue;
+      result = await chatStreamJson(
+        [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文档中提取结构化事实：\n\n${text}` }],
+        { temperature: 0.1, maxTokens: 2048 }
+      );
+    } else {
+      const text = fs.readFileSync(filePath, "utf-8");
+      if (!text.trim()) continue;
+      result = await chatStreamJson(
+        [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文本中提取结构化事实：\n\n${text}` }],
+        { temperature: 0.1, maxTokens: 2048 }
+      );
+    }
+
+    if (!result || !result.facts) {
+      console.log('[FactExtract] AI response missing facts. Keys:', result ? Object.keys(result).join(',') : 'null');
+      console.log('[FactExtract] Raw result sample:', JSON.stringify(result || {}).slice(0, 300));
+      continue;
+    }
+
+    for (const f of result.facts) {
+      f.fact_id = `f${allFacts.length + 1}`;
+      f.attachment_id = att.id;
+      f.source_file = att.file_name;
+      allFacts.push(f);
+    }
+    totalClarity += result.overall_clarity || 0;
+    if (result.needs_review) { needsReview = true; reviewReason = result.review_reason; }
+  }
+
+  return {
+    facts: allFacts,
+    overall_clarity: attachments.length > 0 ? totalClarity / attachments.length : 0,
+    needs_review: needsReview,
+    review_reason: reviewReason,
+    model: "kimi",
+    prompt_version: "v2.2",
+  };
+}
+
+module.exports = { extractFacts, extractStructuredFacts };

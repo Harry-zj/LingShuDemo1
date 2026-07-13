@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="profile-page">
     <div class="bg-atmosphere">
       <div class="orb orb-1"></div>
@@ -41,10 +41,10 @@
         <div class="card glass-card reveal" style="animation-delay: 0.15s;">
           <div class="card-accent" style="background: var(--color-primary)"></div>
           <h3><VIcon icon="mdi:chart-bell-curve" /> 五维能力雷达</h3>
-          <RadarChart :dimensions="evalData.dimension_scores" :size="320" />
+          <RadarChart :data="dimScoresObj" :dimensions="dimConfig" :size="320" />
         </div>
         <div class="card glass-card reveal" style="animation-delay: 0.25s;">
-          <div class="card-accent" style="background: var(--color-tiyu)"></div>
+          <div class="card-accent" style="background: var(--color-ti)"></div>
           <h3><VIcon icon="mdi:chart-bar" /> 班级对比</h3>
           <div ref="compareChartRef" class="echart-box"></div>
           <p v-if="!hasClassData" class="no-data-hint">暂无班级对比数据</p>
@@ -67,11 +67,11 @@ import { getBatches } from "../../api/module3"
 import RadarChart from "../../components/RadarChart.vue"
 
 const dimConfig = [
-  { key: "zhiyu", name: "智育", color: "#4F46E5" },
-  { key: "deyu", name: "德育", color: "#D97706" },
-  { key: "tiyu", name: "体育", color: "#059669" },
-  { key: "meiyu", name: "美育", color: "#7C3AED" },
-  { key: "laoyu", name: "劳育", color: "#EA580C" },
+  { key: "zhi", name: "智育", color: "#4F46E5" },
+  { key: "de", name: "德育", color: "#D97706" },
+  { key: "ti", name: "体育", color: "#059669" },
+  { key: "mei", name: "美育", color: "#7C3AED" },
+  { key: "lao", name: "劳育", color: "#EA580C" },
 ]
 const loading = ref(true)
 const evalData = ref(null); const classStats = ref(null)
@@ -81,8 +81,9 @@ const historyData = ref([])
 let compareChart = null; let trendChart = null
 
 const hasClassData = computed(() => classStats.value?.avg_score > 0 || classStats.value?.rankings?.length > 0)
-const strengths = computed(() => { if (!evalData.value?.dimension_scores) return []; return dimConfig.filter(d => (evalData.value.dimension_scores[d.key] ?? 0) >= 80).map(d => d.name) })
-const weaknesses = computed(() => { if (!evalData.value?.dimension_scores) return []; return dimConfig.filter(d => (evalData.value.dimension_scores[d.key] ?? 0) < 60).map(d => d.name) })
+const dimScoresObj = computed(() => { if (!evalData.value?.dimension_scores_obj) return {}; const arr = evalData.value.dimension_scores_obj; if (Array.isArray(arr)) { const obj = {}; arr.forEach(d => { obj[d.key] = d.score || 0 }); return obj; } return arr; })
+const strengths = computed(() => { if (!evalData.value?.dimension_scores) return []; return dimConfig.filter(d => (dimScoresObj.value[d.key] ?? 0) >= 80).map(d => d.name) })
+const weaknesses = computed(() => { if (!evalData.value?.dimension_scores) return []; return dimConfig.filter(d => (dimScoresObj.value[d.key] ?? 0) < 60).map(d => d.name) })
 const statCards = computed(() => [
   { label: "综测总分", value: evalData.value?.total_score ?? "--", display: evalData.value?.total_score ?? "--", color: "var(--color-primary)" },
   { label: "班级排名", value: evalData.value?.class_rank ? `${evalData.value.class_rank}/${evalData.value.class_size}` : "--", display: evalData.value?.class_rank ? `${evalData.value.class_rank}/${evalData.value.class_size}` : "--", color: "var(--color-success)" },
@@ -93,7 +94,7 @@ const statCards = computed(() => [
 function buildCompareChart() {
   if (!compareChartRef.value) return
   if (!compareChart) compareChart = echarts.init(compareChartRef.value)
-  const my = dimConfig.map(d => evalData.value?.dimension_scores?.[d.key] ?? 0)
+  const my = dimConfig.map(d => dimScoresObj.value?.[d.key] ?? 0)
   const avg = classStats.value?.dimension_averages ? dimConfig.map(d => classStats.value.dimension_averages[d.key] ?? 0) : dimConfig.map(() => 0)
   compareChart.setOption({
     tooltip: { trigger: "axis" }, legend: { data: ["我的得分", "班级均分"], bottom: 0, textStyle: { fontSize: 12, color: "#5F6368" } },
@@ -135,8 +136,8 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); compareC
 
 .bg-atmosphere { position: fixed; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .orb { position: absolute; border-radius: 50%; opacity: 0.07; filter: blur(80px); }
-.orb-1 { width: 350px; height: 350px; background: var(--color-tiyu); top: 10%; left: -120px; animation: orbDrift1 18s ease-in-out infinite; }
-.orb-2 { width: 280px; height: 280px; background: var(--color-meiyu); bottom: 20%; right: -100px; animation: orbDrift2 22s ease-in-out infinite; }
+.orb-1 { width: 350px; height: 350px; background: var(--color-ti); top: 10%; left: -120px; animation: orbDrift1 18s ease-in-out infinite; }
+.orb-2 { width: 280px; height: 280px; background: var(--color-mei); bottom: 20%; right: -100px; animation: orbDrift2 22s ease-in-out infinite; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 1; }
 .page-header h2 { font-size: var(--font-scale-h2); font-weight: var(--font-weight-semibold); }

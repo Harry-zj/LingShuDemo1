@@ -1,11 +1,31 @@
 import request from "./request";
-export const getSmartResult = (p) => request.get("/module1/smart-result", { params: p });
-export const updateSmartResult = (d) => request.put("/module1/smart-result", d);
-export const submitSmartResult = (d) => request.post("/module1/smart-result/submit", d);
-export const getMaterials = (p) => request.get("/module1/materials", { params: p });
-export const createMaterial = (d) => request.post("/module1/materials", d);
-export const submitMaterial = (id, d) => request.put(`/module1/materials/${id}/submit`, d);
-export const uploadFile = (d) => request.post("/module1/upload", d, { headers: { "Content-Type": "multipart/form-data" } });
-export const aiMatch = (d) => request.post("/module1/ai-match", d);
-export const batchFill = (d) => request.post("/zongce/batch-fill", d);
-export const chatFill = (d) => request.post("/module1/chat-fill", d);
+
+// Smart Result (综测表)
+export const getSmartResult = () =>
+  request.get("/module1/smart-result");
+
+export const updateSmartResult = (data) =>
+  request.put("/module1/smart-result", data);
+
+export const submitSmartResult = () =>
+  request.post("/module1/smart-result/submit");
+
+// Materials (材料)
+export const getMaterials = () =>
+  request.get("/module1/materials");
+
+export const createMaterial = (title) =>
+  request.post("/module1/materials", { title });
+
+export const submitMaterial = (id) =>
+  request.put(`/module1/materials/${id}/submit`);
+
+// Upload
+export const uploadFile = (formData) =>
+  request.post("/module1/upload", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+// AI Match
+export const aiMatch = (data) =>
+  request.post("/module1/ai-match", data);

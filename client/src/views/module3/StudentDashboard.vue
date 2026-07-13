@@ -390,7 +390,7 @@ onMounted(loadDetail);
 .eyebrow { display: inline-block; margin-bottom: 5px; color: var(--color-text-tertiary); font-size: 12px; }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.my-materials, .profile-warning, .result-notice, .objection-submit-panel, .loading-card { padding: 20px; border-radius: var(--radius-xl); }
+.my-materials, .profile-warning, .result-notice, .objection-submit-panel, .loading-card { padding: 20px; border-radius: 8px !important; }
 .profile-warning { display: flex; gap: 14px; align-items: flex-start; background: rgba(245, 158, 11, 0.12); }
 .profile-warning svg { font-size: 28px; color: #d97706; }
 .profile-warning h3 { font-size: 16px; margin-bottom: 6px; }
@@ -405,11 +405,11 @@ onMounted(loadDetail);
 .overview-title-row h3 { font-size: 20px; }
 .overview-meta, .overview-note { margin-top: 6px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
 .overview-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--color-primary) 11%, transparent); color: var(--color-primary); font-size: 12px; }
+.status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 11%, transparent); color: var(--color-primary); font-size: 12px; }
 .status-chip.muted { background: var(--color-bg); color: var(--color-text-secondary); }
 .status-chip.demo { background: rgba(99,102,241,.10); color: #6366f1; }
 .status-chip.readonly { background: rgba(245,158,11,.12); color: #d97706; }
-.danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid rgba(239,68,68,.35); background: transparent; color: #ef4444; cursor: pointer; white-space: nowrap; }
+.danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 8px !important; border: 1px solid rgba(239,68,68,.35); background: transparent; color: #ef4444; cursor: pointer; white-space: nowrap; }
 .danger-btn:disabled { opacity: .55; cursor: not-allowed; }
 .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 18px 0 2px; border-top: 1px solid var(--color-border); }
 .action-help { display: flex; flex-direction: column; gap: 5px; }
@@ -417,20 +417,20 @@ onMounted(loadDetail);
 .action-help span { color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
 .action-buttons { display: flex; gap: 10px; flex: 0 0 auto; }
 .objection-submit-panel { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
-.btn-outline, .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: var(--radius-full); cursor: pointer; white-space: nowrap; }
+.btn-outline, .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 8px !important; cursor: pointer; white-space: nowrap; }
 .btn-outline { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); }
 .btn-primary { border: none; background: var(--gradient-primary); color: white; visibility: visible; opacity: 1; }
 .btn-outline:disabled, .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 .material-list { display: flex; flex-direction: column; gap: 10px; }
-.material-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); }
+.material-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px; border-radius: 8px !important; background: var(--color-bg); }
 .row-left { display: flex; align-items: flex-start; gap: 12px; }
 .row-icon { font-size: 22px; color: var(--color-primary); }
 .row-desc { margin-top: 4px; font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
-.status-tag { padding: 4px 10px; border-radius: var(--radius-full); font-size: 12px; white-space: nowrap; }
+.status-tag { padding: 4px 10px; border-radius: 8px !important; font-size: 12px; white-space: nowrap; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px; color: var(--color-text-tertiary); text-align: center; }
 .empty-state .v-icon { font-size: 40px; }
 .result-notice, .result-waiting { display: flex; align-items: flex-start; gap: 14px; background: rgba(52,168,83,.10); }
-.result-waiting { padding: 20px; border-radius: var(--radius-xl); background: rgba(245,158,11,.10); }
+.result-waiting { padding: 20px; border-radius: 8px !important; background: rgba(245,158,11,.10); }
 .result-waiting > svg { flex: 0 0 auto; font-size: 28px; color: #d97706; }
 .result-waiting h3, .result-notice h3 { margin-bottom: 5px; }
 .result-waiting p, .result-notice p, .result-notice small { color: var(--color-text-secondary); line-height: 1.6; }
@@ -444,4 +444,10 @@ onMounted(loadDetail);
   .detail-overview, .form-actions, .objection-submit-panel { flex-direction: column; align-items: stretch; }
   .overview-actions, .action-buttons { flex-wrap: wrap; }
 }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

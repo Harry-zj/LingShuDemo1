@@ -214,33 +214,33 @@ onMounted(() => load());
 .page-header { display: flex; align-items: center; gap: 16px; }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
-.assignment-card, .review-box, .item-review-box { padding: 20px; border-radius: var(--radius-xl); }
+.btn-outline { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px !important; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
+.assignment-card, .review-box, .item-review-box { padding: 20px; border-radius: 8px !important; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .panel-count, .stage-tag { font-size: 13px; color: var(--color-text-secondary); }
-.stage-tag, .objection-tag { padding: 5px 10px; border-radius: var(--radius-full); background: rgba(245,158,11,.12); color: #d97706; }
+.stage-tag, .objection-tag { padding: 5px 10px; border-radius: 8px !important; background: rgba(245,158,11,.12); color: #d97706; }
 .task-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.task-list span { padding: 6px 10px; border-radius: var(--radius-full); background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
+.task-list span { padding: 6px 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
 .item-review-list { display: flex; flex-direction: column; gap: 12px; }
-.item-review-card { padding: 14px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-bg); }
+.item-review-card { padding: 14px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); }
 .item-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
 .item-head p { margin-top: 5px; color: var(--color-text-secondary); font-size: 12px; }
 .objection-tag { max-width: 45%; font-size: 12px; line-height: 1.5; }
 .item-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .item-fields label { display: flex; flex-direction: column; gap: 6px; color: var(--color-text-secondary); font-size: 12px; }
-.item-fields select, .item-fields input { min-height: 38px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-primary); }
+.item-fields select, .item-fields input { min-height: 38px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); }
 .template-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0 8px; color: var(--color-text-secondary); font-size: 12px; }
-.template-row button { border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-text-secondary); padding: 5px 10px; cursor: pointer; }
-.level-row { padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); margin-bottom: 14px; }
+.template-row button { border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-secondary); padding: 5px 10px; cursor: pointer; }
+.level-row { padding: 14px; border-radius: 8px !important; background: var(--color-bg); margin-bottom: 14px; }
 .level-row label { display: block; font-weight: var(--font-weight-semibold); margin-bottom: 10px; }
 .level-options { display: flex; gap: 10px; flex-wrap: wrap; }
-.level-options button { height: 34px; padding: 0 14px; border-radius: var(--radius-full); border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
+.level-options button { height: 34px; padding: 0 14px; border-radius: 8px !important; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
 .level-options button.active { color: white; background: var(--gradient-primary); border: none; }
 .level-tip { margin-top: 10px; color: var(--color-text-secondary); font-size: 12px; }
-textarea { width: 100%; min-height: 86px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--color-text-primary); padding: 12px; resize: vertical; }
+textarea { width: 100%; min-height: 86px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); padding: 12px; resize: vertical; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
-.actions button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: var(--radius-full); border: none; color: white; cursor: pointer; }
+.actions button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px !important; border: none; color: white; cursor: pointer; }
 .actions button:disabled { opacity: .6; cursor: not-allowed; }
 .btn-pass { background: #34a853; }
 .btn-return { background: #f59e0b; }
@@ -248,4 +248,10 @@ textarea { width: 100%; min-height: 86px; border: 1px solid var(--color-border);
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px; color: var(--color-text-tertiary); }
 .empty-state .v-icon { font-size: 40px; }
 @media (max-width: 768px) { .page-header, .item-head { flex-direction: column; align-items: stretch; } .item-fields { grid-template-columns: 1fr; } .objection-tag { max-width: none; } }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

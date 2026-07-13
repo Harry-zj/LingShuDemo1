@@ -1,4 +1,4 @@
-import request from "./request";
+﻿import request from "./request";
 
 // ===== 规则 =====
 export const uploadRuleFiles = (formData) =>
@@ -12,23 +12,8 @@ export const addRuleText = (text) =>
 export const getRuleSources = () =>
   request.get("/zongce/rules/sources");
 
-export const getRuleItems = () =>
-  request.get("/zongce/rules/items");
-
-export const toggleRuleItem = (id) =>
-  request.put(`/zongce/rules/items/${id}/toggle`);
-
-export const parseRuleSource = (id) =>
-  request.post(`/zongce/rules/sources/${id}/parse`, null, { timeout: 30000 });
-
-export const getParseProgress = (taskId) =>
-  request.get(`/zongce/rules/tasks/${taskId}`);
-
 export const deleteRuleSource = (id) =>
   request.delete(`/zongce/rules/sources/${id}`);
-
-export const deleteRuleItem = (id) =>
-  request.delete(`/zongce/rules/items/${id}`);
 
 // ===== 材料 =====
 export const createMaterial = (title) =>
@@ -45,6 +30,15 @@ export const uploadAttachments = (materialId, formData) =>
 export const analyzeMaterial = (materialId) =>
   request.post(`/zongce/materials/${materialId}/analyze`, null, { timeout: 120000 });
 
+export const extractMaterial = (materialId) =>
+  request.post(`/zongce/materials/${materialId}/extract`, null, { timeout: 120000 });
+
+export const previewScore = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/preview`, data, { timeout: 30000 });
+
+export const matchMaterial = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/match`, data, { timeout: 60000 });
+
 export const deleteMaterial = (id) =>
   request.delete(`/zongce/materials/${id}`);
 
@@ -58,10 +52,23 @@ export const confirmRecognition = (id) =>
 export const dismissRecognition = (id) =>
   request.put(`/zongce/recognitions/${id}/dismiss`);
 
+// ★ 确认事实匹配（更新 fact_rule_matches.review_status）
+export const confirmFactMatch = (id) =>
+  request.put(`/zongce/recognitions/fact-match/${id}/confirm`);
+
+// ★ V3 确认加分（材料级别 confirm-match，携带 auth token）
+export const confirmMatchMaterial = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/confirm-match`, data, { timeout: 30000 });
+
+// ★ AI 生成加分描述
+export const generateMatchDescription = (materialId, data) =>
+  request.post(`/zongce/materials/${materialId}/generate-description`, data, { timeout: 30000 });
+
 // ===== 评分 =====
 export const calculateScore = () =>
   request.post("/zongce/evaluation/calculate");
 
+export const getScoreList = (ruleSetId) => request.get("/zongce/evaluation/score-list", { params: { rule_set_id: ruleSetId } });
 export const getEvaluation = () =>
   request.get("/zongce/evaluation/result");
 
@@ -80,8 +87,18 @@ export const doFill = (templateId) =>
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });
 
-export const getMockData = () =>
-  request.get("/zongce/mock-data");
+export const getFillPreview = () =>
+  request.get("/zongce/fill-preview");
+// ===== 智能填表数据保存 =====
+export const saveFillData = (items) =>
+  request.post("/zongce/smart-fill/save", { items });
+
+export const getSmartFillData = (ruleSetId) =>
+  request.get("/zongce/smart-fill/data", { params: { rule_set_id: ruleSetId } });
+
+export const generateF1Description = (section, item_key, item_name) =>
+  request.post("/zongce/smart-fill/generate-f1", { section, item_key, item_name });
+
 
 // ===== 批量填表 =====
 export const batchUploadFiles = (formData) =>
@@ -111,3 +128,20 @@ export const chatFillAnalyze = (templateId) =>
 export const chatFillDoFill = (templateId, fieldContents) =>
   request.post("/zongce/chat-fill/fill", { templateId, fieldContents });
 
+
+// ===== V2 规则集 =====
+export const createRuleSet = () => request.post("/zongce/rule-sets");
+export const getRuleSets = () => request.get("/zongce/rule-sets");
+export const getRuleSet = (id) => request.get(`/zongce/rule-sets/${id}`);
+export const publishRuleSet = (id) => request.post(`/zongce/rule-sets/${id}/publish`);
+export const deleteRuleSet = (id) => request.delete(`/zongce/rule-sets/${id}`);
+
+// ===== V2 规则解析 =====
+export const parseRuleSource = (id) =>
+  request.post(`/zongce/rules/sources/${id}/parse`, null, { timeout: 30000 });
+
+// ===== V2 评分 =====
+export const calculateScoreV2 = (rule_set_id, material_ids) =>
+  request.post("/zongce/evaluation/calculate", { rule_set_id, material_ids });
+export const getCalculation = (id) => request.get(`/zongce/calculations/${id}`);
+export const resumeCalculation = (id) => request.post(`/zongce/calculations/${id}/resume`);

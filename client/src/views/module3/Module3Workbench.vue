@@ -146,28 +146,28 @@ function open(card) {
 
 <style scoped>
 .workbench-page { display: flex; flex-direction: column; gap: 28px; animation: fadeIn .35s var(--easing-decelerate); }
-.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 28px; border-radius: var(--radius-xl); }
+.hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding: 28px; border-radius: 8px !important; }
 .eyebrow { display: inline-block; margin-bottom: 8px; color: var(--color-primary); font-size: 11px; font-weight: 700; letter-spacing: .18em; }
 .hero h2 { font-size: 26px; line-height: 1.25; }
 .hero p { max-width: 760px; margin-top: 8px; color: var(--color-text-secondary); line-height: 1.7; }
-.role-chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: var(--radius-full); background: var(--color-bg); color: var(--color-primary); white-space: nowrap; }
+.role-chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-primary); white-space: nowrap; }
 .section-block { display: flex; flex-direction: column; gap: 16px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
 .section-heading h3 { font-size: 18px; }
 .section-heading p, .section-heading > span { margin-top: 4px; color: var(--color-text-secondary); font-size: 13px; }
 .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
 .feature-grid.four-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.feature-card { position: relative; min-height: 190px; padding: 22px; border: 1px solid var(--color-border); border-radius: var(--radius-xl); color: var(--color-text-primary); text-align: left; cursor: pointer; overflow: hidden; transition: transform var(--duration-fast) var(--easing-standard), border-color var(--duration-fast), box-shadow var(--duration-fast); }
+.feature-card { position: relative; min-height: 190px; padding: 22px; border: 1px solid var(--color-border); border-radius: 8px !important; color: var(--color-text-primary); text-align: left; cursor: pointer; overflow: hidden; transition: transform var(--duration-fast) var(--easing-standard), border-color var(--duration-fast), box-shadow var(--duration-fast); }
 .feature-card:hover:not(.disabled) { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border)); box-shadow: var(--shadow-level-2); }
 .feature-card.disabled { opacity: .55; cursor: not-allowed; }
-.icon-box { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 14px; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 24px; }
+.icon-box { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 24px; }
 .card-content { display: flex; flex-direction: column; gap: 7px; margin-top: 20px; padding-right: 34px; }
 .card-content strong { font-size: 17px; }
 .card-content small { color: var(--color-text-secondary); font-size: 13px; line-height: 1.65; }
 .card-content em { color: #d97706; font-size: 12px; font-style: normal; }
 .card-arrow { position: absolute; right: 20px; bottom: 20px; color: var(--color-primary); }
 .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-.quick-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-height: 76px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: var(--radius-lg); background: var(--color-surface); color: var(--color-text-primary); text-align: left; cursor: pointer; }
+.quick-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-height: 76px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); text-align: left; cursor: pointer; }
 .quick-card > svg:first-child { color: var(--color-primary); font-size: 22px; }
 .quick-card span { display: flex; flex-direction: column; gap: 3px; }
 .quick-card small { color: var(--color-text-secondary); line-height: 1.4; }
@@ -175,4 +175,10 @@ function open(card) {
   .hero, .section-heading { flex-direction: column; align-items: stretch; }
   .feature-grid.four-grid { grid-template-columns: 1fr; }
 }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

@@ -1,603 +1,1858 @@
 <template>
-  <div class="main-layout">
-    <!-- 全局底层光斑氛围 -->
+  <div
+    class="main-layout"
+    :class="[`nav-${navMode}`, { 'mobile-menu-open': mobileMenuOpen }]"
+  >
+    <!-- 背景 -->
     <div class="bg-atmosphere">
-      <div class="orb bg-orb-1"></div>
-      <div class="orb bg-orb-2"></div>
-      <div class="orb bg-orb-3"></div>
+      <div class="orb orb-one"></div>
+      <div class="orb orb-two"></div>
     </div>
 
-    <header class="top-nav">
-      <div class="nav-left">
-        <span class="logo" @click="goHome">
-          <VIcon icon="mdi:brain" class="logo-icon" />
-          灵枢
-        </span>
-      </div>
+    <!-- =========================
+         顶部导航
+    ========================== -->
+    <header
+      v-if="navMode === 'top'"
+      class="top-nav"
+    >
+      <button
+        type="button"
+        class="logo"
+        @click="goHome"
+      >
+        <VIcon icon="mdi:brain" />
+        <span>灵枢</span>
+      </button>
 
-      <nav class="nav-menu">
-        <router-link v-for="item in navItems" :key="item.to" :to="item.to" class="nav-item" active-class="active">
-          <VIcon :icon="item.icon" class="nav-icon" />
-          <span class="nav-text">{{ item.text }}</span>
+      <nav class="top-menu">
+        <router-link
+          v-for="item in navItems"
+          :key="item.key"
+          :to="item.path"
+          class="nav-item"
+          :class="{ active: isNavActive(item) }"
+        >
+          <VIcon :icon="item.icon" />
+          <span>{{ item.label }}</span>
         </router-link>
       </nav>
 
-      <div class="nav-right" v-if="userStore.isLoggedIn">
-        <ThemeToggle />
-        <div
-          class="user-menu"
-          @click="showUserMenu = !showUserMenu"
-          v-click-outside="() => showUserMenu = false"
+      <div class="top-actions">
+        <!-- 切换为左侧导航 -->
+        <button
+          type="button"
+          class="layout-switch"
+          title="切换为左侧导航"
+          aria-label="切换为左侧导航"
+          @click="setNavMode('left')"
         >
-          <div class="user-avatar">
-            {{ (userStore.user?.real_name || userStore.user?.username)?.[0] }}
-          </div>
+          <VIcon icon="mdi:dock-left" />
+          <span>左侧导航</span>
+        </button>
 
-          <span class="user-name">
-            {{ userStore.user?.real_name || userStore.user?.username }}
-          </span>
+        <ThemeToggle />
 
-          <VIcon
-            icon="mdi:chevron-down"
-            class="dropdown-icon"
-            :class="{ rotated: showUserMenu }"
-          />
+        <div
+          v-if="userStore.isLoggedIn"
+          v-click-outside="closeUserMenu"
+          class="user-menu"
+        >
+          <button
+            type="button"
+            class="user-trigger"
+            @click="showUserMenu = !showUserMenu"
+          >
+            <VIcon icon="mdi:account-circle-outline" />
+            <span>{{ displayName }}</span>
+            <VIcon
+              icon="mdi:chevron-down"
+              class="user-arrow"
+              :class="{ rotated: showUserMenu }"
+            />
+          </button>
 
-          <transition name="fade">
-            <div class="dropdown-menu glass-card" v-if="showUserMenu">
-              <div class="dropdown-item" @click.stop="goProfile">
-                <VIcon icon="mdi:account-outline" />
-                <span>个人中心</span>
-              </div>
-
-              <div class="dropdown-divider"></div>
-
-              <div class="dropdown-item logout" @click.stop="handleLogout">
+          <transition name="dropdown">
+            <div
+              v-if="showUserMenu"
+              class="user-dropdown"
+            >
+              <button
+                type="button"
+                class="dropdown-item logout"
+                @click="handleLogout"
+              >
                 <VIcon icon="mdi:logout" />
                 <span>退出登录</span>
-              </div>
+              </button>
             </div>
           </transition>
         </div>
-      </div>
 
-      <div class="nav-right" v-else>
-        <ThemeToggle />
-        <router-link to="/login" class="login-link">
+        <router-link
+          v-else
+          to="/login"
+          class="login-entry top-login-entry"
+        >
           <VIcon icon="mdi:login" />
           <span>登录</span>
         </router-link>
       </div>
     </header>
 
-    <main class="content">
-      <slot />
-    </main>
+    <!-- =========================
+         左侧导航
+    ========================== -->
+    <aside
+      v-if="navMode === 'left'"
+      class="side-nav"
+    >
+      <div class="side-header">
+        <button
+          type="button"
+          class="side-logo"
+          @click="goHome"
+        >
+          <VIcon icon="mdi:brain" />
+          <span>灵枢</span>
+        </button>
+
+        <!-- 切换为顶部导航 -->
+        <button
+          type="button"
+          class="side-layout-switch"
+          title="切换为顶部导航"
+          aria-label="切换为顶部导航"
+          @click="setNavMode('top')"
+        >
+          <VIcon icon="mdi:dock-top" />
+        </button>
+      </div>
+
+      <nav class="side-menu">
+        <router-link
+          v-for="item in navItems"
+          :key="item.key"
+          :to="item.path"
+          class="side-item"
+          :class="{ active: isNavActive(item) }"
+        >
+          <span class="side-item-icon">
+            <VIcon :icon="item.icon" />
+          </span>
+
+          <span>{{ item.label }}</span>
+
+          <span class="active-marker"></span>
+        </router-link>
+      </nav>
+
+      <div class="side-footer">
+        <button
+          type="button"
+          class="nav-mode-card"
+          @click="setNavMode('top')"
+        >
+          <VIcon icon="mdi:dock-top" />
+
+          <span>
+            <strong>顶部导航</strong>
+            <small>切换布局</small>
+          </span>
+        </button>
+
+        <ThemeToggle class="side-theme-toggle" />
+
+        <div
+          v-if="userStore.isLoggedIn"
+          v-click-outside="closeUserMenu"
+          class="side-user-menu"
+        >
+          <button
+            type="button"
+            class="side-user-trigger"
+            @click="showUserMenu = !showUserMenu"
+          >
+            <VIcon
+              icon="mdi:account-circle-outline"
+              class="side-avatar"
+            />
+
+            <span class="side-user-info">
+              <strong>{{ displayName }}</strong>
+              <small>{{ roleName }}</small>
+            </span>
+
+            <VIcon
+              icon="mdi:chevron-up"
+              class="user-arrow"
+              :class="{ rotated: showUserMenu }"
+            />
+          </button>
+
+          <transition name="dropdown">
+            <div
+              v-if="showUserMenu"
+              class="side-user-dropdown"
+            >
+              <button
+                type="button"
+                class="dropdown-item logout"
+                @click="handleLogout"
+              >
+                <VIcon icon="mdi:logout" />
+                <span>退出登录</span>
+              </button>
+            </div>
+          </transition>
+        </div>
+
+        <router-link
+          v-else
+          to="/login"
+          class="login-entry side-login-entry"
+        >
+          <VIcon icon="mdi:login" />
+          <span>登录</span>
+        </router-link>
+      </div>
+    </aside>
+
+    <!-- 移动端顶部栏 -->
+    <header class="mobile-header">
+      <button
+        type="button"
+        class="mobile-menu-button"
+        @click="mobileMenuOpen = !mobileMenuOpen"
+      >
+        <VIcon :icon="mobileMenuOpen ? 'mdi:close' : 'mdi:menu'" />
+      </button>
+
+      <button
+        type="button"
+        class="mobile-logo"
+        @click="goHome"
+      >
+        <VIcon icon="mdi:brain" />
+        <span>灵枢</span>
+      </button>
+
+      <button
+        type="button"
+        class="mobile-layout-button"
+        @click="toggleNavMode"
+      >
+        <VIcon
+          :icon="navMode === 'top'
+            ? 'mdi:dock-left'
+            : 'mdi:dock-top'"
+        />
+      </button>
+    </header>
+
+    <!-- 移动端菜单 -->
+    <transition name="mobile-menu">
+      <div
+        v-if="mobileMenuOpen"
+        class="mobile-menu-panel"
+      >
+        <router-link
+          v-for="item in navItems"
+          :key="item.key"
+          :to="item.path"
+          class="mobile-nav-item"
+          :class="{ active: isNavActive(item) }"
+          @click="mobileMenuOpen = false"
+        >
+          <VIcon :icon="item.icon" />
+          <span>{{ item.label }}</span>
+        </router-link>
+
+        <button
+          type="button"
+          class="mobile-nav-item"
+          @click="toggleNavMode"
+        >
+          <VIcon
+            :icon="navMode === 'top'
+              ? 'mdi:dock-left'
+              : 'mdi:dock-top'"
+          />
+
+          <span>
+            切换为{{ navMode === 'top' ? '左侧' : '顶部' }}导航
+          </span>
+        </button>
+
+        <router-link
+          v-if="!userStore.isLoggedIn"
+          to="/login"
+          class="mobile-nav-item mobile-login-entry"
+          @click="mobileMenuOpen = false"
+        >
+          <VIcon icon="mdi:login" />
+          <span>登录</span>
+        </router-link>
+
+        <button
+          v-else
+          type="button"
+          class="mobile-nav-item mobile-logout-entry"
+          @click="handleLogout"
+        >
+          <VIcon icon="mdi:logout" />
+          <span>退出登录</span>
+        </button>
+      </div>
+    </transition>
+
+    <!-- 页面内容 -->
+    <div
+      ref="pageShell"
+      class="page-shell"
+    >
+      <main class="content">
+        <slot />
+      </main>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
-import { useUserStore } from '../stores/user';
-import { useRouter } from 'vue-router';
-import ThemeToggle from '../components/ThemeToggle.vue';
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  watch,
+} from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useUserStore } from '../stores/user'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
-const userStore = useUserStore();
-const router = useRouter();
-const showUserMenu = ref(false);
+const route = useRoute()
+const router = useRouter()
+const userStore = useUserStore()
 
-const navItems = computed(() => {
-  const role = userStore.userRole;
-  const isMember = !!userStore.user?.is_assessment_member;
-  if (role === 'admin') {
-    return [
-      { to: '/module3/admin', icon: 'mdi:view-dashboard-outline', text: '管理员工作台' },
-      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
-    ];
-  }
-  if (role === 'counselor') {
-    return [
-      { to: '/module3/counselor', icon: 'mdi:view-dashboard-outline', text: '模块三工作台' },
-      { to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '待评价' },
-      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
-    ];
-  }
-  if (role === 'student_affairs') {
-    return [
-      { to: '/module3/student-affairs', icon: 'mdi:view-dashboard-outline', text: '模块三工作台' },
-      { to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' },
-    ];
-  }
-  const profileComplete = userStore.user?.profile_complete !== false;
-  const items = [
-    { to: '/home', icon: 'mdi:home-outline', text: '首页' },
-    { to: '/zongce/smart-fill', icon: 'mdi:file-document-edit-outline', text: '智能填表' },
-    { to: '/module2/evaluation', icon: 'mdi:chart-pie-outline', text: '个性评定' },
-    ...(profileComplete ? [{ to: '/module3/student', icon: 'mdi:view-dashboard-outline', text: '综测评价' }] : []),
-  ];
-  if (isMember) items.push({ to: '/module3/class-leader', icon: 'mdi:clipboard-account-outline', text: '我的待评' });
-  items.push({ to: '/module3/profile', icon: 'mdi:account-outline', text: '个人中心' });
-  return items;
-});
+const showUserMenu = ref(false)
+const mobileMenuOpen = ref(false)
 
-function goProfile() {
-  showUserMenu.value = false;
-  router.push('/module3/profile');
+const navMode = ref(getSavedNavMode())
+const pageShell = ref(null)
+
+const NAV_SWITCH_DURATION = 320
+
+let navResizeFrame = 0
+let navLayoutAnimation = null
+
+function getSavedNavMode() {
+  try {
+    const savedMode = localStorage.getItem('lingshu-nav-mode')
+
+    return savedMode === 'left'
+      ? 'left'
+      : 'top'
+  } catch {
+    return 'top'
+  }
+}
+
+function shouldReduceMotion() {
+  return window.matchMedia?.(
+    '(prefers-reduced-motion: reduce)'
+  ).matches
+}
+
+function notifyLayoutResize() {
+  cancelAnimationFrame(navResizeFrame)
+
+  navResizeFrame = requestAnimationFrame(() => {
+    window.dispatchEvent(new Event('resize'))
+  })
+}
+
+function animatePageShell(previousRect) {
+  const shell = pageShell.value
+
+  if (
+    !shell ||
+    !previousRect ||
+    shouldReduceMotion() ||
+    typeof shell.animate !== 'function'
+  ) {
+    return null
+  }
+
+  const currentRect = shell.getBoundingClientRect()
+  const deltaX = previousRect.left - currentRect.left
+  const deltaY = previousRect.top - currentRect.top
+
+  navLayoutAnimation?.cancel()
+
+  /*
+   * FLIP：
+   * 布局只计算一次，然后仅使用 transform / opacity 做动画。
+   * 不再逐帧修改 margin-left、padding-top，避免页面反复重排。
+   */
+  navLayoutAnimation = shell.animate(
+    [
+      {
+        transform: `translate3d(${deltaX}px, ${deltaY}px, 0)`,
+        opacity: 0.975,
+      },
+      {
+        transform: 'translate3d(0, 0, 0)',
+        opacity: 1,
+      },
+    ],
+    {
+      duration: NAV_SWITCH_DURATION,
+      easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      fill: 'both',
+    }
+  )
+
+  return navLayoutAnimation
+}
+
+async function setNavMode(mode) {
+  if (navMode.value === mode) return
+
+  const previousRect =
+    pageShell.value?.getBoundingClientRect()
+
+  navMode.value = mode
+  showUserMenu.value = false
+  mobileMenuOpen.value = false
+
+  try {
+    localStorage.setItem(
+      'lingshu-nav-mode',
+      mode
+    )
+  } catch {
+    // 本地存储不可用时，仍允许当前页面切换
+  }
+
+  await nextTick()
+
+  const animation = animatePageShell(previousRect)
+
+  /*
+   * 图表 resize 放到动画结束后执行，
+   * 避免 ECharts 重算尺寸和导航动画挤在同一帧。
+   */
+  if (animation) {
+    animation.finished
+      .then(() => {
+        navLayoutAnimation = null
+        notifyLayoutResize()
+      })
+      .catch(() => {
+        // 快速连续切换时旧动画会被取消，由新动画负责 resize
+      })
+  } else {
+    notifyLayoutResize()
+  }
+}
+
+function toggleNavMode() {
+  setNavMode(
+    navMode.value === 'top'
+      ? 'left'
+      : 'top'
+  )
+}
+
+const displayName = computed(() =>
+  userStore.user?.real_name ||
+  userStore.user?.username ||
+  '用户'
+)
+
+const ROLE_NAMES = {
+  student: '学生',
+  admin: '管理员',
+  class_committee: '班委',
+  counselor: '辅导员',
+  student_affairs: '学工老师',
+}
+
+const roleName = computed(() =>
+  ROLE_NAMES[userStore.userRole] ||
+  '已登录'
+)
+
+const MANAGEMENT_HOME_BY_ROLE = {
+  student: '/module3/student',
+  admin: '/module3/batch-manage',
+  class_committee: '/module3/class-leader',
+  counselor: '/module3/class-leader',
+  student_affairs: '/module3/teacher',
+}
+
+const managementHome = computed(() =>
+  MANAGEMENT_HOME_BY_ROLE[userStore.userRole] ||
+  '/module3/student'
+)
+
+const navItems = computed(() => [
+  {
+    key: 'home',
+    label: '首页',
+    path: '/home',
+    section: '/home',
+    icon: 'mdi:home-outline',
+  },
+  {
+    key: 'smart-fill',
+    label: '智能填表',
+    path: '/zongce/smart-fill',
+    section: '/zongce',
+    icon: 'mdi:file-document-edit-outline',
+  },
+  {
+    key: 'evaluation',
+    label: '个性评定',
+    path: '/module2/evaluation',
+    section: '/module2',
+    icon: 'mdi:chart-pie-outline',
+  },
+  {
+    key: 'management',
+    label: '信息管理',
+    path: managementHome.value,
+    section: '/module3',
+    icon: 'mdi:account-group-outline',
+  },
+])
+
+function isNavActive(item) {
+  if (item.key === 'home') {
+    return route.path === '/home'
+  }
+
+  return route.path.startsWith(item.section)
+}
+
+function closeUserMenu() {
+  showUserMenu.value = false
 }
 
 function goHome() {
-  const role = userStore.userRole;
-  if (role === 'admin') router.push('/module3/admin');
-  else if (role === 'counselor') router.push('/module3/counselor');
-  else if (role === 'student_affairs') router.push('/module3/student-affairs');
-  else router.push('/home');
+  router.push('/home')
 }
 
 function handleLogout() {
-  showUserMenu.value = false;
-  userStore.logout();
-  router.push('/login');
+  showUserMenu.value = false
+  userStore.logout()
+  router.push('/login')
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    showUserMenu.value = false
+    mobileMenuOpen.value = false
+  }
+)
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(navResizeFrame)
+  navLayoutAnimation?.cancel()
+})
 </script>
 
 <style scoped>
 .main-layout {
+  --nav-height: 76px;
+  --side-width: 250px;
+
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
   position: relative;
   isolation: isolate;
-  background:
-    radial-gradient(circle at 12% 18%, rgba(99, 102, 241, 0.18), transparent 32%),
-    radial-gradient(circle at 88% 12%, rgba(139, 92, 246, 0.16), transparent 30%),
-    radial-gradient(circle at 70% 86%, rgba(6, 182, 212, 0.10), transparent 28%),
-    linear-gradient(135deg, #f8f7ff 0%, #eef2ff 42%, #f8fafc 100%);
+  background: var(--gradient-cosmos, #0c0d13);
 }
 
-.main-layout::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  background-image:
-    linear-gradient(rgba(79, 70, 229, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(79, 70, 229, 0.045) 1px, transparent 1px);
-  background-size: 36px 36px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.68), transparent 74%);
-}
+/* 背景 */
 
-/* 背景光斑 */
 .bg-atmosphere {
   position: fixed;
   inset: 0;
-  pointer-events: none;
   z-index: 0;
   overflow: hidden;
+  pointer-events: none;
 }
 
-.bg-atmosphere .orb {
+.orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(118px);
-  opacity: 0.62;
+  filter: blur(110px);
+  opacity: 0.28;
 }
 
-.bg-orb-1 {
-  width: 560px;
-  height: 560px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, transparent 62%);
-  top: -240px;
-  right: -120px;
+.orb-one {
+  width: 520px;
+  height: 520px;
+  top: -220px;
+  right: -130px;
+  background: rgba(99, 102, 241, 0.28);
 }
 
-.bg-orb-2 {
-  width: 460px;
-  height: 460px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.13) 0%, transparent 64%);
-  bottom: -170px;
-  left: -100px;
+.orb-two {
+  width: 430px;
+  height: 430px;
+  bottom: -190px;
+  left: 12%;
+  background: rgba(139, 92, 246, 0.16);
 }
 
-.bg-orb-3 {
-  width: 360px;
-  height: 360px;
-  background: radial-gradient(circle, rgba(6, 182, 212, 0.10) 0%, transparent 64%);
-  top: 58%;
-  right: 11%;
-}
+/* =========================
+   顶部导航
+========================= */
 
-/* 顶部导航 */
 .top-nav {
-  height: 84px;
-  display: grid;
-  grid-template-columns: 260px 1fr 260px;
+  height: var(--nav-height);
+  padding: 0 34px;
+  display: flex;
   align-items: center;
-  padding: 0 clamp(28px, 5vw, 76px);
-  background: rgba(255, 255, 255, 0.74);
+  gap: 34px;
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 120;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(14, 15, 22, 0.87);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
-  box-shadow: 0 16px 56px rgba(79, 70, 229, 0.09);
-  position: sticky;
-  top: 0;
-  z-index: 100;
 }
 
-.nav-left {
-  justify-self: start;
-  display: flex;
-  align-items: center;
-}
-
-.nav-menu {
-  justify-self: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.56);
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.82),
-    0 12px 34px rgba(79, 70, 229, 0.07);
-}
-
-.nav-right {
-  justify-self: end;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Logo */
 .logo {
   display: flex;
   align-items: center;
-  gap: 13px;
-  font-size: 38px;
+  gap: 9px;
+  border: 0;
+  color: #ffffff;
+  background: transparent;
+  font-size: 25px;
   font-weight: 950;
-  letter-spacing: 0.14em;
   cursor: pointer;
-  background: linear-gradient(
-    135deg,
-    #1e1b4b 0%,
-    #4338ca 36%,
-    #7c3aed 68%,
-    #06b6d4 100%
-  );
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: drop-shadow(0 12px 26px rgba(79, 70, 229, 0.24));
 }
 
-.logo-icon {
-  font-size: 42px;
-  color: #4f46e5;
-  -webkit-text-fill-color: initial;
-  filter:
-    drop-shadow(0 0 16px rgba(99, 102, 241, 0.42))
-    drop-shadow(0 8px 18px rgba(139, 92, 246, 0.22));
-  transition: transform 0.25s ease;
+.logo svg {
+  color: #f4b847;
+  font-size: 30px;
 }
 
-.logo:hover .logo-icon {
-  transform: rotate(-10deg) scale(1.08);
-}
-
-/* 导航项 */
-.nav-item {
-  min-width: 132px;
-  height: 48px;
-  padding: 0 24px;
+.top-menu {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-radius: 999px;
-  color: var(--color-text-secondary, #64748b);
-  font-size: 18px;
-  font-weight: 800;
-  text-decoration: none;
-  position: relative;
-  overflow: hidden;
-  transition: all 0.25s ease;
+  gap: 6px;
+  flex: 1;
 }
 
-.nav-item::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    135deg,
-    rgba(99, 102, 241, 0.16),
-    rgba(139, 92, 246, 0.08)
-  );
-  border-radius: 999px;
-  transform: scaleX(0);
-  transform-origin: center;
-  transition: transform 0.25s ease;
-}
-
-.nav-item:hover::before {
-  transform: scaleX(1);
-}
-
-.nav-item:hover {
-  color: var(--color-primary, #4f46e5);
-  transform: translateY(-1px);
-}
-
-.nav-item.active {
-  color: var(--color-primary, #4f46e5);
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow:
-    inset 0 0 0 1px rgba(99, 102, 241, 0.18),
-    0 12px 30px rgba(79, 70, 229, 0.11);
-}
-
-.nav-icon {
-  font-size: 24px;
-  position: relative;
-  z-index: 1;
-  flex-shrink: 0;
-}
-
-.nav-text {
-  position: relative;
-  z-index: 1;
-  white-space: nowrap;
-}
-
-/* 登录按钮 */
-.login-link {
-  height: 46px;
-  padding: 0 22px;
+.nav-item {
+  height: 44px;
+  padding: 0 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 999px;
-  color: var(--color-primary, #4f46e5);
-  font-size: 17px;
-  font-weight: 800;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: 13px;
+  color: rgba(246, 242, 232, 0.65);
+  font-size: 14px;
+  font-weight: 750;
   text-decoration: none;
-  transition: all 0.25s ease;
+  transition:
+    color 180ms ease,
+    background 180ms ease;
 }
 
-.login-link:hover {
-  transform: translateY(-1px);
-  background: rgba(238, 242, 255, 0.9);
+.nav-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
 }
 
-/* 用户菜单 */
-.user-menu {
+.nav-item.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.nav-item.active svg {
+  color: #f4b847;
+}
+
+.top-actions {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 15px 6px 6px;
-  border-radius: 999px;
+}
+
+.layout-switch {
+  height: 42px;
+  padding: 0 13px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  color: rgba(246, 242, 232, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 13px;
+  font-weight: 750;
   cursor: pointer;
-  position: relative;
-  background: rgba(255, 255, 255, 0.54);
-  border: 1px solid rgba(255, 255, 255, 0.72);
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
 }
 
-.user-menu:hover {
-  background: rgba(255, 255, 255, 0.76);
+.layout-switch:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+  transform: translateY(-1px);
 }
 
-.user-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #4f46e5 0%, #8b5cf6 100%);
-  color: white;
+/* =========================
+   左侧导航
+========================= */
+
+.side-nav {
+  width: var(--side-width);
+  height: 100vh;
+  padding: 18px 14px;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 120;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 19, 27, 0.96),
+      rgba(11, 12, 18, 0.93)
+    );
+  box-shadow: 18px 0 60px rgba(0, 0, 0, 0.14);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+}
+
+.side-header {
+  height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.side-logo {
+  min-width: 0;
+  height: 50px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  border: 0;
+  border-radius: 15px;
+  color: #ffffff;
+  background: transparent;
+  font-size: 25px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.side-logo:hover {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.side-logo svg {
+  color: #f4b847;
+  font-size: 30px;
+}
+
+.side-layout-switch {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  font-weight: 800;
-  box-shadow: 0 10px 24px rgba(79, 70, 229, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 12px;
+  color: rgba(246, 242, 232, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 21px;
+  cursor: pointer;
 }
 
-.user-name {
-  font-size: 16px;
-  color: var(--color-text, #1e293b);
-  font-weight: 700;
+.side-layout-switch:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
 }
 
-.dropdown-icon {
-  font-size: 18px;
-  color: var(--color-text-secondary, #64748b);
-  transition: transform 0.25s ease;
+.side-menu {
+  margin-top: 26px;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.dropdown-icon.rotated {
-  transform: rotate(180deg);
+.side-item {
+  height: 53px;
+  padding: 0 15px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  color: rgba(246, 242, 232, 0.67);
+  font-size: 15px;
+  font-weight: 750;
+  text-decoration: none;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    transform 180ms ease;
 }
 
-/* 下拉菜单 */
-.dropdown-menu {
+.side-item:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
+  transform: translateX(2px);
+}
+
+.side-item.active {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.075);
+}
+
+.side-item-icon {
+  width: 24px;
+  display: flex;
+  justify-content: center;
+  font-size: 23px;
+}
+
+.side-item.active .side-item-icon {
+  color: #f4b847;
+}
+
+.active-marker {
+  width: 3px;
+  height: 24px;
   position: absolute;
-  top: calc(100% + 12px);
-  right: 0;
-  min-width: 190px;
-  padding: 8px;
-  border-radius: 18px;
-  z-index: 200;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.62));
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow:
-    0 24px 70px rgba(79, 70, 229, 0.16),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(22px);
-  -webkit-backdrop-filter: blur(22px);
-  transform-origin: top right;
+  right: 5px;
+  top: 50%;
+  border-radius: 999px;
+  background: #f4b847;
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0.4);
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
-.dropdown-item {
+.side-item.active .active-marker {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1);
+}
+
+.side-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nav-mode-card {
+  min-height: 55px;
+  padding: 8px 11px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 11px 12px;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 650;
-  color: var(--color-text, #1e293b);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  color: rgba(246, 242, 232, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  text-align: left;
   cursor: pointer;
-  transition: background 0.2s ease;
+}
+
+.nav-mode-card:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.nav-mode-card > svg {
+  font-size: 23px;
+  color: #f4b847;
+}
+
+.nav-mode-card > span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nav-mode-card strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.nav-mode-card small {
+  color: rgba(246, 242, 232, 0.43);
+  font-size: 11px;
+}
+
+/* 用户菜单 */
+
+.user-menu,
+.side-user-menu {
+  position: relative;
+}
+
+.user-trigger {
+  height: 42px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 13px;
+  color: rgba(246, 242, 232, 0.76);
+  background: rgba(255, 255, 255, 0.055);
+  cursor: pointer;
+}
+
+.user-trigger > svg:first-child {
+  color: #f4b847;
+  font-size: 23px;
+}
+
+.user-arrow {
+  transition: transform 180ms ease;
+}
+
+.user-arrow.rotated {
+  transform: rotate(180deg);
+}
+
+.user-dropdown {
+  min-width: 170px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(17, 18, 26, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.side-user-trigger {
+  width: 100%;
+  min-height: 58px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  color: rgba(246, 242, 232, 0.72);
+  background: rgba(255, 255, 255, 0.055);
+  cursor: pointer;
+}
+
+.side-avatar {
+  color: #f4b847;
+  font-size: 30px;
+}
+
+.side-user-info {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+
+.side-user-info strong {
+  max-width: 130px;
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-user-info small {
+  color: rgba(246, 242, 232, 0.43);
+  font-size: 11px;
+}
+
+.side-user-dropdown {
+  min-width: 180px;
+  padding: 8px;
+  position: absolute;
+  left: calc(100% + 12px);
+  bottom: 0;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 14px;
+  background: rgba(17, 18, 26, 0.96);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.dropdown-item {
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  color: rgba(246, 242, 232, 0.72);
+  background: transparent;
+  cursor: pointer;
 }
 
 .dropdown-item:hover {
-  background: rgba(238, 242, 255, 0.78);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .dropdown-item.logout {
-  color: var(--color-error, #dc2626);
+  color: #ef7777;
 }
 
-.dropdown-item.logout:hover {
-  background: rgba(254, 226, 226, 0.72);
-}
+/* 页面区域 */
 
-.dropdown-divider {
-  height: 1px;
-  background: rgba(148, 163, 184, 0.22);
-  margin: 5px 8px;
-}
-
-/* 内容区 */
-.content {
-  flex: 1;
-  max-width: 1440px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 40px 40px 76px;
+.page-shell {
+  min-height: 100vh;
   position: relative;
   z-index: 1;
-  animation: fadeIn 0.5s ease;
+
+  /*
+   * 布局属性只更新一次，视觉移动由 FLIP 的 transform 完成。
+   * 避免逐帧修改 margin-left / padding-top 引发重排。
+   */
+  transform-origin: top left;
+  backface-visibility: hidden;
+  transition: none;
 }
 
-/* 动画 */
-.fade-enter-active,
-.fade-leave-active {
-  transition:
-    opacity 0.18s ease,
-    transform 0.18s ease;
+.nav-top .page-shell {
+  margin-left: 0;
+  padding-top: var(--nav-height);
 }
 
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px) scale(0.98);
+.nav-left .page-shell {
+  margin-left: var(--side-width);
+  padding-top: 0;
 }
 
-@keyframes fadeIn {
+.content {
+  width: 100%;
+  max-width: 1500px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 34px 40px 70px;
+}
+
+/* ==================================================
+   导航布局切换动画
+   只动画 transform / opacity，不动画布局属性
+================================================== */
+
+.top-nav,
+.side-nav {
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .top-nav {
+    animation: top-nav-smooth-enter 280ms
+      cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .side-nav {
+    animation: side-nav-smooth-enter 300ms
+      cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+}
+
+@keyframes top-nav-smooth-enter {
   from {
-    opacity: 0;
-    transform: translateY(8px);
+    opacity: 0.72;
+    transform: translate3d(0, -8px, 0);
   }
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
-/* 中等屏 */
-@media (max-width: 1100px) {
-  .top-nav {
-    height: 78px;
-    grid-template-columns: auto 1fr auto;
-    padding: 0 22px;
+@keyframes side-nav-smooth-enter {
+  from {
+    opacity: 0.72;
+    transform: translate3d(-9px, 0, 0);
   }
 
-  .nav-menu {
-    gap: 8px;
-    padding: 8px;
-  }
-
-  .nav-item {
-    min-width: auto;
-    height: 44px;
-    padding: 0 16px;
-    font-size: 16px;
-  }
-
-  .nav-icon {
-    font-size: 22px;
-  }
-
-  .logo {
-    font-size: 32px;
-  }
-
-  .logo-icon {
-    font-size: 36px;
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
   }
 }
 
-/* 小屏 */
-@media (max-width: 760px) {
-  .top-nav {
-    height: 70px;
-    grid-template-columns: auto 1fr auto;
-    padding: 0 14px;
-  }
+/* 浅色主题 */
 
-  .logo {
-    font-size: 25px;
-    letter-spacing: 0.08em;
-  }
+:global(html[data-theme='light']) .top-nav,
+:global(html[data-theme='light']) .side-nav {
+  border-color: rgba(74, 69, 58, 0.13);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 251, 244, 0.96),
+      rgba(244, 238, 228, 0.94)
+    );
+}
 
-  .logo-icon {
-    font-size: 30px;
-  }
+:global(html[data-theme='light']) .logo,
+:global(html[data-theme='light']) .side-logo {
+  color: #30352f;
+}
 
-  .nav-menu {
-    justify-self: center;
-    gap: 4px;
-    padding: 5px;
-  }
+:global(html[data-theme='light']) .nav-item,
+:global(html[data-theme='light']) .side-item {
+  color: #686c65;
+}
 
-  .nav-item {
-    width: 42px;
-    height: 42px;
-    min-width: 42px;
-    padding: 0;
-  }
+:global(html[data-theme='light']) .nav-item:hover,
+:global(html[data-theme='light']) .nav-item.active,
+:global(html[data-theme='light']) .side-item:hover,
+:global(html[data-theme='light']) .side-item.active {
+  color: #30352f;
+  background: rgba(102, 123, 109, 0.1);
+}
 
-  .nav-text {
+:global(html[data-theme='light']) .layout-switch,
+:global(html[data-theme='light']) .side-layout-switch,
+:global(html[data-theme='light']) .nav-mode-card,
+:global(html[data-theme='light']) .side-user-trigger,
+:global(html[data-theme='light']) .user-trigger {
+  color: #686c65;
+  border-color: rgba(74, 69, 58, 0.13);
+  background: rgba(102, 123, 109, 0.07);
+}
+
+:global(html[data-theme='light']) .side-user-info strong {
+  color: #30352f;
+}
+
+/* 移动端 */
+
+.mobile-header,
+.mobile-menu-panel {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .top-nav,
+  .side-nav {
     display: none;
   }
 
-  .nav-icon {
-    font-size: 22px;
+  .mobile-header {
+    height: 64px;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 130;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    background: rgba(14, 15, 22, 0.93);
+    backdrop-filter: blur(24px);
   }
 
-  .user-name {
-    display: none;
-  }
-
-  .login-link span {
-    display: none;
-  }
-
-  .login-link {
-    width: 42px;
-    height: 42px;
-    padding: 0;
+  .mobile-menu-button,
+  .mobile-layout-button {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
     justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 12px;
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 22px;
+  }
+
+  .mobile-logo {
+    margin-left: 10px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    border: 0;
+    color: #ffffff;
+    background: transparent;
+    font-size: 20px;
+    font-weight: 900;
+  }
+
+  .mobile-logo svg {
+    color: #f4b847;
+    font-size: 26px;
+  }
+
+  .mobile-menu-panel {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: fixed;
+    inset: 64px 12px auto;
+    z-index: 125;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 16px;
+    background: rgba(17, 18, 26, 0.97);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.32);
+  }
+
+  .mobile-nav-item {
+    min-height: 48px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 0;
+    border-radius: 12px;
+    color: rgba(246, 242, 232, 0.72);
+    background: transparent;
+    font-size: 14px;
+    font-weight: 750;
+    text-decoration: none;
+  }
+
+  .mobile-nav-item.active,
+  .mobile-nav-item:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .nav-top .page-shell,
+  .nav-left .page-shell {
+    margin-left: 0;
+    padding-top: 64px;
   }
 
   .content {
-    padding: 16px;
+    padding: 22px 16px 55px;
   }
+}
+
+/* 动画 */
+
+.dropdown-enter-active,
+.dropdown-leave-active,
+.mobile-menu-enter-active,
+.mobile-menu-leave-active {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-5px) scale(0.98);
+}
+
+.mobile-menu-enter-from,
+.mobile-menu-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .top-nav,
+  .side-nav,
+  .page-shell {
+    animation: none !important;
+    transition-duration: 1ms !important;
+  }
+}
+
+/* ==================================================
+   仅修复登录元素：入口、用户名、退出登录可读性
+================================================== */
+
+.main-layout .top-actions > .user-menu {
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  display: block !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow: visible !important;
+}
+
+.login-entry {
+  min-height: 42px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 13px;
+  color: #f6f2e8;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease;
+}
+
+.login-entry svg {
+  color: #f4b847;
+  font-size: 20px;
+}
+
+.login-entry:hover {
+  color: #ffffff;
+  border-color: rgba(244, 184, 71, 0.36);
+  background: rgba(255, 255, 255, 0.11);
+  transform: translateY(-1px);
+}
+
+.side-login-entry {
+  width: 100%;
+  min-height: 54px;
+}
+
+.main-layout.nav-top .user-trigger > span,
+.main-layout.nav-left .side-user-info strong {
+  color: #ffffff !important;
+  opacity: 1 !important;
+  font-weight: 800;
+}
+
+.main-layout .user-dropdown,
+.main-layout .side-user-dropdown {
+  color: #ffffff;
+  background: rgba(21, 22, 29, 0.98) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+.main-layout .user-dropdown .dropdown-item.logout,
+.main-layout .side-user-dropdown .dropdown-item.logout {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.main-layout .user-dropdown .dropdown-item.logout svg,
+.main-layout .side-user-dropdown .dropdown-item.logout svg {
+  color: #ffffff !important;
+}
+
+.main-layout .user-dropdown .dropdown-item.logout:hover,
+.main-layout .side-user-dropdown .dropdown-item.logout:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .user-trigger {
+  color: #252a26 !important;
+  background: rgba(255, 252, 246, 0.9) !important;
+  border-color: rgba(74, 69, 58, 0.18) !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .user-trigger > span {
+  color: #202420 !important;
+  opacity: 1 !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .user-trigger > svg:first-child {
+  color: #c98a18 !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .user-trigger
+  .user-arrow {
+  color: #59615a !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .top-login-entry {
+  color: #30352f;
+  background: rgba(255, 252, 246, 0.9);
+  border-color: rgba(74, 69, 58, 0.18);
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .top-login-entry:hover {
+  color: #202420;
+  background: #fffaf2;
+  border-color: rgba(102, 123, 109, 0.38);
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .user-dropdown {
+  color: #ffffff !important;
+  background: rgba(21, 22, 29, 0.98) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-left
+  .side-user-info strong {
+  color: #30352f !important;
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-left
+  .side-login-entry {
+  color: #30352f;
+  background: rgba(102, 123, 109, 0.08);
+  border-color: rgba(74, 69, 58, 0.16);
+}
+
+:global(html[data-theme='light'])
+  .main-layout.nav-left
+  .side-login-entry:hover {
+  color: #202420;
+  background: rgba(102, 123, 109, 0.13);
+  border-color: rgba(102, 123, 109, 0.34);
+}
+
+.mobile-login-entry {
+  color: #ffffff;
+}
+
+.mobile-login-entry svg {
+  color: #f4b847;
+}
+
+.mobile-logout-entry,
+.mobile-logout-entry svg {
+  color: #ffffff;
+}
+
+</style>
+
+<style>
+/* FINAL_LOGIN_AND_LEFT_NAV_THEME_FIX */
+
+/* ==================================================
+   顶部导航 + 米白主题：用户名必须清晰可见
+================================================== */
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.top-actions
+.user-menu {
+  color: #111111 !important;
+  background: transparent !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.top-actions
+.user-trigger {
+  color: #111111 !important;
+  background: rgba(255, 252, 246, 0.94) !important;
+  border-color: rgba(74, 69, 58, 0.20) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.top-actions
+.user-trigger > span {
+  color: #111111 !important;
+  -webkit-text-fill-color: #111111 !important;
+  opacity: 1 !important;
+  font-weight: 900 !important;
+  text-shadow: none !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.top-actions
+.user-trigger > svg:first-child {
+  color: #e6a21d !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.top-actions
+.user-trigger
+.user-arrow {
+  color: #444b45 !important;
+}
+
+/* 顶部用户下拉框保持深色，退出登录保持白色 */
+html[data-theme='light']
+body
+.main-layout.nav-top
+.user-dropdown {
+  color: #ffffff !important;
+  background: rgba(21, 22, 29, 0.98) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.user-dropdown
+.dropdown-item.logout,
+html[data-theme='light']
+body
+.main-layout.nav-top
+.user-dropdown
+.dropdown-item.logout svg,
+html[data-theme='light']
+body
+.main-layout.nav-top
+.user-dropdown
+.dropdown-item.logout span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-top
+.user-dropdown
+.dropdown-item.logout:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+
+
+/* ==================================================
+   左侧导航 + 米白主题：导航栏完全沿用深色主题
+   页面主体仍保持米白主题
+================================================== */
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav {
+  color: rgba(246, 242, 232, 0.72) !important;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(18, 19, 27, 0.96),
+      rgba(11, 12, 18, 0.93)
+    ) !important;
+  border-right-color: rgba(255, 255, 255, 0.09) !important;
+  box-shadow: 18px 0 60px rgba(0, 0, 0, 0.14) !important;
+
+  /* 主题按钮在左侧导航中也必须使用深色主题配色 */
+  --theme-toggle-bg: rgba(255, 255, 255, 0.07);
+  --theme-toggle-border: rgba(255, 255, 255, 0.15);
+  --theme-toggle-border-hover: rgba(244, 184, 71, 0.44);
+  --theme-toggle-text: rgba(246, 242, 232, 0.82);
+  --theme-toggle-track: rgba(255, 255, 255, 0.10);
+  --theme-toggle-track-border: rgba(255, 255, 255, 0.10);
+  --theme-toggle-thumb: #f4b847;
+  --theme-toggle-icon: #11110f;
+  --theme-toggle-thumb-shadow: rgba(0, 0, 0, 0.28);
+  --theme-toggle-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-logo {
+  color: #ffffff !important;
+  background: transparent !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-logo:hover {
+  background: rgba(255, 255, 255, 0.055) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-logo svg {
+  color: #f4b847 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-layout-switch {
+  color: rgba(246, 242, 232, 0.72) !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-layout-switch:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-item {
+  color: rgba(246, 242, 232, 0.67) !important;
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-item:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-item.active {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.075) !important;
+  border-color: rgba(255, 255, 255, 0.09) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-item.active
+.side-item-icon {
+  color: #f4b847 !important;
+  background: transparent !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.active-marker {
+  background-color: #f4b847 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.nav-mode-card,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-trigger,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-login-entry {
+  color: rgba(246, 242, 232, 0.76) !important;
+  background: rgba(255, 255, 255, 0.055) !important;
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.nav-mode-card:hover,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-trigger:hover,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-login-entry:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.09) !important;
+  border-color: rgba(255, 255, 255, 0.13) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.nav-mode-card > svg,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-avatar,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-login-entry svg {
+  color: #f4b847 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.nav-mode-card strong,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-info strong {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.nav-mode-card small,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-info small {
+  color: rgba(246, 242, 232, 0.43) !important;
+}
+
+/* 左侧主题按钮：文字、轨道、图标全部恢复深色主题样式 */
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.theme-toggle {
+  color: rgba(246, 242, 232, 0.82) !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.theme-toggle:hover {
+  border-color: rgba(244, 184, 71, 0.44) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.theme-toggle
+.toggle-label {
+  color: rgba(246, 242, 232, 0.82) !important;
+  -webkit-text-fill-color: rgba(246, 242, 232, 0.82) !important;
+  opacity: 1 !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.theme-toggle
+.toggle-track {
+  background: rgba(255, 255, 255, 0.10) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.10) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.theme-toggle
+.toggle-thumb {
+  color: #11110f !important;
+  background: #f4b847 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28) !important;
+}
+
+/* 左侧用户下拉菜单始终保持深色 */
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-dropdown {
+  color: #ffffff !important;
+  background: rgba(17, 18, 26, 0.98) !important;
+  border-color: rgba(255, 255, 255, 0.11) !important;
+}
+
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-dropdown
+.dropdown-item.logout,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-dropdown
+.dropdown-item.logout svg,
+html[data-theme='light']
+body
+.main-layout.nav-left
+.side-nav
+.side-user-dropdown
+.dropdown-item.logout span {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
 }
 </style>

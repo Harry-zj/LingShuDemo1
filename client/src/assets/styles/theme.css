@@ -107,6 +107,16 @@ html[data-theme='light'] {
   --theme-toggle-icon: #667b6d;
   --theme-toggle-thumb-shadow: rgba(78, 67, 48, 0.18);
   --theme-toggle-shadow: 0 8px 24px rgba(78, 67, 48, 0.07), inset 0 1px 0 #fff;
+  --theme-toggle-bg: rgba(71, 76, 68, 0.08);                /* 适配浅色的深底衬色 */
+  --theme-toggle-border: rgba(71, 76, 68, 0.18);            /* 边缘细腻描边 */
+  --theme-toggle-border-hover: #667b6d;                     /* 悬浮激活主色 */
+  --theme-toggle-text: #30352f;                             /* 深色文字 */
+  --theme-toggle-track: rgba(71, 76, 68, 0.14);             /* 内置滑道 */
+  --theme-toggle-track-border: rgba(71, 76, 68, 0.08);
+  --theme-toggle-thumb: #667b6d;                            /* 滑块主体颜色转为主色调 */
+  --theme-toggle-icon: #fffdf8;                             /* 图标转为纸白色 */
+  --theme-toggle-thumb-shadow: rgba(71, 76, 68, 0.15);
+  --theme-toggle-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
 html[data-theme='light'],
@@ -231,12 +241,14 @@ html[data-theme='light'] body .user-menu:hover {
   background: #fffaf2 !important;
 }
 html[data-theme='light'] body .user-avatar {
-  color: #fffaf2 !important;
-  background: linear-gradient(135deg, #748779, #53675a) !important;
-  box-shadow: 0 8px 18px rgba(76, 96, 82, 0.17) !important;
+  color: #30352f !important;
+  background: #fffaf2 !important;
+  box-shadow: inset 0 0 0 1px rgba(91, 82, 65, 0.14) !important;
 }
 html[data-theme='light'] body .user-name,
 html[data-theme='light'] body .dropdown-icon { color: #555c55 !important; }
+html[data-theme='light'] body .user-menu:hover .user-name,
+html[data-theme='light'] body .user-menu:hover .dropdown-icon { color: #30352f !important; }
 html[data-theme='light'] body .dropdown-menu {
   color: var(--color-text) !important;
   background: rgba(255, 251, 244, 0.96) !important;

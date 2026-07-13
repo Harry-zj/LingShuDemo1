@@ -41,7 +41,7 @@ async function initDatabase() {
   const conn = await pool.getConnection();
   try {
     const sqlPath = path.join(__dirname, "../services/zongce/db/init.sql");
-    const sql = fs.readFileSync(sqlPath, "utf-8");
+    const sql = fs.readFileSync(sqlPath, "utf-8").replace(/^\uFEFF/, "");
     const tableSql = sql
       .replace(/CREATE DATABASE IF NOT EXISTS[^;]*;\s*/i, "")
       .replace(/USE\s+lingshu_zongce\s*;\s*/i, "");
@@ -49,20 +49,48 @@ async function initDatabase() {
 
     console.log("[DB] 建表完成，开始种子数据...");
 
+    // 报告缓存表（跨设备同步 AI 内容 + 用户数据）
+    await conn.query(`CREATE TABLE IF NOT EXISTS report_cache (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      batch_id INT NOT NULL,
+      report_data JSON,
+      dim_profiles JSON,
+      goals JSON,
+      plan_done JSON,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uk_user_batch (user_id, batch_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+
     // 迁移：evaluation_results 表结构升级（兼容旧表）
     const migrations = [
-      "ALTER TABLE evaluation_results ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id",
-      "ALTER TABLE evaluation_results DROP INDEX uk_user",
-      "ALTER TABLE evaluation_results ADD UNIQUE KEY uk_user_batch (user_id, batch_id)",
+      "ALTER TABLE rule_items ADD COLUMN limit_value DECIMAL(5,2) DEFAULT NULL AFTER rule_type",
+      "ALTER TABLE rule_items ADD COLUMN scope VARCHAR(50) DEFAULT NULL AFTER limit_value",
+      "ALTER TABLE rule_items ADD COLUMN strategy VARCHAR(50) DEFAULT NULL AFTER scope",
+      "ALTER TABLE rule_sources ADD COLUMN file_hash CHAR(64) DEFAULT NULL",
+      "ALTER TABLE rule_sources ADD COLUMN is_frozen TINYINT(1) DEFAULT 0",
+      // ★ fact_rule_matches 补列（V2 匹配管线需要）
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_current TINYINT(1) DEFAULT 1 AFTER review_status",
+      "ALTER TABLE fact_rule_matches ADD COLUMN is_selected TINYINT(1) DEFAULT 1 AFTER is_current",
+      "ALTER TABLE fact_rule_matches ADD COLUMN preview_data JSON DEFAULT NULL AFTER is_selected",
     ];
-    for (const sql of migrations) {
-      try { await conn.query(sql); } catch (_) { /* 列/索引已存在则跳过 */ }
+    // rule_set_documents 列名迁移（兼容旧表 source_document_id）
+    try {
+      await conn.execute("ALTER TABLE rule_set_documents CHANGE source_document_id rule_source_id INT NOT NULL");
+    } catch (e) {
+      if (e.errno !== 1054 && e.errno !== 1060) console.warn("[DB] 迁移 rule_set_documents:", e.message);
+    }
+    for (const s of migrations) {
+      try { await conn.execute(s); } catch (e) {
+        if (e.errno !== 1060) console.warn("[DB] 迁移:", e.message);
+      }
     }
 
     // 模块三：先兼容升级旧数据库，再执行使用新字段的幂等种子数据。
     await migrateModule3(conn);
 
-    // 种子数据（INSERT IGNORE 幂等安全，只含张三测试用户）
+    // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 
     console.log("[DB] lingshu_zongce 初始化完成");
