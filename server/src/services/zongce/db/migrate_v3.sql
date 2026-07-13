@@ -5,6 +5,7 @@
 -- ============================================================
 
 -- 1. Drop old V1/V2 rule tables
+
 DROP TABLE IF EXISTS rule_conflict_items;
 DROP TABLE IF EXISTS rule_conflicts;
 DROP TABLE IF EXISTS rule_source_refs;
