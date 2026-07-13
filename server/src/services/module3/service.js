@@ -1390,8 +1390,16 @@ async function syncStudentSmartFillForm(student, batch) {
 
     if (!source) {
       if (form?.status === "smart_ready" && form.from_smart_fill) {
-        await deleteFormCascade(conn, form.id);
-        return null;
+        // ★ 检查是否有实际填表数据，有则保留（来自提交审核直接创建）
+        const [items] = await conn.execute(
+          "SELECT COUNT(*) AS cnt FROM assessment_form_items WHERE form_id = ?", [form.id]
+        );
+        if (items[0].cnt === 0) {
+          await deleteFormCascade(conn, form.id);
+          return null;
+        }
+        // 已有填表数据，保留并返回
+        return buildFormView(form, student, conn);
       }
       return form ? buildFormView(form, student, conn) : null;
     }

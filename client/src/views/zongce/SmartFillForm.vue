@@ -373,15 +373,36 @@ async function submitToReview() {
     try { await api.saveFillData(fillItems, props.batchId) } catch(e) { console.warn('saveFillData:', e.message) }
 
     // ② 写入 evaluation_results（个性化分析端）
+    // ★ 按照 module2 extractScoreData 期望的格式构建 dimension_scores
     try {
+      const aScores = {};  // F1 子项: A1~A5
+      ['A1','A2','A3','A4','A5'].forEach(k => {
+        aScores[k] = d['F1_'+k+'_score'] || 0;
+      });
+      const bScores = {};  // F3 子项: B1~B8
+      ['B1','B2','B3','B4','B5','B6','B7','B8'].forEach(k => {
+        bScores[k] = d['F3_'+k+'_score'] || 0;
+      });
+      const scores = {
+        F1: d.F1_total || 0,
+        F2: d.F2_weighted_avg || 0,
+        F3: d.F3_total || 0,
+      };
+
       await api.saveEvaluationResult({
         total_score: d.total_score,
         grade: d.grade,
         formula: 'F=F1*0.1+F2*0.65+F3*0.25',
+        batch_id: props.batchId || null,
         dimension_scores: {
-          F1: {score:d.F1_total, weighted:d.F1_weighted},
-          F2: {score:d.F2_weighted_avg, weighted:d.F2_weighted, courses:f2Courses},
-          F3: {score:d.F3_total, weighted:d.F3_weighted},
+          aScores,
+          bScores,
+          scores,
+          classAvg: {},
+          rank: null,
+          totalStudents: null,
+          majorRank: null,
+          majorTotal: null,
         }
       })
     } catch(e) { console.warn('saveEvaluationResult:', e.message) }
