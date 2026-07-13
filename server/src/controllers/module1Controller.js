@@ -2,6 +2,29 @@
 const Res = require("../utils/response");
 const module3Service = require("../services/module3/service");
 
+function formView(form, items, records) {
+  if (!form) return null;
+  let scores = { f1_basic_quality: 0, f2_course_learning: 0, f3_innovation_practice: 0, total: 0 };
+  try { scores = typeof form.scores === 'string' ? JSON.parse(form.scores) : (form.scores || scores); } catch (_) {}
+  return {
+    id: form.id,
+    batch_id: form.batch_id,
+    student_id: form.student_id,
+    student_name: form.student_name,
+    student_no: form.student_no,
+    college: form.college,
+    major: form.major,
+    grade: form.grade,
+    class_name: form.class_name,
+    status: form.status,
+    level: form.level || calcLevel(scores.total || 0),
+    manual_level: form.manual_level || '',
+    scores,
+    items: items || [],
+    review_records: records || [],
+  };
+}
+
 function calcLevel(total) {
   if (total >= 90) return '优秀';
   if (total >= 80) return '良好';
