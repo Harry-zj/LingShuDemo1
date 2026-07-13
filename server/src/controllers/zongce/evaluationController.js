@@ -189,3 +189,27 @@ exports.getScoreList = async (req, res) => {
     res.json(Res.error("获取评分清单失败"));
   }
 };
+
+// ★ 保存综合评定结果（供个性化分析端 module2 使用）
+exports.saveResult = async (req, res) => {
+  try {
+    const { total_score, grade, formula, dimension_scores, batch_id } = req.body;
+    if (total_score == null) return res.json(Res.error("缺少 total_score"));
+
+    await pool.execute(
+      `INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         total_score = VALUES(total_score),
+         grade = VALUES(grade),
+         formula = VALUES(formula),
+         dimension_scores = VALUES(dimension_scores)`,
+      [req.user.id, batch_id || null, total_score, grade || '', formula || 'F=F1*0.1+F2*0.65+F3*0.25', JSON.stringify(dimension_scores || {})]
+    );
+
+    res.json(Res.success(null, "评定结果已保存"));
+  } catch (e) {
+    console.error('[Evaluation] saveResult Error:', e.message);
+    res.json(Res.error(e.message));
+  }
+};

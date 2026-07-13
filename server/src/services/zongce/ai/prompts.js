@@ -31,8 +31,14 @@ Output format:
   "missing_info": ["未注明是否为团队赛"]
 }
 
-Types: award/position/activity/certificate/score/other
+Types:
+- award: 竞赛获奖（数学建模、英语竞赛、挑战杯等）
+- position: 学生干部职务（班长、学生会主席、社团负责人等）
+- activity: 活动/实践参与（志愿服务、社会实践、文体活动等）
+- certificate: 证书/资格证（英语四六级、计算机等级、职业资格证书等）
+- score: 学业成绩
 detail: any structured info from the text (level, rank, organizer, date, etc.)
+★ 不要使用 "other"，必须从上述5种类型中选择最接近的一个。
 Only output valid JSON, no other text.`;
 
 // ===== V3 F3-Only Rule Parsing (simplified) =====

@@ -41,7 +41,10 @@
       </div>
 
       <div v-if="mat.attachments?.length" class="attach-row">
-        <span v-for="att in mat.attachments" :key="att.id" class="attach-tag">{{ att.file_name }}</span>
+        <span v-for="att in mat.attachments" :key="att.id" class="attach-tag">
+          {{ att.file_name }}
+          <button class="attach-del" @click.stop="deleteAttach(mat.id, att.id)" title="删除附件">×</button>
+        </span>
       </div>
 
       <template v-if="mat.facts?.length">
@@ -195,6 +198,23 @@ function onFiles(matId, e) {
   const files = Array.from(e.target.files)
   if (files.length) emit('upload', matId, files)
 }
+async function deleteAttach(matId, attId) {
+  if (!confirm('确定删除该附件？')) return
+  try {
+    const res = await api.deleteAttachment(matId, attId)
+    if (res.code === 200) {
+      // 从本地材料列表中移除该附件
+      const mat = (props.materials || []).find(m => m.id === matId)
+      if (mat && mat.attachments) {
+        mat.attachments = mat.attachments.filter(a => a.id !== attId)
+      }
+    } else {
+      alert(res.msg || '删除失败')
+    }
+  } catch (e) {
+    alert('删除异常: ' + (e.response?.data?.msg || e.message))
+  }
+}
 function allConfirmed(mat) { return mat.facts?.length && mat.facts.every(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
 function someConfirmed(mat) { return mat.facts?.some(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
 function statusLabel(mat) {
@@ -297,6 +317,8 @@ async function generateDescription(mat, sp, spi) {
 .file-count { font-size: 12px; color: var(--color-text-tertiary); background: var(--color-surface-variant); padding: 2px 8px; border-radius: var(--radius-tag); }
 .attach-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .attach-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px; background: var(--color-surface-variant); border-radius: var(--radius-tag); }
+.attach-del { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; border-radius: 50%; background: transparent; color: #999; cursor: pointer; font-size: 14px; line-height: 1; transition: all .15s; }
+.attach-del:hover { background: #D93025; color: #fff; }
 .empty { text-align: center; color: var(--color-gray); padding: 40px 0; }
 .tag-cat { font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #e8f0fe; color: #1a73e8; font-weight: 500; }
 .tag-score { font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }

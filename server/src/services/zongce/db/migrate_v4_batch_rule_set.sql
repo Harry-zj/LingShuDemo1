@@ -5,11 +5,11 @@
 -- ============================================================
 
 -- 1. 为 rule_sets 表增加 batch_id 列，允许为 NULL（兼容已有数据）
-ALTER TABLE rule_sets
-  ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id,
-  ADD INDEX idx_rule_sets_batch (batch_id);
+-- ALTER TABLE rule_sets
+--   ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id,
+--   ADD INDEX idx_rule_sets_batch (batch_id);
 
--- 2. 为 smart_fill_data 表增加 batch_id 列
-ALTER TABLE smart_fill_data
-  ADD COLUMN batch_id INT DEFAULT NULL AFTER rule_set_id,
-  ADD INDEX idx_sfd_batch (batch_id);
+-- -- 2. 为 smart_fill_data 表增加 batch_id 列
+-- ALTER TABLE smart_fill_data
+--   ADD COLUMN batch_id INT DEFAULT NULL AFTER rule_set_id,
+--   ADD INDEX idx_sfd_batch (batch_id);

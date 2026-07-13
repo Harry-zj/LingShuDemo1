@@ -45,6 +45,32 @@ exports.getTemplates = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
+// ★ 删除模板（同时删除关联的填充结果）
+exports.deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [tpls] = await pool.execute(
+      "SELECT * FROM fill_templates WHERE id = ? AND user_id = ?", [id, req.user.id]
+    );
+    if (!tpls.length) return res.json(Res.error("模板不存在"));
+    // 删除模板文件
+    const tpl = tpls[0];
+    const tplPath = path.join(__dirname, "../../../uploads", tpl.file_path);
+    try { fs.unlinkSync(tplPath); } catch (_) {}
+    // 删除关联的填充结果
+    const [results] = await pool.execute(
+      "SELECT result_path FROM fill_results WHERE template_id = ?", [id]
+    );
+    for (const r of results) {
+      const rpath = path.join(__dirname, "../../../uploads", r.result_path);
+      try { fs.unlinkSync(rpath); } catch (_) {}
+    }
+    await pool.execute("DELETE FROM fill_results WHERE template_id = ?", [id]);
+    await pool.execute("DELETE FROM fill_templates WHERE id = ?", [id]);
+    res.json(Res.success(null, "模板已删除"));
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
 exports.doFill = async (req, res) => {
   try {
     const { templateId } = req.params;

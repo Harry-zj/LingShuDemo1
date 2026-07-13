@@ -1429,13 +1429,34 @@ async function updateSmartResult(studentId, payload) {
   const student = await getUser(studentId);
   assertProfileComplete(student, "填写综测");
   return withTransaction(async conn => {
-    const [forms] = await conn.execute(
+    const batch = await getBatchById(Number(payload.batch_id), conn);
+    if (!batch) throw new Error("批次不存在或已删除");
+
+    let [forms] = await conn.execute(
       "SELECT * FROM assessment_forms WHERE student_id=? AND batch_id=? ORDER BY updated_at DESC, id DESC LIMIT 1 FOR UPDATE",
-      [student.id, payload.batch_id]
+      [student.id, batch.id]
     );
-    if (!forms.length) throw new Error("当前批次暂无智能填表结果");
+
+    // ★ 智能填表首次提交：如果没有 assessment_form，自动创建
+    if (!forms.length) {
+      const scores = { f1_basic_quality: 0, f2_course_learning: 0, f3_innovation_practice: 0, total: 0 };
+      const [result] = await conn.execute(
+        `INSERT INTO assessment_forms
+          (batch_id, batch_title, student_id, student_name, student_no, college, major, grade,
+           class_id, class_name, from_smart_fill, is_demo, status, level, scores, personal_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'smart_ready', ?, ?, ?)`,
+        [
+          batch.id, batch.title || "",
+          student.id, student.real_name || "", student.student_no || student.username || "",
+          student.college || "", student.major || "", student.grade || "",
+          student.class_id || null, student.class_name || "",
+          calculateLevel(0, DEFAULT_SETTINGS.gradeRules), JSON.stringify(scores), ""
+        ]
+      );
+      [forms] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [result.insertId]);
+    }
+
     const form = forms[0];
-    const batch = await getBatchById(form.batch_id, conn);
     const settings = await getSettings(conn);
     if (!canStudentEdit(form, batch, settings)) throw new Error(readonlyReason(form, batch, settings));
 

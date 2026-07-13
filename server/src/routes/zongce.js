@@ -45,6 +45,7 @@ router.post("/materials/:id/generate-description", auth, materialCtrl.generateMa
 // ===== 评分 =====
 router.post("/evaluation/calculate", auth, evalCtrl.calculateScore);
 router.get("/evaluation/score-list", auth, evalCtrl.getScoreList);
+router.post("/evaluation/save-result", auth, evalCtrl.saveResult);
 router.get("/evaluation/result",     auth, evalCtrl.getEvaluation);
 router.get("/calculations/:id",      auth, evalCtrl.getCalculation);
 router.post("/calculations/:id/resume", auth, evalCtrl.resumeCalculation);
@@ -62,6 +63,7 @@ router.post("/rule-sets/:id/clone", auth, ruleSetCtrl.cloneRuleSet);
 // ===== 模板与填�?=====
 router.post("/templates/upload",  auth, upload.single("file"), fillCtrl.uploadTemplate);
 router.get("/templates",         auth, fillCtrl.getTemplates);
+router.delete("/templates/:id",  auth, fillCtrl.deleteTemplate);
 router.post("/fill/:templateId", auth, fillCtrl.doFill);
 router.get("/fill/:id/download", auth, fillCtrl.downloadFill);
 router.get("/fill-preview",         auth, fillCtrl.getFillPreview);
@@ -92,12 +94,36 @@ router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
 // ===== 测评批次（智能填表模块使用） =====
 router.post("/rules/parse/:taskId/cancel", auth, ruleCtrl.cancelParse);
 
+// ★ 获取学生所在学院+年级的所有批次
 router.get("/batches", auth, async (req, res) => {
   try {
+    const [[user]] = await pool.execute("SELECT college, grade FROM users WHERE id = ?", [req.user.id]);
+    if (!user) return res.json(Res.error("用户不存在"));
     const [rows] = await pool.execute(
-      "SELECT id, school_year, title, college, grade, status, start_time, end_time FROM assessment_batches WHERE status <> 'deleted' ORDER BY created_at DESC"
+      `SELECT id, school_year, title, college, grade, status, start_time, end_time
+       FROM assessment_batches
+       WHERE status <> 'deleted' AND college = ? AND grade = ?
+       ORDER BY school_year DESC`,
+      [user.college || '', user.grade || '']
     );
     res.json(Res.success(rows));
+  } catch (e) { res.json(Res.error(e.message)); }
+});
+
+// ★ 自动匹配学生当前批次（最新学年）
+router.get("/student-batch", auth, async (req, res) => {
+  try {
+    const [[user]] = await pool.execute("SELECT college, grade FROM users WHERE id = ?", [req.user.id]);
+    if (!user) return res.json(Res.error("用户不存在"));
+    const [rows] = await pool.execute(
+      `SELECT id, school_year, title, college, grade, status, start_time, end_time
+       FROM assessment_batches
+       WHERE college = ? AND grade = ? AND status <> 'deleted'
+       ORDER BY school_year DESC LIMIT 1`,
+      [user.college || '', user.grade || '']
+    );
+    if (!rows.length) return res.json(Res.error("未找到匹配的测评批次，请联系管理员创建您所在学院和年级的批次"));
+    res.json(Res.success(rows[0]));
   } catch (e) { res.json(Res.error(e.message)); }
 });
 

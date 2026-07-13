@@ -3,6 +3,8 @@
 // ===== 测评批次（智能填表模块使用） =====
 export const getBatches = () =>
   request.get("/zongce/batches");
+export const getStudentBatch = () =>
+  request.get("/zongce/student-batch");
 
 // ===== 规则 =====
 export const uploadRuleFiles = (formData, batchId) => {
@@ -93,6 +95,8 @@ export const uploadTemplate = (formData) =>
 
 export const getTemplates = () =>
   request.get("/zongce/templates");
+export const deleteTemplate = (id) =>
+  request.delete(`/zongce/templates/${id}`);
 
 export const doFill = (templateId, batchId) =>
   request.post(`/zongce/fill/${templateId}`);
@@ -102,6 +106,11 @@ export const downloadFill = (id) =>
 
 export const getFillPreview = (batchId) =>
   request.get("/zongce/fill-preview", { params: { batch_id: batchId } });
+
+// ★ 保存综合评定结果到 evaluation_results（供个性化分析端 module2 使用）
+export const saveEvaluationResult = (data) =>
+  request.post("/zongce/evaluation/save-result", data);
+
 // ===== 智能填表数据保存 =====
 export const saveFillData = (items, batchId) =>
   request.post("/zongce/smart-fill/save", { items, batch_id: batchId });

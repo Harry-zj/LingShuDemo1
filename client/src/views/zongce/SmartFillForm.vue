@@ -72,8 +72,8 @@
         <div class="preview-group">
           <div class="group-title">F3 创新实践<span class="group-weight">权重25%</span><span class="group-score">合计{{ fillData.F3_total }}分 加权{{ fillData.F3_weighted }}</span></div>
           <div class="dim-list">
-            <div v-for="b in F3Items" :key="b.key" class="dim-row f3-row">
-              <span class="dim-name">{{ b.label }}</span><input class="score-inp" type="number" v-model.number="fillData[b.scoreKey]" min="0" @change="onFieldChange('F3',b.key)" /><textarea class="desc-inp" v-model="fillData[b.detailKey]" placeholder="加分依据..." @change="onFieldChange('F3',b.key)" rows="2"></textarea>
+            <div v-for="b in F3Items" :key="b.key" class="dim-row">
+              <span class="dim-name">{{ b.label }}</span><span class="score-display">{{ fillData[b.scoreKey] || 0 }}</span><span class="score-unit">分</span><span class="desc-display">{{ fillData[b.detailKey] || '暂无依据' }}</span>
             </div>
           </div>
         </div>
@@ -102,16 +102,16 @@
   </div>
 </template>
 <script setup>
-import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import * as api from '@/api/zongce'
 import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
-const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array })
+const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String] })
 const smartFillStore = useSmartFillStore()
 
-const emit = defineEmits(['update:uploadedTemplate','upload-template','fill','download','score-changed'])
+const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template'])
 const fileInput = ref(null)
 const isDragging = ref(false)
 const formatError = ref(false)
@@ -119,6 +119,7 @@ const isFilling = ref(false)
 const fillDone = ref(false)
 const fillError = ref('')
 const showPreview = ref(true)
+const isSubmitting = ref(false)
 
 const fillData = ref({
   real_name: '', student_id: '', academic_year: '', grade: '', total_score: 0,
@@ -141,28 +142,6 @@ const fillData = ref({
   F3_B8_score: 0, F3_B8_detail: '',
 })
 
-// ★ 记录用户已手动编辑的 F3 字段，防止 watch(scoreList) 覆盖
-const f3EditedKeys = ref(new Set())
-
-let saveTimer=null;
-function onFieldChange(s,ik)
-{clearTimeout(saveTimer);saveTimer=setTimeout(function()
-{var items=[];
-if(s=="F3"){
-  items.push({section:s,item_key:ik,score:fillData.value["F3_"+ik+"_score"],description:fillData.value["F3_"+ik+"_detail"],rule_set_id:props.ruleSetId||0});
-  // 标记为已编辑，防止后续 scoreList 同步覆盖
-  f3EditedKeys.value.add('F3_'+ik+'_detail');
-  f3EditedKeys.value.add('F3_'+ik+'_score');
-}
-if(items.length)api.saveFillData(items).then(function(){emit("score-changed")}).catch(function(){})},800)};
-async function generateDesc(section,ik,label)
-{try{var r=await api.generateF1Description(section,ik,label);
-if(r.code===200&&r.data&&r.data.description)
-{if(section=="F1")fillData.value["F1_"+ik+"_detail"]=r.data.description;
-onFieldChange(section,ik)}}catch(e){}};
-function addCourse(){fillData.value.F2_courses.push({name:"",credit:2,score:0})};
-function removeCourse(i){fillData.value.F2_courses.splice(i,1);onFieldChange("F2","COURSE")};
-function flushSave(){if(saveTimer){clearTimeout(saveTimer);saveTimer=null}};
 async function loadFillData() {
   try {
     const r = await api.getFillPreview()
@@ -172,15 +151,12 @@ async function loadFillData() {
         fillData.value[k] = r.data[k]
       }
       updateTotalScore()
-      // 服务端数据加载后，先恢复到 Store（仅恢复 Store 中仍为默认值的项），再同步
       restoreStoreFromServer()
     }
-  } catch (e) {}
+  } catch (e) { console.error('[SmartFillForm] loadFillData 失败:', e.message || e) }
   syncF1F2Data()
 }
 loadFillData()
-// 组件销毁前立即保存未提交的编辑
-onBeforeUnmount(function(){flushSave()})
 
 
 const F1Items=computed(()=>[
@@ -231,8 +207,7 @@ const placeholderGroups = [
 ]
 
 
-// ★ 监听评分清单变化，自动同步F3数据到预览面板
-// 注意：不会覆盖用户已手动编辑的字段
+// ★ 监听评分清单变化，同步 F3 数据到预览面板（只读展示）
 watch(() => props.scoreList, (newVal) => {
   if (!newVal || !newVal.indicators) return;
   const indicators = newVal.indicators.filter(ind => /^B\d+$/.test(ind.code));
@@ -241,24 +216,18 @@ watch(() => props.scoreList, (newVal) => {
     const key = ind.code;
     const scoreKey = 'F3_' + key + '_score';
     const detailKey = 'F3_' + key + '_detail';
-    // 分数：仅在用户未手动编辑时同步
-    if (!f3EditedKeys.value.has(scoreKey)) {
-      fillData.value[scoreKey] = ind.score || 0;
-    }
-    // 描述：仅在用户未手动编辑且服务端未返回描述时，自动从 facts 拼接
-    if (!f3EditedKeys.value.has(detailKey) && !fillData.value[detailKey]) {
-      const autoDesc = (ind.facts || []).map(f => {
-        const name = f.award_name || f.competition_name || '加分项';
-        return name + '(+' + (f.score || 0) + '分)';
-      }).filter(Boolean).join('；');
-      if (autoDesc) fillData.value[detailKey] = autoDesc;
-    }
-    f3Total += fillData.value[scoreKey] || 0;
+    fillData.value[scoreKey] = ind.score || 0;
+    // 从 facts 拼接描述
+    const autoDesc = (ind.facts || []).map(f => {
+      const name = f.award_name || f.competition_name || '加分项';
+      return name + '(+' + (f.score || 0) + '分)';
+    }).filter(Boolean).join('；');
+    fillData.value[detailKey] = autoDesc || fillData.value[detailKey];
+    f3Total += ind.score || 0;
   }
   fillData.value.F3_total = f3Total;
   fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1));
   updateTotalScore();
-  // 同时触发 F1/F2 数据重新加载
   syncF1F2Data();
 }, { deep: true });
 
@@ -324,10 +293,10 @@ function onFileSelect(e){const f=e.target.files[0];if(f)validateAndUpload(f);e.t
 function validateAndUpload(file){
   const ext=file.name.split('.').pop().toLowerCase();
   if(ext!=='docx'){formatError.value=true;setTimeout(()=>formatError.value=false,3000);return}
-  emit("update:uploadedTemplate",{name:file.name,size:file.size,file});emit("upload-template",file);
+  emit("update:uploadedTemplate",{name:file.name,size:file.size,file});emit("upload-template",file);emit("upload",file);
   fillDone.value=false;fillError.value='';
 }
-function removeTemplate(){emit("update:uploadedTemplate",null);fillDone.value=false;fillError.value=''}
+function removeTemplate(){emit("update:uploadedTemplate",null);emit("remove-template");fillDone.value=false;fillError.value=''}
 
 let currentFillId=null
 async function handleDoFill(){
@@ -346,7 +315,93 @@ async function handleDoFill(){
 function handleDownload(){if(currentFillId)emit('download',currentFillId)}
 function resetFill(){fillDone.value=false;fillError.value='';currentFillId=null}
 function formatSize(b){if(!b)return'';return b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(2)+' MB'}
-async function submitToReview(){try{const r=await api.getFillPreview();if(r.code!==200){alert("获取填表数据失败");return};const d=r.data;const items=[];const titles={A1:"思想政治表现",A2:"道德品质修养",A3:"学习态度作风",A4:"组织纪律观念",A5:"身心健康素质",B1:"职业技能类",B2:"学科竞赛类",B3:"科研学术活动类",B4:"文学艺术创作与宣传报道类",B5:"社会工作类",B6:"社会实践类",B7:"文体艺术活动类",B8:"劳育类"};["A1","A2","A3","A4","A5"].forEach(k=>items.push({section:"F1",subKey:k,title:titles[k]||k,reason:d["F1_"+k+"_detail"]||"",score:d["F1_"+k+"_score"]||0}));["B1","B2","B3","B4","B5","B6","B7","B8"].forEach(k=>items.push({section:"F3",subKey:k,title:titles[k]||k,reason:d["F3_"+k+"_detail"]||"",score:d["F3_"+k+"_score"]||0}));const f2Courses=d.F2_courses||[];items.push({section:"F2",subKey:"COURSE",title:"课程成绩",reason:(f2Courses.map(c=>c.name+"("+c.credit+"学分)").join("；")),score:d.F2_weighted_avg||0});const res=await updateSmartResult({items});if(res.code===200){alert("已提交到审核流程，可在信息管理页查看")}else{alert(res.msg)}}catch(e){alert("提交失败"+(e.message||e))}}
+
+// ★ 提交审核：同时写入 4 张表
+// ① smart_fill_data (表单历史快照)
+// ② assessment_form_items + assessment_forms (信息管理端)
+// ③ evaluation_results (个性化分析端)
+async function submitToReview() {
+  if (isSubmitting.value) return
+  isSubmitting.value = true
+  try {
+    const d = fillData.value
+    const items = []
+    const fillItems = []
+    const titles = {
+      A1:"思想政治表现",A2:"道德品质修养",A3:"学习态度作风",A4:"组织纪律观念",A5:"身心健康素质",
+      B1:"职业技能类",B2:"学科竞赛类",B3:"科研学术活动类",B4:"文学艺术创作与宣传报道类",
+      B5:"社会工作类",B6:"社会实践类",B7:"文体艺术活动类",B8:"劳育类"
+    }
+
+    // ★ 检查数据结构
+    console.log('[submitToReview] F1Items keys:', (smartFillStore.f1Items||[]).map?.(a=>a.key)?.join(',') || 'NOT_ARRAY')
+    console.log('[submitToReview] d.F2_courses type:', typeof d.F2_courses, 'isArray:', Array.isArray(d.F2_courses))
+
+    // F1
+    const f1Keys = ['A1','A2','A3','A4','A5']
+    if (!Array.isArray(f1Keys) || typeof f1Keys.forEach !== 'function') {
+      throw new Error('f1Keys is not iterable: ' + typeof f1Keys)
+    }
+    f1Keys.forEach(k => {
+      const s = d['F1_'+k+'_score'] || 0
+      const desc = d['F1_'+k+'_detail'] || ''
+      items.push({section:"F1",subKey:k,title:titles[k]||k,reason:desc,score:s})
+      fillItems.push({section:"F1",item_key:k,score:20-s,description:desc,rule_set_id:props.ruleSetId||0})
+    })
+
+    // F3
+    const f3Keys = ['B1','B2','B3','B4','B5','B6','B7','B8']
+    f3Keys.forEach(k => {
+      const s = d['F3_'+k+'_score'] || 0
+      const desc = d['F3_'+k+'_detail'] || ''
+      items.push({section:"F3",subKey:k,title:titles[k]||k,reason:desc,score:s})
+      fillItems.push({section:"F3",item_key:k,score:s,description:desc,rule_set_id:props.ruleSetId||0})
+    })
+
+    // F2
+    const f2Courses = Array.isArray(d.F2_courses) ? d.F2_courses : []
+    items.push({section:"F2",subKey:"COURSE",title:"课程成绩",
+      reason:(f2Courses.map(c=>c.name+"("+c.credit+"学分)").join("；")),
+      score:d.F2_weighted_avg||0})
+    if (f2Courses.length > 0) {
+      fillItems.push({section:"F2",item_key:"COURSE",score:0,description:'',
+        extra_data:f2Courses,rule_set_id:props.ruleSetId||0})
+    }
+
+    // ① 写入 smart_fill_data（表单历史快照）
+    console.log('[submitToReview] saving fillData, items:', fillItems.length)
+    try { await api.saveFillData(fillItems, props.batchId) } catch(e) { console.warn('saveFillData:', e.message) }
+
+    // ② 写入 evaluation_results（个性化分析端）
+    try {
+      await api.saveEvaluationResult({
+        total_score: d.total_score,
+        grade: d.grade,
+        formula: 'F=F1*0.1+F2*0.65+F3*0.25',
+        dimension_scores: {
+          F1: {score:d.F1_total, weighted:d.F1_weighted},
+          F2: {score:d.F2_weighted_avg, weighted:d.F2_weighted, courses:f2Courses},
+          F3: {score:d.F3_total, weighted:d.F3_weighted},
+        }
+      })
+    } catch(e) { console.warn('saveEvaluationResult:', e.message) }
+
+    // ③ 写入 assessment_forms + assessment_form_items（信息管理端）
+    const payload = { items, batch_id: props.batchId || null }
+    console.log('[submitToReview] updateSmartResult payload:', JSON.stringify(payload).slice(0,200))
+    const res = await updateSmartResult(payload)
+    if (res.code === 200) {
+      alert("已提交到审核流程，可在信息管理页查看")
+    } else {
+      alert(res.msg)
+    }
+  } catch(e) {
+    console.error('[submitToReview] 错误:', e.message || e, e.stack?.split('\n').slice(0,3).join('\n'))
+    alert("提交失败："+(e.message||e))
+  } finally {
+    isSubmitting.value = false
+  }
+}
 </script>
 
 <style scoped>
