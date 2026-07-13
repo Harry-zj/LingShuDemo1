@@ -43,6 +43,27 @@
         <label class="number-row">异议期限（天）<input type="number" min="0" v-model.number="form.objectionDays" /></label>
       </div>
       <button class="btn-primary" @click="handleCreate"><VIcon icon="mdi:send-outline" /><span class="btn-label">发布</span></button>
+
+      <div v-if="createdBatch" class="rule-inline">
+        <div class="rule-inline-header">
+          <h4>📄 上传规则文件 — {{ createdBatch.title }}</h4>
+          <button class="btn-text" @click="createdBatch = null; ruleSources = []">清除</button>
+        </div>
+        <label class="upload-btn"><VIcon icon="mdi:file-upload-outline" />上传 .docx 规则文件<input type="file" hidden accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="handleRuleUpload($event, createdBatch.id)" /></label>
+        <div class="rule-file-list" v-if="ruleSources.length">
+          <div class="rule-file-row" v-for="src in ruleSources" :key="src.id">
+            <div class="rule-file-info">
+              <span class="rule-file-name">📄 {{ src.file_name || '未命名文件' }}</span>
+              <span class="rule-file-status" :class="parsingIds.has(src.id) ? 'parsing' : (src.status === 'parsed' ? 'parsed' : 'pending')">{{ parsingIds.has(src.id) ? (parsePhase || '解析中') + (parseProgress.total ? ' (' + parseProgress.completed + '/' + parseProgress.total + ')' : '...') : (src.status === 'parsed' ? '已解析' : '未解析') }}</span>
+            </div>
+            <div class="rule-file-actions">
+              <button class="btn-text" :disabled="parsingIds.has(src.id)" @click="handleParse(src.id, createdBatch.id)">{{ parsingIds.has(src.id) ? '解析中...' : '解析' }}</button>
+              <button class="btn-text danger" @click="handleDeleteRule(src.id, createdBatch.id)">删除</button>
+            </div>
+          </div>
+        </div>
+        <div class="empty-line" v-if="!ruleLoading && !ruleSources.length">暂无规则文件</div>
+      </div>
     </div>
 
 
@@ -82,6 +103,7 @@
           </div>
           <div class="actions">
             <button @click="openEdit(batch)"><span class="btn-label">查看/修改</span></button>
+            <button @click="openRuleModal(batch)"><span class="btn-label">规则文件</span></button>
             <button @click="setStatus(batch.id, 'closed')"><span class="btn-label">关闭</span></button>
             <button class="danger" @click="removeBatch(batch.id)"><span class="btn-label">删除</span></button>
           </div>
@@ -104,60 +126,108 @@
           </div>
           <div class="actions">
             <button @click="openEdit(batch)"><span class="btn-label">查看/修改</span></button>
+            <button @click="openRuleModal(batch)"><span class="btn-label">规则文件</span></button>
           </div>
         </div>
         <div class="empty-line" v-if="!historyBatches.length">暂无历史批次</div>
       </div>
     </div>
 
-    <div class="panel-card glass-card" v-if="editing && ['active', 'history'].includes(view)">
-      <div class="panel-header">
-        <h3><VIcon icon="mdi:playlist-edit" />批次详情与跨班互评配置</h3>
-        <button class="btn-text" @click="editing = null"><span class="btn-label">关闭</span></button>
-      </div>
-      <div class="form-grid">
-        <input v-model="editing.title" placeholder="批次名称" :disabled="isEditingHistorical" />
-        <select v-model="editing.school_year" :disabled="isEditingHistorical">
-          <option v-for="year in editingSchoolYearOptions" :key="year" :value="year">{{ year }}</option>
-        </select>
-        <select v-model="editing.college" :disabled="isEditingHistorical">
-          <option v-for="college in options.colleges" :key="college" :value="college">{{ college }}</option>
-        </select>
-        <select v-model="editing.grade" :disabled="isEditingHistorical">
-          <option v-for="grade in options.grades" :key="grade" :value="grade">{{ grade }}</option>
-        </select>
-        <input type="date" v-model="editing.start_time" :disabled="isEditingHistorical" @keydown.prevent @paste.prevent />
-        <input type="date" v-model="editing.end_time" :disabled="isEditingHistorical" @keydown.prevent @paste.prevent />
-        <select v-model="editing.status">
-          <option value="draft">草稿</option>
-          <option value="published">已发布</option>
-          <option value="closed">已关闭</option>
-          <option value="archived">归档</option>
-        </select>
-        <textarea v-model="editing.description" placeholder="批次说明"></textarea>
-        <textarea v-model="editing.requirements" placeholder="填写与材料要求" :disabled="isEditingHistorical"></textarea>
-        <label class="check-row"><input type="checkbox" v-model="editing.requireCounselorReview" :disabled="isEditingHistorical" /> 需要辅导员参与评价</label>
-        <label class="check-row"><input type="checkbox" v-model="editing.requireStudentAffairsReview" :disabled="isEditingHistorical" /> 需要学生工作处参与评价</label>
-        <label class="check-row"><input type="checkbox" v-model="editing.lockSubmittedMaterial" :disabled="isEditingHistorical" /> 学生提交后禁止保存/修改</label>
-        <label class="number-row">异议期限（天）<input type="number" min="0" v-model.number="editing.objectionDays" :disabled="isEditingHistorical" /></label>
-      </div>
+    <!-- 批次详情编辑弹窗 -->
+    <teleport to="body">
+      <Transition name="fade">
+        <div v-if="editing && ['active', 'history'].includes(view)" class="modal-overlay" @click.self="editing = null">
+          <div class="modal-card glass-card modal-card-wide" @click.stop>
+            <div class="modal-header">
+              <h3><VIcon icon="mdi:playlist-edit" />批次详情与跨班互评配置</h3>
+              <button class="modal-close" @click="editing = null"><VIcon icon="mdi:close" /></button>
+            </div>
+            <div class="modal-body">
+              <div class="form-grid">
+                <input v-model="editing.title" placeholder="批次名称" :disabled="isEditingHistorical" />
+                <select v-model="editing.school_year" :disabled="isEditingHistorical">
+                  <option v-for="year in editingSchoolYearOptions" :key="year" :value="year">{{ year }}</option>
+                </select>
+                <select v-model="editing.college" :disabled="isEditingHistorical">
+                  <option v-for="college in options.colleges" :key="college" :value="college">{{ college }}</option>
+                </select>
+                <select v-model="editing.grade" :disabled="isEditingHistorical">
+                  <option v-for="grade in options.grades" :key="grade" :value="grade">{{ grade }}</option>
+                </select>
+                <input type="date" v-model="editing.start_time" :disabled="isEditingHistorical" @keydown.prevent @paste.prevent />
+                <input type="date" v-model="editing.end_time" :disabled="isEditingHistorical" @keydown.prevent @paste.prevent />
+                <select v-model="editing.status">
+                  <option value="draft">草稿</option>
+                  <option value="published">已发布</option>
+                  <option value="closed">已关闭</option>
+                  <option value="archived">归档</option>
+                </select>
+                <textarea v-model="editing.description" placeholder="批次说明"></textarea>
+                <textarea v-model="editing.requirements" placeholder="填写与材料要求" :disabled="isEditingHistorical"></textarea>
+                <label class="check-row"><input type="checkbox" v-model="editing.requireCounselorReview" :disabled="isEditingHistorical" /> 需要辅导员参与评价</label>
+                <label class="check-row"><input type="checkbox" v-model="editing.requireStudentAffairsReview" :disabled="isEditingHistorical" /> 需要学生工作处参与评价</label>
+                <label class="check-row"><input type="checkbox" v-model="editing.lockSubmittedMaterial" :disabled="isEditingHistorical" /> 学生提交后禁止保存/修改</label>
+                <label class="number-row">异议期限（天）<input type="number" min="0" v-model.number="editing.objectionDays" :disabled="isEditingHistorical" /></label>
+              </div>
 
-      <p class="history-tip" v-if="isEditingHistorical">该批次属于历史学年，仅说明、状态和跨班互评配置可以修改。</p>
-      <div class="sub-title">跨班互评配置 <small>（选择评价班级后，该班当前批次全部已授权评价小组成员均可评价）</small></div>
-      <div class="assignment-row" v-for="(item, index) in editing.review_assignments" :key="item.id || index">
-        <select v-model.number="item.target_class_id" @change="syncClassName(item, 'target')">
-          <option value="">被评班级</option>
-          <option v-for="cls in classOptions" :key="cls.id" :value="cls.id">{{ cls.name }}</option>
-        </select>
-        <select v-model.number="item.reviewer_class_id" @change="syncClassName(item, 'reviewer')">
-          <option value="">评测班级</option>
-          <option v-for="cls in classOptions" :key="cls.id" :value="cls.id" :disabled="Number(cls.id) === Number(item.target_class_id)">{{ cls.name }}</option>
-        </select>
-        <button class="danger small" @click="editing.review_assignments.splice(index, 1)"><span class="btn-label">删除</span></button>
-      </div>
-      <button class="btn-outline" @click="addAssignment"><VIcon icon="mdi:plus" /><span class="btn-label">新增互评关系</span></button>
-      <button class="btn-primary" @click="saveBatch"><VIcon icon="mdi:content-save-outline" /><span class="btn-label">保存批次与互评配置</span></button>
-    </div>
+              <p class="history-tip" v-if="isEditingHistorical">该批次属于历史学年，仅说明、状态和跨班互评配置可以修改。</p>
+              <div class="sub-title">跨班互评配置 <small>（选择评价班级后，该班当前批次全部已授权评价小组成员均可评价）</small></div>
+              <div class="assignment-row" v-for="(item, index) in editing.review_assignments" :key="item.id || index">
+                <select v-model.number="item.target_class_id" @change="syncClassName(item, 'target')">
+                  <option value="">被评班级</option>
+                  <option v-for="cls in classOptions" :key="cls.id" :value="cls.id">{{ cls.name }}</option>
+                </select>
+                <select v-model.number="item.reviewer_class_id" @change="syncClassName(item, 'reviewer')">
+                  <option value="">评测班级</option>
+                  <option v-for="cls in classOptions" :key="cls.id" :value="cls.id" :disabled="Number(cls.id) === Number(item.target_class_id)">{{ cls.name }}</option>
+                </select>
+                <button class="danger small" @click="editing.review_assignments.splice(index, 1)"><span class="btn-label">删除</span></button>
+              </div>
+              <button class="btn-outline" @click="addAssignment"><VIcon icon="mdi:plus" /><span class="btn-label">新增互评关系</span></button>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-outline" @click="editing = null">取消</button>
+              <button class="btn-primary" @click="saveBatch"><VIcon icon="mdi:content-save-outline" /><span class="btn-label">保存批次与互评配置</span></button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </teleport>
+
+    <teleport to="body">
+      <Transition name="fade">
+        <div v-if="ruleModalBatch" class="modal-overlay" @click.self="closeRuleModal">
+          <div class="modal-card glass-card" @click.stop>
+            <div class="modal-header">
+              <h3>规则文件 — {{ ruleModalBatch.title }}</h3>
+              <button class="modal-close" @click="closeRuleModal"><VIcon icon="mdi:close" /></button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-batch-info">{{ ruleModalBatch.college }} · {{ ruleModalBatch.grade }} · {{ ruleModalBatch.school_year }}</p>
+              <div v-if="canEditBatchRules(ruleModalBatch)">
+                <label class="upload-btn"><VIcon icon="mdi:file-upload-outline" />上传 .docx 规则文件<input type="file" hidden accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" @change="handleRuleUpload($event, ruleModalBatch.id)" /></label>
+              </div>
+              <div class="rule-file-list" v-if="ruleSources.length">
+                <div class="rule-file-row" v-for="src in ruleSources" :key="src.id">
+                  <div class="rule-file-info">
+                    <span class="rule-file-name">📄 {{ src.file_name || '未命名文件' }}</span>
+                    <span class="rule-file-status" :class="parsingIds.has(src.id) ? 'parsing' : (src.status === 'parsed' ? 'parsed' : 'pending')">{{ parsingIds.has(src.id) ? (parsePhase || '解析中') + (parseProgress.total ? ' (' + parseProgress.completed + '/' + parseProgress.total + ')' : '...') : (src.status === 'parsed' ? '已解析' : '未解析') }}</span>
+                  </div>
+                  <div class="rule-file-actions" v-if="canEditBatchRules(ruleModalBatch)">
+                    <button class="btn-text" :disabled="parsingIds.has(src.id)" @click="handleParse(src.id, ruleModalBatch.id)">{{ parsingIds.has(src.id) ? '解析中...' : '解析' }}</button>
+                    <button class="btn-text danger" @click="handleDeleteRule(src.id, ruleModalBatch.id)">删除</button>
+                  </div>
+                </div>
+              </div>
+              <div class="empty-line" v-if="!ruleLoading && !ruleSources.length">暂无规则文件</div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-outline" @click="closeRuleModal">关闭</button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </teleport>
   </div>
 </template>
 
@@ -165,6 +235,8 @@
 import { computed, onMounted, ref } from 'vue';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
 import { createBatch, deleteBatch, getBatches, getScopeOptions, getSettings, updateBatch, updateBatchStatus, updateSettings } from '../../api/module3';
+import { uploadRuleFiles, getRuleSources, parseRuleSource, deleteRuleSource } from '../../api/zongce';
+import { useUserStore } from '../../stores/user';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
 const view = computed(() => props.view || 'menu');
@@ -187,6 +259,15 @@ const batches = ref([]);
 const settings = ref(null);
 const options = ref({ colleges: [], grades: [], classes: [], members: [], batch_memberships: [], students: [] });
 const editing = ref(null);
+
+// 规则文件管理（创建页内嵌 + active/history 弹窗）
+const createdBatch = ref(null);
+const ruleModalBatch = ref(null);
+const ruleSources = ref([]);
+const ruleLoading = ref(false);
+const parsingIds = ref(new Set());
+const parsePhase = ref('');
+const parseProgress = ref({ completed: 0, total: 0 });
 
 function currentAcademicYearStart() {
   const today = new Date();
@@ -259,7 +340,8 @@ async function handleCreate() {
   if (!form.value.start_time || !form.value.end_time) return alert('请选择开始时间和结束时间');
   const res = await createBatch({ ...form.value, status: 'published' });
   if (res.code === 200) {
-    alert('批次已发布');
+    createdBatch.value = res.data;
+    loadRuleSources(res.data.id);
     await load();
   } else alert(res.msg);
 }
@@ -312,6 +394,15 @@ async function saveSettings() {
   } else alert(res.msg);
 }
 
+
+// ===== 规则文件管理 =====
+function openRuleModal(batch) { ruleModalBatch.value = batch; loadRuleSources(batch.id); }
+function closeRuleModal() { ruleModalBatch.value = null; ruleSources.value = []; }
+async function loadRuleSources(batchId) { ruleLoading.value = true; try { const r = await getRuleSources(batchId); if (r.code === 200) ruleSources.value = r.data || []; } catch (_) {} finally { ruleLoading.value = false; } }
+async function handleRuleUpload(e, batchId) { const files = e.target.files; if (!files || !files.length) return; const fd = new FormData(); for (const f of files) fd.append('files', f); try { const r = await uploadRuleFiles(fd, batchId); if (r.code === 200) loadRuleSources(batchId); else alert(r.msg); } catch (_) { alert('上传失败'); } e.target.value = ''; }
+async function handleParse(sourceId, batchId) { parsingIds.value.add(sourceId); parsePhase.value = 'starting'; try { const r = await parseRuleSource(sourceId, batchId || undefined); if (r.code !== 200) { alert(r.msg); parsingIds.value.delete(sourceId); return; } const token = useUserStore().token; const es = new EventSource(`/api/zongce/rules/tasks/${r.data.taskId}/stream?token=${encodeURIComponent(token)}`); es.addEventListener('progress', e => { try { const p = JSON.parse(e.data); parsePhase.value = p.phase || parsePhase.value; parseProgress.value = { completed: p.completed || 0, total: p.total || 0 }; } catch (_) {} }); es.addEventListener('done', () => { es.close(); parsingIds.value.delete(sourceId); loadRuleSources(batchId); }); es.addEventListener('error', () => { es.close(); parsingIds.value.delete(sourceId); alert('解析失败'); }); } catch (_) { alert('解析请求失败'); parsingIds.value.delete(sourceId); } }
+async function handleDeleteRule(id, batchId) { if (!window.confirm('确定删除该规则文件？相关规则集和计分规则将一并删除。')) return; try { const r = await deleteRuleSource(id); if (r.code === 200) loadRuleSources(batchId); else alert(r.msg); } catch (_) { alert('删除失败'); } }
+function canEditBatchRules(b) { return b && ['draft', 'published'].includes(b.status); }
 
 onMounted(load);
 </script>
@@ -367,5 +458,112 @@ input:disabled, select:disabled, textarea:disabled { opacity: 0.68; cursor: not-
 :deep(*) {
   border-radius: 8px !important;
 }
+
+/* ===== 弹窗 & 规则文件 ===== */
+.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.35); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); display:flex; align-items:center; justify-content:center; z-index:1000; padding:24px; }
+.modal-card { position:relative; background:var(--glass-bg); backdrop-filter:var(--glass-blur); -webkit-backdrop-filter:var(--glass-blur); border:1px solid var(--glass-border); border-radius:20px; box-shadow:var(--shadow-level-3); max-width:520px; width:100%; max-height:80vh; overflow-y:auto; padding:0; }
+.modal-card-wide { max-width:720px; }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 0; }
+.modal-header h3 { display:flex; align-items:center; gap:8px; font-size:18px; font-weight:700; color:var(--color-text); margin:0; }
+.modal-close { width:32px; height:32px; border-radius:50%; border:1px solid var(--color-border); background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); }
+.modal-close:hover { border-color:var(--color-primary); color:var(--color-primary); }
+.modal-body { padding:16px 24px 24px; }
+.modal-batch-info { font-size:13px; color:var(--color-text-tertiary); margin-bottom:16px; }
+.modal-footer { display:flex; gap:10px; justify-content:flex-end; padding:0 24px 20px; }
+.rule-inline { margin-top:20px; padding:20px; border-radius:8px; background:var(--color-bg); border:1px solid var(--color-border); }
+.rule-inline-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.rule-inline-header h4 { font-size:15px; font-weight:600; margin:0; }
+.upload-btn { display:inline-flex; align-items:center; gap:6px; min-height:36px; padding:0 14px; border-radius:8px; cursor:pointer; color:var(--color-text-primary); font-weight:var(--font-weight-medium); background:var(--color-surface); border:1px solid var(--color-border); margin-bottom:12px; }
+.upload-btn:hover { border-color:var(--color-primary); color:var(--color-primary); }
+.rule-file-list { display:flex; flex-direction:column; gap:8px; }
+.rule-file-row { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:12px; border-radius:8px; background:var(--color-surface); border:1px solid var(--color-border); }
+.rule-file-info { display:flex; flex-direction:column; gap:2px; flex:1; min-width:0; }
+.rule-file-name { font-size:14px; font-weight:var(--font-weight-medium); }
+.rule-file-status { font-size:12px; color:var(--color-text-secondary); }
+.rule-file-status.parsed { color:#059669; }
+.rule-file-status.parsing { color:var(--color-primary); }
+.rule-file-actions { display:flex; gap:4px; }
+.rule-file-actions .btn-text { padding:4px 10px; font-size:12px; border-radius:6px; border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-primary); cursor:pointer; }
+.rule-file-actions .btn-text:hover { border-color:var(--color-primary); color:var(--color-primary); }
+.rule-file-actions .btn-text:disabled { opacity:0.5; cursor:not-allowed; }
+.rule-file-actions .btn-text.danger { border-color:rgba(239,68,68,0.35); color:#ef4444; }
+.rule-file-actions .btn-text.danger:hover { background:rgba(239,68,68,0.08); }
+
+/* ===== 弹窗通用样式（批次编辑 & 规则文件共用）===== */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 24px;
+}
+.modal-card {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: var(--shadow-level-3);
+  max-width: 520px; width: 100%;
+  max-height: 80vh; overflow-y: auto;
+  padding: 0;
+}
+.modal-card-wide { max-width: 720px; }
+.modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 24px 0;
+}
+.modal-header h3 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 18px; font-weight: 700; color: var(--color-text); margin: 0;
+}
+.modal-close {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--color-border); background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-secondary);
+}
+.modal-close:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.modal-body { padding: 16px 24px 24px; }
+.modal-batch-info { font-size: 13px; color: var(--color-text-tertiary); margin-bottom: 16px; }
+.modal-footer {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 0 24px 20px;
+}
+
+/* ===== 规则文件弹窗专用样式 ===== */
+.upload-area { margin-bottom: 16px; }
+.upload-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 14px; border-radius: 8px; cursor: pointer;
+  color: var(--color-text-primary); font-weight: var(--font-weight-medium);
+  background: var(--color-surface); border: 1px solid var(--color-border);
+}
+.upload-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.rule-file-list { display: flex; flex-direction: column; gap: 8px; }
+.rule-file-row {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: 12px; padding: 12px; border-radius: 8px;
+  background: var(--color-bg); border: 1px solid var(--color-border);
+}
+.rule-file-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.rule-file-name { font-size: 14px; font-weight: var(--font-weight-medium); color: var(--color-text); }
+.rule-file-status { font-size: 12px; color: var(--color-text-secondary); }
+.rule-file-status.parsed { color: #059669; }
+.rule-file-status.parsing { color: var(--color-primary); }
+.rule-file-status.pending { color: var(--color-text-tertiary); }
+.rule-file-time { font-size: 11px; color: var(--color-text-tertiary); }
+.rule-file-actions { display: flex; gap: 4px; }
+.rule-file-actions .btn-text {
+  padding: 4px 10px; font-size: 12px; border-radius: 6px;
+  border: 1px solid var(--color-border); background: var(--color-surface);
+  color: var(--color-text-primary); cursor: pointer;
+}
+.rule-file-actions .btn-text:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.rule-file-actions .btn-text:disabled { opacity: 0.5; cursor: not-allowed; }
+.rule-file-actions .btn-text.danger { border-color: rgba(239,68,68,0.35); color: #ef4444; }
+.rule-file-actions .btn-text.danger:hover { background: rgba(239,68,68,0.08); }
 
 </style>
