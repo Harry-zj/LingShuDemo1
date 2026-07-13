@@ -12,8 +12,8 @@ export const uploadRuleFiles = (formData, batchId) => {
   });
 };
 
-export const addRuleText = (text) =>
-  request.post("/zongce/rules/text", { text });
+export const addRuleText = (text, batchId) =>
+  request.post("/zongce/rules/text", { text, batch_id: batchId });
 
 export const getRuleSources = (batchId) =>
   request.get("/zongce/rules/sources", { params: batchId ? { batch_id: batchId } : {} });

@@ -24,11 +24,11 @@ exports.uploadRuleFiles = async (req, res) => {
 // 输入文字规则
 exports.addRuleText = async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, batch_id } = req.body;
     if (!text || !text.trim()) return res.json(Res.error("请输入文字"));
     const [r] = await pool.execute(
-      "INSERT INTO rule_sources (user_id, source_type, original_text, status) VALUES (?, 'text', ?, 'pending')",
-      [req.user.id, text.trim()]
+      "INSERT INTO rule_sources (user_id, batch_id, source_type, original_text, status) VALUES (?, ?, 'text', ?, 'pending')",
+      [req.user.id, batch_id || null, text.trim()]
     );
     res.json(Res.success({ id: r.insertId, status: 'pending' }, "文字规则已保存"));
   } catch (e) { res.json(Res.error(e.message)); }

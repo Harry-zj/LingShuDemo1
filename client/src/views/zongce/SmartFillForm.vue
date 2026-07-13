@@ -141,11 +141,19 @@ const fillData = ref({
   F3_B8_score: 0, F3_B8_detail: '',
 })
 
+// ★ 记录用户已手动编辑的 F3 字段，防止 watch(scoreList) 覆盖
+const f3EditedKeys = ref(new Set())
+
 let saveTimer=null;
 function onFieldChange(s,ik)
 {clearTimeout(saveTimer);saveTimer=setTimeout(function()
 {var items=[];
-if(s=="F3")items.push({section:s,item_key:ik,score:fillData.value["F3_"+ik+"_score"],description:fillData.value["F3_"+ik+"_detail"],rule_set_id:props.ruleSetId||0});
+if(s=="F3"){
+  items.push({section:s,item_key:ik,score:fillData.value["F3_"+ik+"_score"],description:fillData.value["F3_"+ik+"_detail"],rule_set_id:props.ruleSetId||0});
+  // 标记为已编辑，防止后续 scoreList 同步覆盖
+  f3EditedKeys.value.add('F3_'+ik+'_detail');
+  f3EditedKeys.value.add('F3_'+ik+'_score');
+}
 if(items.length)api.saveFillData(items).then(function(){emit("score-changed")}).catch(function(){})},800)};
 async function generateDesc(section,ik,label)
 {try{var r=await api.generateF1Description(section,ik,label);
@@ -161,13 +169,13 @@ async function loadFillData() {
     if (r.code === 200 && r.data) {
       for (const k in r.data) {
         if (!(k in fillData.value)) continue
-        // 格?始终从服务器拉最新数据覆盖，不再判断是否为空
         fillData.value[k] = r.data[k]
       }
       updateTotalScore()
+      // 服务端数据加载后，先恢复到 Store（仅恢复 Store 中仍为默认值的项），再同步
+      restoreStoreFromServer()
     }
   } catch (e) {}
-  // 修复：服务器数据加载后重新从Store同步F1/F2，确保用户编辑数据不被覆盖
   syncF1F2Data()
 }
 loadFillData()
@@ -223,27 +231,59 @@ const placeholderGroups = [
 ]
 
 
-// 格?监听评分清单变化，自动同步F3数据
+// ★ 监听评分清单变化，自动同步F3数据到预览面板
+// 注意：不会覆盖用户已手动编辑的字段
 watch(() => props.scoreList, (newVal) => {
   if (!newVal || !newVal.indicators) return;
   const indicators = newVal.indicators.filter(ind => /^B\d+$/.test(ind.code));
-  const map = { B1:'B1', B2:'B2', B3:'B3', B4:'B4', B5:'B5', B6:'B6', B7:'B7', B8:'B8' };
   let f3Total = 0;
   for (const ind of indicators) {
     const key = ind.code;
-    if (!map[key]) continue;
     const scoreKey = 'F3_' + key + '_score';
     const detailKey = 'F3_' + key + '_detail';
-    fillData.value[scoreKey] = ind.score || 0;
-    fillData.value[detailKey] = (ind.facts || []).map(f => f.award_name || f.competition_name || '').filter(Boolean).join("格?");
-    f3Total += ind.score || 0;
+    // 分数：仅在用户未手动编辑时同步
+    if (!f3EditedKeys.value.has(scoreKey)) {
+      fillData.value[scoreKey] = ind.score || 0;
+    }
+    // 描述：仅在用户未手动编辑且服务端未返回描述时，自动从 facts 拼接
+    if (!f3EditedKeys.value.has(detailKey) && !fillData.value[detailKey]) {
+      const autoDesc = (ind.facts || []).map(f => {
+        const name = f.award_name || f.competition_name || '加分项';
+        return name + '(+' + (f.score || 0) + '分)';
+      }).filter(Boolean).join('；');
+      if (autoDesc) fillData.value[detailKey] = autoDesc;
+    }
+    f3Total += fillData.value[scoreKey] || 0;
   }
   fillData.value.F3_total = f3Total;
   fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1));
   updateTotalScore();
-  // 格?同时触发 F1/F2 数据重新加载
+  // 同时触发 F1/F2 数据重新加载
   syncF1F2Data();
 }, { deep: true });
+
+// ★ 从服务端数据恢复到 Pinia Store（仅恢复 Store 中仍为默认值的项）
+// 解决刷新后 Store 为空、syncF1F2Data() 用空数据覆盖服务端数据的问题
+function restoreStoreFromServer() {
+  // 恢复 F1：仅当 Store 仍为默认值(20分,空说明)时才覆盖
+  for (const a of smartFillStore.f1Items) {
+    const serverScore = fillData.value['F1_' + a.key + '_score']
+    const serverDetail = fillData.value['F1_' + a.key + '_detail']
+    // Store 值仍是默认时，从服务端恢复
+    if (a.score === a.base && !a.detail && serverScore !== undefined && serverScore !== null) {
+      a.score = serverScore
+      a.detail = serverDetail || ''
+    }
+  }
+  // 恢复 F2 课程：仅当 Store 中无有效课程（无课程名）时才恢复
+  const hasValidCourses = smartFillStore.f2Courses.some(c => c.name)
+  if (!hasValidCourses) {
+    const courses = fillData.value.F2_courses
+    if (courses && courses.length > 0 && courses.some(c => c.name)) {
+      smartFillStore.f2Courses = JSON.parse(JSON.stringify(courses))
+    }
+  }
+}
 
 // ★ 从共享 Store 同步 F1/F2 数据
 function syncF1F2Data() {

@@ -81,7 +81,8 @@ async function getFillData(userId, batchId) {
 
     // 2. 查询已发布的规则集
     const [ruleSets] = await conn.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1", [userId]
+      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1",
+      [userId, batchId || null, batchId || null]
     );
 
     // 3. 构建基础数据
@@ -178,8 +179,8 @@ async function getFillData(userId, batchId) {
         human_readable: preview.human_readable || '',
         fact_id: row.fact_id,
         fact_type: row.fact_type,
-        award_name: factData.award_name || '',
-        competition_name: factData.competition_name || '',
+        award_name: factData.value || factData.award_name || '',
+        competition_name: factData.value || factData.competition_name || '',
         inferred_level: factData.inferred_level || '',
         award_rank: factData.award_rank || '',
         score: score,
@@ -208,7 +209,7 @@ async function getFillData(userId, batchId) {
         if (B_TO_F3_MAP[bKey]) {
           const f3Key = B_TO_F3_MAP[bKey]; // F3_B1, ...
           fillData[f3Key + '_score'] = group.totalScore;
-          fillData[f3Key + '_detail'] = group.facts.map(f => f.human_readable || f.competition_name || f.award_name).filter(Boolean).join('；');
+          // _detail 在 step8c 中统一处理（优先 smart_fill_data，否则从 _items 自动生成）
           fillData[f3Key + '_items'] = group.facts.map(f => ({
             desc: f.human_readable || f.competition_name || f.award_name || '未知',
             score: String(f.score),
@@ -223,9 +224,10 @@ async function getFillData(userId, batchId) {
     fillData.F3_total = f3Total;
 
     // ★ 8. 从 smart_fill_data 读取用户保存的分数和描述（兼容 rule_set_id=0 的情况）
+    // 注意：smart_fill_data 表没有 batch_id 列，通过 rule_set_id 关联到批次
     const [savedRows] = await conn.execute(
-      "SELECT * FROM smart_fill_data WHERE user_id = ? AND (rule_set_id = ? OR rule_set_id = 0) AND (? IS NULL OR batch_id = ?)",
-      [userId, ruleSetId || 0, batchId || null, batchId || null]
+      "SELECT * FROM smart_fill_data WHERE user_id = ? AND (rule_set_id = ? OR rule_set_id = 0)",
+      [userId, ruleSetId || 0]
     );
 
     // 构建 lookup: "section:item_key" → row

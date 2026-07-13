@@ -67,7 +67,7 @@
       <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
       <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
       <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" />
+      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
     </div>
   </div>
 </template>
@@ -147,6 +147,10 @@ const templatesLoaded = ref(false)
 const fillResults = ref([]); const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
+const publishedRuleSetId = computed(() => {
+  const pub = ruleSets.value.find(r => r.status === 'published' && (!selectedBatchId.value || r.batch_id === selectedBatchId.value))
+  return pub ? pub.id : 0
+})
 const ruleReady = computed(() => publishedRuleSetCount.value > 0)
 const materialCount = computed(() => materials.value.length)
 const confirmedRecCount = computed(() =>
@@ -157,11 +161,37 @@ const totalScore = computed(() => evaluation.value?.total_score ?? null)
 // ========== 刷新 ==========
 async function refreshAll() {
   await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()])
+  // 从服务端恢复 F1/F2 数据到 Pinia Store，解决刷新后 Store 数据丢失问题
+  await restoreStoreFromPreview()
   if (templates.value.length > 0) {
     const latest = templates.value[0]
     uploadedTemplate.value = { id: latest.id, name: latest.name, size: 0 }
   }
   refreshScoreList()
+}
+
+// ★ 从服务端 fill-preview 数据恢复到 Pinia Store（仅在 Store 为默认值时覆盖）
+async function restoreStoreFromPreview() {
+  try {
+    const r = await api.getFillPreview(selectedBatchId.value || undefined)
+    if (r.code !== 200 || !r.data) return
+    const d = r.data
+    // 恢复 F1
+    for (const a of store.f1Items) {
+      const score = d['F1_' + a.key + '_score']
+      const detail = d['F1_' + a.key + '_detail']
+      // 仅当 Store 仍为默认值时才覆盖
+      if (a.score === a.base && !a.detail && score !== undefined && score !== null) {
+        a.score = score
+        a.detail = detail || ''
+      }
+    }
+    // 恢复 F2 课程：仅当 Store 中无有效课程时才恢复
+    const hasValidCourses = store.f2Courses.some(c => c.name)
+    if (!hasValidCourses && d.F2_courses && d.F2_courses.length > 0 && d.F2_courses.some(c => c.name)) {
+      store.f2Courses = JSON.parse(JSON.stringify(d.F2_courses))
+    }
+  } catch (_) {}
 }
 
 async function refreshRules() {
@@ -278,6 +308,7 @@ function downloadFill(id) {
   })
 }
 function removeTemplate() { uploadedTemplate.value = null }
+function onScoreChanged() { refreshEval(); refreshScoreList() }
 function onF1F2Saved() {
   const items = []
   for (const a of store.f1Items) {
