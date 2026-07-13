@@ -1,4 +1,8 @@
+const fs = require("fs");
+const path = require("path");
+const mammoth = require("mammoth");
 const { pool } = require("../../config/database");
+const { getFillDataPreview } = require("../zongce/fillService");
 
 const ROLE_LABEL = {
   student: "学生",
@@ -111,6 +115,197 @@ function attachmentPublicUrl(filePath) {
   if (!value) return '';
   if (/^(https?:)?\/\//i.test(value) || value.startsWith('/uploads/')) return value;
   return `/uploads/${value.replace(/^\/+/, '')}`;
+}
+
+
+const SMART_FILL_ITEM_TITLES = {
+  A1: "思想政治表现",
+  A2: "道德品质修养",
+  A3: "学习态度作风",
+  A4: "组织纪律观念",
+  A5: "身心健康素质",
+  COURSE: "课程成绩",
+  B1: "职业技能类",
+  B2: "学科竞赛类",
+  B3: "科研学术活动类",
+  B4: "文学艺术创作与宣传报道类",
+  B5: "社会工作类",
+  B6: "社会实践类",
+  B7: "文体艺术活动类",
+  B8: "劳育类",
+};
+
+function numberValue(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function buildSmartFillItems(fillData = {}) {
+  const items = [];
+  ["A1", "A2", "A3", "A4", "A5"].forEach(key => {
+    items.push({
+      section: "F1",
+      subKey: key,
+      title: SMART_FILL_ITEM_TITLES[key],
+      reason: String(fillData[`F1_${key}_detail`] || ""),
+      score: numberValue(fillData[`F1_${key}_score`]),
+    });
+  });
+
+  const courses = Array.isArray(fillData.F2_courses) ? fillData.F2_courses : [];
+  items.push({
+    section: "F2",
+    subKey: "COURSE",
+    title: SMART_FILL_ITEM_TITLES.COURSE,
+    reason: courses.length
+      ? courses.map(course => `${course.name || "未命名课程"}（${numberValue(course.credit)} 学分，${numberValue(course.score)} 分）`).join("；")
+      : "暂无课程成绩明细",
+    score: numberValue(fillData.F2_weighted_avg),
+  });
+
+  ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8"].forEach(key => {
+    items.push({
+      section: "F3",
+      subKey: key,
+      title: SMART_FILL_ITEM_TITLES[key],
+      reason: String(fillData[`F3_${key}_detail`] || ""),
+      score: numberValue(fillData[`F3_${key}_score`]),
+    });
+  });
+  return items;
+}
+
+function calculateSmartFillScores(items = []) {
+  const f1 = items.filter(item => item.section === "F1").reduce((sum, item) => sum + numberValue(item.score), 0);
+  const f2 = items.filter(item => item.section === "F2").reduce((sum, item) => sum + numberValue(item.score), 0);
+  const f3 = items.filter(item => item.section === "F3").reduce((sum, item) => sum + numberValue(item.score), 0);
+  return {
+    f1_basic_quality: Number(f1.toFixed(2)),
+    f2_course_learning: Number(f2.toFixed(2)),
+    f3_innovation_practice: Number(f3.toFixed(2)),
+    total: Number((f1 * 0.1 + f2 * 0.65 + f3 * 0.25).toFixed(2)),
+  };
+}
+
+async function getLatestSmartDocument(db, userId) {
+  try {
+    const [rows] = await db.execute(
+      `SELECT id, user_id, template_id, result_path, original_name, created_at
+       FROM fill_results
+       WHERE user_id=?
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+      [userId]
+    );
+    return rows[0] || null;
+  } catch (error) {
+    if (["ER_NO_SUCH_TABLE", "ER_BAD_FIELD_ERROR"].includes(error?.code)) return null;
+    throw error;
+  }
+}
+
+function smartDocumentMeta(documentRow, formId) {
+  if (!documentRow) return null;
+  return {
+    id: Number(documentRow.id),
+    file_name: documentRow.original_name || "综测登记表_已填写.docx",
+    generated_at: documentRow.created_at || "",
+    preview_endpoint: `/module3/forms/${formId}/document/preview`,
+    download_endpoint: `/module3/forms/${formId}/document/download`,
+  };
+}
+
+function smartDocumentPath(documentRow) {
+  const relativePath = String(documentRow?.result_path || "").replace(/^[/\\]+/, "");
+  return relativePath ? path.join(__dirname, "../../../uploads", relativePath) : "";
+}
+
+function sanitizePreviewHtml(html) {
+  return String(html || "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+    .replace(/\s(href|src)\s*=\s*(["'])\s*javascript:[\s\S]*?\2/gi, "");
+}
+
+async function createSmartFillFormFromDatabase(student, batch, conn) {
+  const fillData = await getFillDataPreview(student.id);
+  const items = buildSmartFillItems(fillData);
+  const scores = calculateSmartFillScores(items);
+  const settings = await getSettings(conn);
+  const [result] = await conn.execute(
+    `INSERT INTO assessment_forms
+      (batch_id, batch_title, student_id, student_name, student_no, college, major, grade,
+       class_id, class_name, from_smart_fill, is_demo, status, level, scores, personal_summary)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'smart_ready', ?, ?, ?)`,
+    [
+      batch.id,
+      batch.title || "",
+      student.id,
+      student.real_name || "",
+      student.student_no || student.username || "",
+      student.college || "",
+      student.major || "",
+      student.grade || "",
+      student.class_id || null,
+      student.class_name || "",
+      calculateLevel(scores.total, settings.gradeRules),
+      JSON.stringify(scores),
+      "综测数据由智能填表数据库同步生成。",
+    ]
+  );
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    await conn.execute(
+      `INSERT INTO assessment_form_items
+        (form_id, section, sub_key, title, reason, score, evidence_ids, editable, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, JSON_ARRAY(), 1, ?)`,
+      [result.insertId, item.section, item.subKey, item.title, item.reason, item.score, index + 1]
+    );
+  }
+
+  await addLog(conn, student, "同步智能填表结果", batch.title, "从智能填表数据库读取 Word 结果及 F1/F2/F3 数据");
+  const [created] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [result.insertId]);
+  return created[0];
+}
+
+async function getReadableFormDocument(formId, user, db = pool) {
+  const [forms] = await db.execute("SELECT * FROM assessment_forms WHERE id=? LIMIT 1", [formId]);
+  if (!forms.length) throw new Error("评价表不存在");
+  const form = forms[0];
+  if (!(await canReadForm(user, form, db))) throw new Error("无权查看该综测表");
+  const documentRow = await getLatestSmartDocument(db, form.student_id);
+  if (!documentRow) throw new Error("尚未找到智能填表生成的 Word 文档");
+  const filePath = smartDocumentPath(documentRow);
+  if (!filePath || !fs.existsSync(filePath)) throw new Error("智能填表 Word 文档已丢失，请重新生成");
+  return { form, documentRow, filePath };
+}
+
+async function getFormDocumentPreview(formId, user) {
+  const { documentRow, filePath } = await getReadableFormDocument(formId, user);
+  const result = await mammoth.convertToHtml(
+    { path: filePath },
+    {
+      convertImage: mammoth.images.imgElement(async image => ({
+        src: `data:${image.contentType};base64,${await image.read("base64")}`,
+      })),
+    }
+  );
+  return {
+    file_name: documentRow.original_name || "综测登记表_已填写.docx",
+    generated_at: documentRow.created_at || "",
+    html: sanitizePreviewHtml(result.value),
+    warnings: (result.messages || []).map(message => message.message).filter(Boolean),
+  };
+}
+
+async function getFormDocumentFile(formId, user) {
+  const { documentRow, filePath } = await getReadableFormDocument(formId, user);
+  return {
+    filePath,
+    fileName: documentRow.original_name || "综测登记表_已填写.docx",
+  };
 }
 
 async function validateStudentEvidenceIds(db, studentId, items) {
@@ -1185,6 +1380,7 @@ async function buildFormView(form, viewer = null, db = pool) {
   }
   const [tasks] = await db.execute(taskSql, taskParams);
   const activeTask = assignedReviewer ? tasks.find(task => task.status === "pending") || tasks[0] : null;
+  const smartDocument = await getLatestSmartDocument(db, form.student_id);
   const scores = parseJson(form.scores, { f1_basic_quality: 0, f2_course_learning: 0, f3_innovation_practice: 0, total: 0 });
   const evidenceIds = [...new Set(items.flatMap(item => normalizeIds(parseJson(item.evidence_ids, []))))];
   let evidenceMap = new Map();
@@ -1250,6 +1446,7 @@ async function buildFormView(form, viewer = null, db = pool) {
     objections,
     review_tasks: tasks,
     grouped_items: groupedItems,
+    smart_document: smartDocumentMeta(smartDocument, form.id),
     review_stage: activeTask?.stage || "initial",
     reviewable_item_ids: reviewableItemIds,
     result_released: resultReleased,
@@ -1420,8 +1617,19 @@ async function getSmartResult(studentId, batchId) {
     "SELECT * FROM assessment_forms WHERE student_id=? AND batch_id=? ORDER BY updated_at DESC, id DESC LIMIT 1",
     [student.id, batch.id]
   );
-  if (!forms.length) return null;
-  return buildFormView(forms[0], student);
+  if (forms.length) return buildFormView(forms[0], student);
+
+  const latestDocument = await getLatestSmartDocument(pool, student.id);
+  if (!latestDocument) return null;
+
+  return withTransaction(async conn => {
+    const [existing] = await conn.execute(
+      "SELECT * FROM assessment_forms WHERE student_id=? AND batch_id=? ORDER BY updated_at DESC, id DESC LIMIT 1 FOR UPDATE",
+      [student.id, batch.id]
+    );
+    const form = existing[0] || await createSmartFillFormFromDatabase(student, batch, conn);
+    return buildFormView(form, student, conn);
+  });
 }
 
 async function updateSmartResult(studentId, payload) {
@@ -1461,7 +1669,13 @@ async function updateSmartResult(studentId, payload) {
           [form.id, section.key, child.key, String(input.title || ""), String(input.reason || ""), score, JSON.stringify(normalizeIds(input.evidence_ids)), input.editable === false ? 0 : 1, index]
         );
       }
-      scores = { ...scores, f1_basic_quality: f1, f2_course_learning: f2, f3_innovation_practice: f3, total: f1 + f2 + f3 };
+      scores = {
+        ...scores,
+        f1_basic_quality: Number(f1.toFixed(2)),
+        f2_course_learning: Number(f2.toFixed(2)),
+        f3_innovation_practice: Number(f3.toFixed(2)),
+        total: Number((f1 * 0.1 + f2 * 0.65 + f3 * 0.25).toFixed(2)),
+      };
     }
     const level = calculateLevel(scores.total, settings.gradeRules);
     await conn.execute(
@@ -1954,6 +2168,8 @@ module.exports = {
   submitSmartResult,
   listFormsByUser,
   getFormDetail,
+  getFormDocumentPreview,
+  getFormDocumentFile,
   getPendingReviews,
   setFormLevel,
   reviewForm,

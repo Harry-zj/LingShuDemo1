@@ -99,19 +99,19 @@ onMounted(load);
 .page-header { display: flex; align-items: center; gap: 16px; }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.btn-back { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 8px !important; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
-.review-box { padding: 20px; border-radius: 8px !important; }
+.btn-back { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); cursor: pointer; }
+.review-box { padding: 20px; border-radius: 8px; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
-.panel-badge { padding: 4px 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
+.panel-badge { padding: 4px 10px; border-radius: 8px; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
 .grade-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 14px; }
-.grade-row > div { padding: 14px; border-radius: 8px !important; background: var(--color-bg); display: flex; flex-direction: column; gap: 6px; }
+.grade-row > div { padding: 14px; border-radius: 8px; background: var(--color-bg); display: flex; flex-direction: column; gap: 6px; }
 .grade-row span { font-size: 13px; color: var(--color-text-secondary); }
 .grade-row strong { font-size: 24px; color: var(--color-primary); }
-select, textarea { width: 100%; border: 1px solid var(--color-border); border-radius: 8px !important; padding: 8px 10px; background: var(--color-surface); color: var(--color-text-primary); }
+select, textarea { width: 100%; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-surface); color: var(--color-text-primary); }
 textarea { min-height: 90px; resize: vertical; margin-bottom: 14px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.actions button { display: inline-flex; align-items: center; gap: 4px; padding: 10px 16px; border: none; border-radius: 8px !important; cursor: pointer; color: white; }
+.actions button { display: inline-flex; align-items: center; gap: 4px; padding: 10px 16px; border: none; border-radius: 8px; cursor: pointer; color: white; }
 .btn-pass { background: #34A853; }
 .btn-return { background: #E37400; }
 .btn-reject { background: #D93025; }
@@ -119,10 +119,4 @@ textarea { min-height: 90px; resize: vertical; margin-bottom: 14px; }
   .page-header { flex-direction: column; align-items: flex-start; }
   .grade-row { grid-template-columns: 1fr; }
 }
-
-/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
-:deep(*) {
-  border-radius: 8px !important;
-}
-
 </style>

@@ -128,6 +128,27 @@ exports.getFormDetail = async (req, res) => {
   }
 };
 
+exports.getFormDocumentPreview = async (req, res) => {
+  try {
+    res.json(Res.success(await service.getFormDocumentPreview(req.params.id, await currentUser(req))));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
+};
+
+exports.downloadFormDocument = async (req, res) => {
+  try {
+    const document = await service.getFormDocumentFile(req.params.id, await currentUser(req));
+    const stat = fs.statSync(document.filePath);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`);
+    res.setHeader("Content-Length", stat.size);
+    fs.createReadStream(document.filePath).pipe(res);
+  } catch (error) {
+    res.status(404).json(Res.error(error.message));
+  }
+};
+
 exports.setFormLevel = async (req, res) => {
   try {
     res.json(Res.success(await service.setFormLevel(req.params.id, req.body.level, await currentUser(req)), "等级已更新"));

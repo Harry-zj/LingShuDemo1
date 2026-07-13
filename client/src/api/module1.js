@@ -1,14 +1,14 @@
 import request from "./request";
 
 // Smart Result (综测表)
-export const getSmartResult = () =>
-  request.get("/module1/smart-result");
+export const getSmartResult = (params = {}) =>
+  request.get("/module1/smart-result", { params });
 
 export const updateSmartResult = (data) =>
   request.put("/module1/smart-result", data);
 
-export const submitSmartResult = () =>
-  request.post("/module1/smart-result/submit");
+export const submitSmartResult = (data = {}) =>
+  request.post("/module1/smart-result/submit", data);
 
 // Materials (材料)
 export const getMaterials = () =>

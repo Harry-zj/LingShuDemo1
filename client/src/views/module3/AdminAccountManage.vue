@@ -182,20 +182,20 @@ watch(view, value => { if (value === 'list') loadUsers(); }, { immediate: true }
 .admin-page { display:flex; flex-direction:column; gap:22px; animation:fadeIn .35s var(--easing-decelerate); }
 .page-header h2 { font-size:22px; font-weight:var(--font-weight-semibold); }
 .page-desc, .hint { color:var(--color-text-secondary); font-size:13px; margin-top:4px; }
-.panel { padding:22px; border-radius: 8px !important; }
+.panel { padding:22px; border-radius: 8px; }
 .panel-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
 .panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-input, select, textarea { width:100%; border:1px solid var(--color-border); border-radius: 8px !important; background:var(--color-surface); color:var(--color-text-primary); padding:10px 12px; outline:none; font-family:inherit; }
+input, select, textarea { width:100%; border:1px solid var(--color-border); border-radius: 8px; background:var(--color-surface); color:var(--color-text-primary); padding:10px 12px; outline:none; font-family:inherit; }
 textarea { margin-top:10px; resize:vertical; }
 .inline-form { display:flex; gap:10px; align-items:center; }
 .inline-form input, .inline-form select { flex:1; }
-.btn-primary, .btn-outline { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:40px; padding:0 16px; border-radius: 8px !important; cursor:pointer; white-space:nowrap; margin-top:14px; }
+.btn-primary, .btn-outline { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:40px; padding:0 16px; border-radius: 8px; cursor:pointer; white-space:nowrap; margin-top:14px; }
 .inline-form .btn-primary, .inline-form .btn-outline { margin-top:0; }
 .btn-primary { border:0; background:var(--gradient-primary); color:#fff; }
 .btn-outline { border:1px solid var(--color-border); background:var(--color-surface); color:var(--color-text-primary); }
 .result-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-.result-row { display:flex; flex-direction:column; gap:4px; padding:12px; border-radius: 8px !important; background:var(--color-bg); }
+.result-row { display:flex; flex-direction:column; gap:4px; padding:12px; border-radius: 8px; background:var(--color-bg); }
 .result-row span, .result-row small { color:var(--color-text-secondary); }
 .import-summary { display:flex; gap:16px; margin-top:12px; color:var(--color-text-secondary); flex-wrap:wrap; }
 .filters { display:flex; gap:8px; align-items:center; }
@@ -205,10 +205,4 @@ th, td { padding:10px; border-bottom:1px solid var(--color-border); text-align:l
 th { color:var(--color-text-secondary); font-weight:600; }
 .back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
 @media (max-width:900px) { .form-grid, .result-list { grid-template-columns:1fr; } .panel-header, .filters, .inline-form { flex-direction:column; align-items:stretch; } }
-
-/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
-:deep(*) {
-  border-radius: 8px !important;
-}
-
 </style>

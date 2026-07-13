@@ -24,6 +24,8 @@ router.put("/students/:id/member", auth, roleCheck("admin", "counselor"), ctrl.s
 
 router.get("/materials", auth, ctrl.getMyMaterials);
 router.get("/forms/:id", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormDetail);
+router.get("/forms/:id/document/preview", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormDocumentPreview);
+router.get("/forms/:id/document/download", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.downloadFormDocument);
 router.put("/forms/:id/level", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.setFormLevel);
 router.put("/materials/:id/review", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.reviewMaterial);
 router.post("/forms/:id/objections", auth, roleCheck("student"), ctrl.submitObjection);

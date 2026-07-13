@@ -1,5 +1,5 @@
 <template>
-  <div class="page">
+  <div class="page module3-legacy-page">
     <header class="page-head">
       <div>
         <h1>统计总览</h1>
@@ -84,9 +84,9 @@ onMounted(load);
 .page-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
 h1, h2 { margin: 0; color: #111827; }
 .page-head p { margin: 8px 0 0; color: #6b7280; line-height: 1.7; }
-button { border: none; border-radius: 8px !important; padding: 10px 14px; cursor: pointer; background: #2563eb; color: #fff; }
+button { border: none; border-radius: 8px; padding: 10px 14px; cursor: pointer; background: #2563eb; color: #fff; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.stat-grid div, .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px !important; padding: 18px; }
+.stat-grid div, .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; }
 .stat-grid div { display: grid; gap: 8px; }
 .stat-grid span { color: #6b7280; font-size: 13px; }
 .stat-grid strong { font-size: 24px; color: #111827; }
@@ -96,10 +96,4 @@ th, td { border-bottom: 1px solid #e5e7eb; text-align: left; padding: 12px; }
 th { color: #374151; background: #f9fafb; }
 td { color: #4b5563; }
 @media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
-
-/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
-:deep(*) {
-  border-radius: 8px !important;
-}
-
 </style>

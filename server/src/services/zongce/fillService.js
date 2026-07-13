@@ -243,7 +243,7 @@ async function getFillData(userId) {
       const scoreKey = `F1_${key}_score`;
       const detailKey = `F1_${key}_detail`;
       if (saved) {
-        fillData[scoreKey] = Math.max(0, 20 - (Number(saved.score) || 0));
+        fillData[scoreKey] = Math.max(0, Math.min(20, Number(saved.score) || 0));
         fillData[detailKey] = saved.description || '';
       } else {
         // 默认满分，描述为空（前端可 AI 生成）
@@ -251,6 +251,8 @@ async function getFillData(userId) {
         fillData[detailKey] = '';
       }
     }
+    f1Total = F1_KEYS.reduce((sum, key) => sum + (Number(fillData[`F1_${key}_score`]) || 0), 0);
+    fillData.F1_total = f1Total;
 
     // 8b. 合并 F2 数据：课程列表
     const savedF2 = savedMap.get('F2:COURSE');
