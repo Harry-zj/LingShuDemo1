@@ -18,6 +18,7 @@ const chatFillCtrl = require("../controllers/zongce/chatFillController");
 router.post("/rules/upload",   auth, upload.array("files", 10), ruleCtrl.uploadRuleFiles);
 router.post("/rules/text",     auth, ruleCtrl.addRuleText);
 router.get("/rules/sources",   auth, ruleCtrl.getRuleSources);
+router.get("/rules/published", auth, ruleSetCtrl.getPublishedRules);
 router.post("/rules/sources/:id/parse", auth, ruleCtrl.parseRuleSource);
 router.get("/rules/tasks/:taskId", auth, ruleCtrl.getParseProgress);
 router.get("/rules/tasks/:taskId/stream", auth, ruleCtrl.streamParseProgress);
@@ -57,6 +58,7 @@ router.get("/rule-sets/:id", auth, ruleSetCtrl.getRuleSet);
 router.post("/rule-sets/:id/documents", auth, ruleSetCtrl.addDocument);
 router.delete("/rule-sets/:id/documents/:docId", auth, ruleSetCtrl.removeDocument);
 router.post("/rule-sets/:id/publish", auth, ruleSetCtrl.publishRuleSet);
+router.post("/rule-sets/:id/rules", auth, ruleSetCtrl.addRule);
 router.delete("/rule-sets/:id", auth, ruleSetCtrl.deleteRuleSet);
 router.post("/rule-sets/:id/clone", auth, ruleSetCtrl.cloneRuleSet);
 
@@ -94,18 +96,25 @@ router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
 // ===== 测评批次（智能填表模块使用） =====
 router.post("/rules/parse/:taskId/cancel", auth, ruleCtrl.cancelParse);
 
-// ★ 获取学生所在学院+年级的所有批次
+// ★ 获取批次列表（学生按 college+grade 过滤，管理员看全部）
 router.get("/batches", auth, async (req, res) => {
   try {
-    const [[user]] = await pool.execute("SELECT college, grade FROM users WHERE id = ?", [req.user.id]);
-    if (!user) return res.json(Res.error("用户不存在"));
-    const [rows] = await pool.execute(
-      `SELECT id, school_year, title, college, grade, status, start_time, end_time
-       FROM assessment_batches
-       WHERE status <> 'deleted' AND college = ? AND grade = ?
-       ORDER BY school_year DESC`,
-      [user.college || '', user.grade || '']
-    );
+    let rows;
+    if (req.user.role === 'admin' || req.user.role === 'student_affairs') {
+      [rows] = await pool.execute(
+        `SELECT id, school_year, title, college, grade, status, start_time, end_time
+         FROM assessment_batches WHERE status <> 'deleted' ORDER BY school_year DESC`
+      );
+    } else {
+      const [[user]] = await pool.execute("SELECT college, grade FROM users WHERE id = ?", [req.user.id]);
+      if (!user) return res.json(Res.error("用户不存在"));
+      [rows] = await pool.execute(
+        `SELECT id, school_year, title, college, grade, status, start_time, end_time
+         FROM assessment_batches WHERE status <> 'deleted' AND college = ? AND grade = ?
+         ORDER BY school_year DESC`,
+        [user.college || '', user.grade || '']
+      );
+    }
     res.json(Res.success(rows));
   } catch (e) { res.json(Res.error(e.message)); }
 });

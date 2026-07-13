@@ -93,7 +93,16 @@ exports.extractMaterial = async (req, res) => {
           console.log('[Extract] Cache hit, running V3 auto-match...');
           let spCache = [];
           try {
-            const [spRsCache] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+            // ★ 按学生的学院+年级匹配批次，再查该批次的已发布规则集（规则由管理员上传，不以 user_id 限制）
+            const [batchRows] = await pool.execute(
+              "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+              [req.user.id, req.user.id]
+            );
+            const batchId = batchRows.length > 0 ? batchRows[0].id : null;
+            const [spRsCache] = await pool.execute(
+              "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+              [batchId]
+            );
             if (spRsCache.length) {
               for (const ef of efs) {
                 try {
@@ -222,7 +231,16 @@ exports.extractMaterial = async (req, res) => {
     console.log('[Extract] V3 auto-match starting, efRows:', efRows.length);
     let scorePreviews = [];
     try {
-      const [spRs] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+      // ★ 按学生的学院+年级匹配批次，再查该批次的已发布规则集
+      const [batchRows] = await pool.execute(
+        "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [req.user.id, req.user.id]
+      );
+      const batchId = batchRows.length > 0 ? batchRows[0].id : null;
+      const [spRs] = await pool.execute(
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [batchId]
+      );
       console.log('[Extract] published ruleSet found:', spRs.length > 0);
       if (spRs.length) {
         const spRid = spRs[0].id;
@@ -273,15 +291,20 @@ exports.previewScore = async (req, res) => {
     const { fact } = req.body;
     if (!fact) return res.json(Res.error("请提供事实数据"));
 
+    // ★ 按批次查询已发布规则集（不限制 user_id）
+    const [btRows] = await pool.execute(
+      "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+      [req.user.id, req.user.id]
+    );
+    const batchId = btRows.length > 0 ? btRows[0].id : null;
     const [ruleSets] = await pool.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
-      [req.user.id]
+      "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+      [batchId]
     );
     if (!ruleSets.length) return res.json(Res.error("请先发布有效规则集"));
     const ruleSetId = ruleSets[0].id;
 
     // 跑完整匹配管线 (Phase 1+2: AI)
-    // V3.0 simplified preview: text similarity matching
     const preview = await calculateScorePreview(fact, ruleSetId, req.user.id);
 
     const v3status = preview.needs_review ? 'needs_review' : 'completed';
@@ -515,9 +538,15 @@ exports.confirmMatchV3 = async (req, res) => {
       if (!efs.length) { await conn.rollback(); conn.release(); return res.json(Res.error("fact not found")); }
 
       const { analysis_run_id, user_id } = efs[0];
+      // ★ 按学生批次查询已发布规则集（不限制 user_id）
+      const [btRows2] = await conn.execute(
+        "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [user_id, user_id]
+      );
+      const matchBatchId = btRows2.length > 0 ? btRows2[0].id : null;
       const [rsRows] = await conn.execute(
-        "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
-        [user_id]
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [matchBatchId]
       );
       const ruleSetId = rsRows.length ? rsRows[0].id : 0;
 

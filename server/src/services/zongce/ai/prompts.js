@@ -42,20 +42,29 @@ detail: any structured info from the text (level, rank, organizer, date, etc.)
 Only output valid JSON, no other text.`;
 
 // ===== V3 F3-Only Rule Parsing (simplified) =====
-const V3_RULE_PARSE_SYSTEM = `Extract ONLY F3 (innovation & practice) scoring rules.
-Ignore F1/F2. Only extract "level + rank = score" rules.
+const V3_RULE_PARSE_SYSTEM = `Extract ONLY F3 (innovation & practice) scoring rules from the provided document.
+Ignore F1/F2 sections. Only extract rules that define "level + rank = score" relationships.
 
-Output:
+★ ALL text fields MUST be in Chinese (item_name, score_level, score_rank, description, keywords).
+Only proper nouns (e.g. CET-4, MCM/ICM, GPA, TOEFL) may remain in English.
+
+Output format:
 { "f3_rules": [
-    { "item_key":"B2", "item_name":"discipline competition", "score_level":"national",
-      "score_rank":"first prize", "score":10, "keywords":"math modeling challenge cup",
-      "description":"National discipline competition first prize" }
+    { "item_key":"B2", "item_name":"学科竞赛", "score_level":"国家级",
+      "score_rank":"一等奖", "score":10, "keywords":"数学建模 挑战杯",
+      "description":"国家级学科竞赛一等奖加10分" }
   ], "notes": [] }
 
-Fields: item_key(B1~B8), score_level(national/provincial/school/college),
-score_rank(original text), score(integer), keywords(space-separated), description
+Scoring categories (item_key):
+B1=职业技能(证书/资格证/英语等级), B2=学科竞赛, B3=科研学术,
+B4=宣传报道(文学创作/新闻宣传), B5=社会工作(学生干部/社团),
+B6=社会实践(志愿服务/社会调查), B7=文体竞赛, B8=劳动教育
+
+Level values (score_level):
+国家级=international/national, 省级=provincial, 校级=school, 院级=college
+
 Only extract rules with explicit scores. Split lookup tables by cell.
-Only output JSON.`;
+Only output JSON, no explanation text.`;
 
 module.exports = {
   VERSION,

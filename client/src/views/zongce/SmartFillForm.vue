@@ -144,7 +144,7 @@ const fillData = ref({
 
 async function loadFillData() {
   try {
-    const r = await api.getFillPreview()
+    const r = await api.getFillPreview(props.batchId)
     if (r.code === 200 && r.data) {
       for (const k in r.data) {
         if (!(k in fillData.value)) continue

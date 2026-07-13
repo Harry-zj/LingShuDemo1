@@ -65,7 +65,7 @@
       </div>
       <SmartFillF1 v-if="activeCard === 'f1'" />
       <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
-      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="currentBatch?.id" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
+      <SmartFillRule v-if="activeCard === 'rule'" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
       <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
       <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
       <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
@@ -109,10 +109,6 @@ async function loadStudentBatch() {
   }
 }
 
-const isParsing = ref(false)
-function onParseStart() { isParsing.value = true }
-function onParseEnd() { isParsing.value = false }
-
 // ========== 导航 ==========
 const activeCard = ref(null)
 const sectionTitle = computed(() => ({
@@ -122,8 +118,8 @@ const sectionTitle = computed(() => ({
 
 function openCard(name) {
   if (!currentBatch.value) { alert(batchError.value || '未找到测评批次，请联系管理员'); return }
-  if (name === 'rule') { activeCard.value = 'rule'; return }
-  if (!ruleReady.value) { alert('请先发布规则集后再操作'); return }
+  if (name === 'rule') { activeCard.value = 'rule'; loadPublishedRules(); return }
+  if (!ruleReady.value) { alert('该批次尚无已发布的规则集，请等待管理员上传'); return }
   if (name === 'f1' || name === 'f2') { if (!ruleReady.value) { alert('请先发布规则集'); return }; activeCard.value = name; return }
   if (name === 'form' && confirmedRecCount.value === 0) { alert('暂无已确认的识别结果'); return }
   activeCard.value = name
@@ -131,21 +127,22 @@ function openCard(name) {
 }
 
 // ========== 共享状态 ==========
-const ruleSources = ref([])
-const ruleSets = ref([])
+const publishedRules = ref([])
+const ruleSets = ref([])  // 保留给其他逻辑（如 smart_fill_data 中的 rule_set_id）
 const materials = ref([])
 const evaluation = ref(null)
 const scoreList = ref(null)
 const templates = ref([])
 const templatesLoaded = ref(false)
-const fillResults = ref([]); const uploadedTemplate = ref(null)
+const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
 const publishedRuleSetId = computed(() => {
   const pub = ruleSets.value.find(r => r.status === 'published' && (!currentBatch.value?.id || r.batch_id === currentBatch.value?.id))
   return pub ? pub.id : 0
 })
-const ruleReady = computed(() => publishedRuleSetCount.value > 0)
+// ★ ruleReady 现在基于已发布规则（不再基于 ruleSets）
+const ruleReady = computed(() => publishedRules.value.length > 0)
 const materialCount = computed(() => materials.value.length)
 const confirmedRecCount = computed(() =>
   materials.value.reduce((sum, m) => sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0)
@@ -154,14 +151,36 @@ const totalScore = computed(() => evaluation.value?.total_score ?? null)
 
 // ========== 刷新 ==========
 async function refreshAll() {
-  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()])
-  // 从服务端恢复 F1/F2 数据到 Pinia Store，解决刷新后 Store 数据丢失问题
+  await Promise.all([loadPublishedRules(), loadRuleSets(), refreshMaterials(), refreshEval(), refreshTemplates()])
   await restoreStoreFromPreview()
   if (templates.value.length > 0) {
     const latest = templates.value[0]
     uploadedTemplate.value = { id: latest.id, name: latest.name, size: 0 }
   }
   refreshScoreList()
+}
+
+async function loadPublishedRules() {
+  if (!currentBatch.value?.id) { publishedRules.value = []; return }
+  try {
+    const r = await api.getPublishedRules(currentBatch.value.id)
+    if (r.code === 200 && r.data) {
+      publishedRules.value = r.data.rules || []
+      // 同时更新 ruleSets（供其他逻辑使用 publishedRuleSetId）
+      if (r.data.rule_set) {
+        const existing = ruleSets.value.find(rs => rs.id === r.data.rule_set.id)
+        if (!existing) ruleSets.value = [r.data.rule_set]
+      }
+    }
+  } catch (e) { console.error('[SmartFill] loadPublishedRules error:', e.message) }
+}
+
+async function loadRuleSets() {
+  if (!currentBatch.value?.id) return
+  try {
+    const r = await api.getRuleSets(currentBatch.value.id)
+    if (r.code === 200) ruleSets.value = r.data || []
+  } catch (_) {}
 }
 
 // ★ 从服务端 fill-preview 数据恢复到 Pinia Store（仅在 Store 为默认值时覆盖）
@@ -188,15 +207,6 @@ async function restoreStoreFromPreview() {
   } catch (_) {}
 }
 
-async function refreshRules() {
-  const [s, rs] = await Promise.all([
-    api.getRuleSources(currentBatch.value?.id),
-    api.getRuleSets(currentBatch.value?.id)
-  ])
-  if (s.code === 200) ruleSources.value = s.data || []
-  if (rs.code === 200) ruleSets.value = rs.data || []
-}
-
 async function refreshMaterials() {
   const r = await api.getMaterials()
   if (r.code === 200) materials.value = r.data || []
@@ -219,13 +229,6 @@ onMounted(async () => {
     await refreshAll()
   }
 })
-
-async function removeRuleSource(id) {
-  if (!confirm('确定删除该规则文件吗？\n\n相关的文档结构、解析记录、规则集和计分规则将一并删除，此操作不可恢复。')) return
-  const res = await api.deleteRuleSource(id)
-  if (res.code === 200) refreshRules()
-  else alert(res.msg)
-}
 
 async function createMaterial() {
   const res = await api.createMaterial('')

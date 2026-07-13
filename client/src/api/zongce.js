@@ -159,6 +159,8 @@ export const getRuleSets = (batchId) => request.get("/zongce/rule-sets", { param
 export const getRuleSet = (id) => request.get(`/zongce/rule-sets/${id}`);
 export const publishRuleSet = (id) => request.post(`/zongce/rule-sets/${id}/publish`);
 export const deleteRuleSet = (id) => request.delete(`/zongce/rule-sets/${id}`);
+export const getPublishedRules = (batchId) => request.get("/zongce/rules/published", { params: { batch_id: batchId } });
+export const addRuleToSet = (ruleSetId, data) => request.post(`/zongce/rule-sets/${ruleSetId}/rules`, data);
 
 // ===== V2 规则解析 =====
 export const parseRuleSource = (id, batchId) =>

@@ -79,11 +79,23 @@ async function getFillData(userId, batchId) {
     }
     const user = users[0];
 
-    // 2. 查询已发布的规则集
-    const [ruleSets] = await conn.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1",
-      [userId, batchId || null, batchId || null]
-    );
+    // 2. 查询已发布的规则集（★ 按批次查询，不限制 user_id，因为规则可能由管理员上传）
+    let effectiveBatchId = batchId || null;
+    if (!effectiveBatchId) {
+      const [btRows] = await conn.execute(
+        "SELECT id FROM assessment_batches WHERE college = ? AND grade = ? AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [user.college || '', user.grade || '']
+      );
+      effectiveBatchId = btRows.length > 0 ? btRows[0].id : null;
+    }
+    let ruleSetId = 0;
+    if (effectiveBatchId) {
+      const [rsRows] = await conn.execute(
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [effectiveBatchId]
+      );
+      ruleSetId = rsRows.length > 0 ? rsRows[0].id : 0;
+    }
 
     // 3. 构建基础数据
     const fillData = {
@@ -114,11 +126,10 @@ async function getFillData(userId, batchId) {
       total_score: 0,
     };
 
-    if (!ruleSets.length) {
+    if (!ruleSetId) {
       console.log("[fillService] 无已发布规则集，返回基础用户数据");
       return fillData;
     }
-    const ruleSetId = ruleSets[0].id;
 
     // 4. 查询已确认的事实匹配（V3: 不再依赖 indicator_nodes）
     const [rows] = await conn.execute(
