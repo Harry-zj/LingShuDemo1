@@ -1,6 +1,9 @@
-const router = require("express").Router();
+﻿const router = require("express").Router();
 const auth = require("../middleware/auth");  // 开发模式，正式上线改回 ../middleware/auth
 const upload = require("../middleware/upload");
+const { pool } = require("../config/database");
+const Res = require("../utils/response");
+
 
 const ruleCtrl = require("../controllers/zongce/ruleController");
 const ruleSetCtrl = require("../controllers/zongce/ruleSetController");
@@ -84,5 +87,53 @@ router.post("/chat-fill/upload",      auth, upload.single("file"), chatFillCtrl.
 router.post("/chat-fill/analyze/:templateId", auth, chatFillCtrl.analyzeTemplate);
 router.post("/chat-fill/chat",        auth, chatFillCtrl.chatField);
 router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
+
+
+// ===== 测评批次（智能填表模块使用） =====
+router.post("/rules/parse/:taskId/cancel", auth, ruleCtrl.cancelParse);
+
+router.get("/batches", auth, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT id, school_year, title, college, grade, status, start_time, end_time FROM assessment_batches WHERE status <> 'deleted' ORDER BY created_at DESC"
+    );
+    res.json(Res.success(rows));
+  } catch (e) { res.json(Res.error(e.message)); }
+});
+
+// ===== 规则批次迁移（切批次时实时更新） =====
+router.put("/rules/move-batch", auth, async (req, res) => {
+  try {
+    const { from_batch_id, to_batch_id } = req.body;
+    if (!from_batch_id || !to_batch_id) return res.json(Res.error("缺少批次参数"));
+    if (from_batch_id == to_batch_id) return res.json(Res.success(null, "无需迁移"));
+
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      // 更新 rule_sources 的 batch_id
+      await conn.execute(
+        "UPDATE rule_sources SET batch_id = ? WHERE user_id = ? AND batch_id = ?",
+        [to_batch_id, req.user.id, from_batch_id]
+      );
+      // 更新 rule_sets 的 batch_id
+      await conn.execute(
+        "UPDATE rule_sets SET batch_id = ? WHERE user_id = ? AND batch_id = ?",
+        [to_batch_id, req.user.id, from_batch_id]
+      );
+      // 更新 scoring_rules 的 batch_id
+      await conn.execute(
+        "UPDATE scoring_rules SET batch_id = ? WHERE user_id = ? AND batch_id = ?",
+        [to_batch_id, req.user.id, from_batch_id]
+      );
+      await conn.commit();
+      res.json(Res.success(null, "规则已迁至新批次"));
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    } finally { conn.release(); }
+  } catch (e) { res.json(Res.error(e.message)); }
+});
+
 
 module.exports = router;

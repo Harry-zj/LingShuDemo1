@@ -1,11 +1,11 @@
-﻿const { pool } = require("../../config/database");
+const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
 const { executeCalculation } = require("../../services/zongce/engine/scoringEngine");
 
 // 创建计算任务并执行
 exports.calculateScore = async (req, res) => {
   try {
-    const { rule_set_id, material_ids } = req.body;
+    const { rule_set_id, material_ids, batch_id } = req.body;
     if (!rule_set_id) return res.json(Res.error("请选择规则集"));
 
     // 验证规则集已发布
@@ -51,8 +51,8 @@ exports.calculateScore = async (req, res) => {
         let totalScore = 0; for (const m of metris) { if (m.final_score != null) totalScore += Number(m.final_score); }
         const grade = totalScore >= 90 ? '优秀' : totalScore >= 80 ? '良好' : totalScore >= 70 ? '中等' : totalScore >= 60 ? '合格' : '待提升';
         const dimScores = JSON.stringify({ aScores:{}, bScores:{}, scores:{F1:0,F2:0,F3:0}, classAvg:{F1:90,F2:80,F3:55}, rank:5, totalStudents:38, majorRank:12, majorTotal:118 });
-        await pool.execute('INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (?,101,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score), grade=VALUES(grade), dimension_scores=VALUES(dimension_scores)',
-          [req.user.id, totalScore, grade, 'F=F1*0.1+F2*0.65+F3*0.25', dimScores]);
+        await pool.execute('INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score), grade=VALUES(grade), dimension_scores=VALUES(dimension_scores)',
+          [req.user.id, batch_id || null, totalScore, grade, 'F=F1*0.1+F2*0.65+F3*0.25', dimScores]);
       } catch (e) { console.warn('[Eval] er fail:', e.message); }
     }
 

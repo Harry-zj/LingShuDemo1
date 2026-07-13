@@ -82,9 +82,9 @@ async function calculateScorePreview(facts, ruleSetId, userId) {
   const factDesc = buildFactDescription(fact);
   const [scoringRules] = await pool.execute(
     `SELECT id, item_key, item_name, score_level, score_rank, score, keywords, description
-     FROM scoring_rules WHERE status = 'active' AND (user_id = ? OR rule_set_id = ?)
+     FROM scoring_rules WHERE status = 'active' AND (rule_set_id = ? OR (user_id = ? AND batch_id IS NULL))
      ORDER BY item_key, score_level, score_rank`,
-    [userId, ruleSetId || 0]
+    [ruleSetId || 0, userId]
   );
   if (!scoringRules.length) return { score_preview: null, explanation: 'no rules', needs_review: true };
 

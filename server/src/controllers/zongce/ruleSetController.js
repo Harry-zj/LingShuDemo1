@@ -4,10 +4,10 @@ const Res = require("../../utils/response");
 // 创建规则集
 exports.createRuleSet = async (req, res) => {
   try {
-    const { version_label } = req.body;
+    const { version_label, batch_id } = req.body;
     const [r] = await pool.execute(
-      "INSERT INTO rule_sets (user_id, version_label) VALUES (?, ?)",
-      [req.user.id, version_label || ""]
+      "INSERT INTO rule_sets (user_id, batch_id, version_label) VALUES (?, ?, ?)",
+      [req.user.id, batch_id || null, version_label || ""]
     );
     res.json(Res.success({ id: r.insertId, status: 'draft' }, "规则集已创建"));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -17,8 +17,8 @@ exports.createRuleSet = async (req, res) => {
 exports.getRuleSets = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT rs.*, (SELECT COUNT(*) FROM scoring_rules WHERE rule_set_id = rs.id AND status = 'active') AS f3_rule_count FROM rule_sets rs WHERE rs.user_id = ? ORDER BY rs.created_at DESC",
-      [req.user.id]
+      "SELECT rs.*, (SELECT COUNT(*) FROM scoring_rules WHERE rule_set_id = rs.id AND status = 'active') AS f3_rule_count FROM rule_sets rs WHERE rs.user_id = ? AND (? IS NULL OR rs.batch_id = ?) ORDER BY rs.created_at DESC",
+      [req.user.id, req.query.batch_id || null, req.query.batch_id || null]
     );
     res.json(Res.success(rows));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -119,8 +119,8 @@ exports.cloneRuleSet = async (req, res) => {
     if (!rs.length) return res.json(Res.error("规则集不存在"));
 
     const [r] = await pool.execute(
-      "INSERT INTO rule_sets (user_id, version_label, cloned_from_id) VALUES (?, ?, ?)",
-      [req.user.id, (rs[0].version_label || '') + ' (副本)', id]
+      "INSERT INTO rule_sets (user_id, batch_id, version_label, cloned_from_id) VALUES (?, ?, ?, ?)",
+      [req.user.id, rs[0].batch_id || null, (rs[0].version_label || '') + ' (副本)', id]
     );
     res.json(Res.success({ id: r.insertId }, "已克隆"));
   } catch (e) { res.json(Res.error(e.message)); }

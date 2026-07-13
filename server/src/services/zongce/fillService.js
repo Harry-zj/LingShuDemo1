@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 综测自动填表引擎
  * - Word (.docx): docxtemplater + pizzip 占位符替换
  * - 从数据库读取当前用户的评分数据构建填充数据
@@ -66,7 +66,7 @@ function buildF3Defaults() {
  * @param {number} userId - 用户ID
  * @returns {object} 填充数据
  */
-async function getFillData(userId) {
+async function getFillData(userId, batchId) {
   const conn = await pool.getConnection();
   try {
     // 1. 查询用户信息
@@ -81,7 +81,7 @@ async function getFillData(userId) {
 
     // 2. 查询已发布的规则集
     const [ruleSets] = await conn.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [userId]
+      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' AND (? IS NULL OR batch_id = ?) ORDER BY published_at DESC LIMIT 1", [userId]
     );
 
     // 3. 构建基础数据
@@ -224,8 +224,8 @@ async function getFillData(userId) {
 
     // ★ 8. 从 smart_fill_data 读取用户保存的分数和描述（兼容 rule_set_id=0 的情况）
     const [savedRows] = await conn.execute(
-      "SELECT * FROM smart_fill_data WHERE user_id = ? AND (rule_set_id = ? OR rule_set_id = 0)",
-      [userId, ruleSetId || 0]
+      "SELECT * FROM smart_fill_data WHERE user_id = ? AND (rule_set_id = ? OR rule_set_id = 0) AND (? IS NULL OR batch_id = ?)",
+      [userId, ruleSetId || 0, batchId || null, batchId || null]
     );
 
     // 构建 lookup: "section:item_key" → row
@@ -407,8 +407,8 @@ function fillDocx(templatePath, data) {
 /**
  * 获取填充数据预览（供前端）
  */
-async function getFillDataPreview(userId) {
-  return await getFillData(userId);
+async function getFillDataPreview(userId, batchId) {
+  return await getFillData(userId, batchId);
 }
 
 module.exports = { fillDocx, getFillData, getFillDataPreview };
