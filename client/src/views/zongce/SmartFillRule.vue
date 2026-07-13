@@ -223,7 +223,7 @@ async function onFiles(e) {
 }
 async function sendText() {
   if (!ruleText.value.trim()) return
-  const res = await api.addRuleText(ruleText.value)
+  const res = await api.addRuleText(ruleText.value, props.batchId || undefined)
   alert(res.msg)
   if (res.code === 200) emit('refresh'); emit('parse-end')
   ruleText.value = ''

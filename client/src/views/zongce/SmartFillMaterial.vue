@@ -173,12 +173,23 @@ function toggleCollapse(matId) { collapsedMap.value[matId] = !collapsedMap.value
 
 watch(() => props.materials, (mats) => {
   for (const mat of (mats || [])) {
-    if (!mat._bestCat && mat.facts?.length) {
-      for (const f of mat.facts) {
-        if (f.match?.indicator?.code) { mat._bestCat = f.match.indicator.code; break }
+    // 从 facts 或 score_previews 更新 _bestCat（材料列表分类标签）
+    if (!mat._bestCat) {
+      if (mat.score_previews?.length) {
+        mat._bestCat = mat.score_previews[0].indicator_code || mat.score_previews[0].matched_rule?.category || ''
+      } else if (mat.facts?.length) {
+        for (const f of mat.facts) {
+          if (f.match?.indicator?.code) { mat._bestCat = f.match.indicator.code; break }
+        }
       }
     }
-    if (!(mat.id in collapsedMap.value)) { collapsedMap.value[mat.id] = allConfirmed(mat) }; if (mat.score_previews) mat.score_previews.forEach(sp => { sp._confirmed = sp._confirmed || !!sp.confirmed || false; sp._confirming = !!sp._confirming && false }); }; }, { immediate: true })
+    if (!(mat.id in collapsedMap.value)) { collapsedMap.value[mat.id] = allConfirmed(mat) }
+    if (mat.score_previews) mat.score_previews.forEach(sp => {
+      sp._confirmed = sp._confirmed || !!sp.confirmed || false;
+      sp._confirming = false;
+    })
+  }
+}, { deep: true, immediate: true })
 
 function onFiles(matId, e) {
   const files = Array.from(e.target.files)

@@ -18,10 +18,44 @@
 </template>
 
 <script setup>
+import { watch, onBeforeUnmount } from 'vue'
 import { useSmartFillStore } from '@/stores/smartFill'
 import * as api from '@/api/zongce'
 
 const store = useSmartFillStore()
+
+// ★ 自动保存：监听 F1 编辑变化，debounce 800ms 后保存到服务端
+let saveTimer = null
+watch(
+  () => store.f1Items.map(a => ({ key: a.key, score: a.score, detail: a.detail })),
+  () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      const items = store.f1Items.map(a => ({
+        section: 'F1',
+        item_key: a.key,
+        score: a.base - a.score,  // 转换为扣分制存储
+        description: a.detail,
+        rule_set_id: 0
+      }))
+      api.saveFillData(items).catch(() => {})
+    }, 800)
+  },
+  { deep: true }
+)
+
+// 组件卸载前立即保存
+onBeforeUnmount(() => {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  const items = store.f1Items.map(a => ({
+    section: 'F1',
+    item_key: a.key,
+    score: a.base - a.score,
+    description: a.detail,
+    rule_set_id: 0
+  }))
+  api.saveFillData(items).catch(() => {})
+})
 
 async function generateAI(a) {
   try {
