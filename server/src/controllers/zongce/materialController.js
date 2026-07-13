@@ -1,5 +1,7 @@
 ﻿const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
+const path = require("path");
+const { uploadBuffer, generateKey } = require("../../services/oss");
 const { calculateScorePreview, generateDescription } = require("../../services/zongce/ai/materialPipeline");
 // Legacy: ruleBlockMatcher used by previewScore/matchMaterial (V3 migration target)
 const { matchFactPipeline, validateAndPersistMatch } = require("../../services/zongce/ai/ruleBlockMatcher");
@@ -49,7 +51,7 @@ exports.getMaterials = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 上传证明文件
+// 上传证明文件（★ OSS: buffer → 上传云端 → 存完整 URL 到 file_path）
 exports.uploadAttachments = async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,11 +61,24 @@ exports.uploadAttachments = async (req, res) => {
     const inserted = [];
     for (const f of req.files) {
       const safeName = Buffer.from(f.originalname, 'latin1').toString('utf8');
+      // ★ 上传 buffer 到 OSS，获取完整公开 URL
+      const ossKey = generateKey(safeName);
+      let filePath;
+      try {
+        filePath = await uploadBuffer(f.buffer, ossKey, f.mimetype);
+      } catch (ossErr) {
+        console.error('[Upload] OSS 上传失败，回退到本地存储:', ossErr.message);
+        // 回退：OSS 不可用时写本地磁盘
+        const fs = require("fs");
+        const localPath = path.join(__dirname, "../../../uploads", ossKey);
+        fs.writeFileSync(localPath, f.buffer);
+        filePath = ossKey; // 裸文件名，兼容旧逻辑
+      }
       const [r] = await pool.execute(
         "INSERT INTO attachments (material_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)",
-        [id, safeName, f.filename, f.mimetype, f.size]
+        [id, safeName, filePath, f.mimetype, f.size]
       );
-      inserted.push({ id: r.insertId, file_name: safeName });
+      inserted.push({ id: r.insertId, file_name: safeName, url: filePath });
     }
     res.json(Res.success(inserted, `已上传 ${inserted.length} 个文件`));
   } catch (e) { res.json(Res.error(e.message)); }

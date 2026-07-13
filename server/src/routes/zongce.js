@@ -13,6 +13,7 @@ const evalCtrl = require("../controllers/zongce/evaluationController");
 const fillCtrl = require("../controllers/zongce/fillController");
 const batchFillCtrl = require("../controllers/zongce/batchFillController");
 const chatFillCtrl = require("../controllers/zongce/chatFillController");
+const uploadOss = require("../middleware/uploadOss");
 
 // ===== 规则 =====
 router.post("/rules/upload",   auth, upload.array("files", 10), ruleCtrl.uploadRuleFiles);
@@ -27,7 +28,7 @@ router.delete("/rules/sources/:id",   auth, ruleCtrl.deleteRuleSource);
 // ===== 材料 =====
 router.post("/materials",                      auth, materialCtrl.createMaterial);
 router.get("/materials",                       auth, materialCtrl.getMaterials);
-router.post("/materials/:id/upload",           auth, upload.array("files", 10), materialCtrl.uploadAttachments);
+router.post("/materials/:id/upload",           auth, uploadOss.array("files", 10), materialCtrl.uploadAttachments);
 router.post("/materials/:id/analyze",          auth, materialCtrl.analyzeMaterial);
 router.post("/materials/:id/extract",         auth, materialCtrl.extractMaterial);
 router.post("/materials/:id/preview",         auth, materialCtrl.previewScore);

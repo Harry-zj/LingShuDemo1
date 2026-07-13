@@ -109,7 +109,14 @@ function getImages(mat) {
   for (const att of mat.attachments) {
     const ext = (att.file_name || '').split('.').pop().toLowerCase()
     if (['png','jpg','jpeg','gif','webp','bmp'].includes(ext)) {
-      imgs.push({ url: `/uploads/${att.file_path || att.file_name}`, name: att.file_name })
+      // ★ OSS 完整 URL 直接使用，旧裸文件名走 /uploads/ 代理
+      let url;
+      if (att.file_path?.startsWith('http://') || att.file_path?.startsWith('https://')) {
+        url = att.file_path;
+      } else {
+        url = `/uploads/${att.file_path || att.file_name}`;
+      }
+      imgs.push({ url, name: att.file_name })
     }
   }
   return imgs

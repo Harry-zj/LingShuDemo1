@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { pool } = require("../../config/database");
 const { getFillDataPreview } = require("../zongce/fillService");
+const { uploadBuffer, generateKey } = require("../oss");
 
 const ROLE_LABEL = {
   student: "学生",
@@ -1519,16 +1520,27 @@ async function uploadStudentSupportMaterials(studentId, batchId, files = []) {
       const originalName = String(file.originalname || file.filename || '支撑材料');
       const decodedName = Buffer.from(originalName, 'latin1').toString('utf8');
       const safeName = decodedName.includes('�') ? originalName : decodedName;
+      // ★ 上传 buffer 到 OSS，获取完整公开 URL
+      const ossKey = generateKey(safeName);
+      let filePath;
+      try {
+        filePath = await uploadBuffer(file.buffer, ossKey, file.mimetype || '');
+      } catch (ossErr) {
+        console.error('[Mod3] OSS 上传失败，回退到本地存储:', ossErr.message);
+        const localPath = path.join(__dirname, "../../../uploads", ossKey);
+        fs.writeFileSync(localPath, file.buffer);
+        filePath = ossKey; // 裸文件名，兼容旧逻辑
+      }
       const [attachmentResult] = await conn.execute(
         'INSERT INTO attachments (material_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
-        [materialResult.insertId, safeName, file.filename, file.mimetype || '', Number(file.size || 0)]
+        [materialResult.insertId, safeName, filePath, file.mimetype || '', Number(file.size || 0)]
       );
       uploaded.push({
         id: attachmentResult.insertId,
         name: safeName,
         type: file.mimetype || '文件',
         size: Number(file.size || 0),
-        url: attachmentPublicUrl(file.filename),
+        url: attachmentPublicUrl(filePath),
       });
     }
     await addLog(conn, student, '添加综测支撑材料', form.student_name, `上传 ${uploaded.length} 个支撑材料，等待保存到具体综测项目`);

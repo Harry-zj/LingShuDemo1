@@ -3,13 +3,14 @@ const ctrl = require("../controllers/module3Controller");
 const auth = require("../middleware/auth");
 const roleCheck = require("../middleware/roleCheck");
 const upload = require("../middleware/upload");
+const uploadOss = require("../middleware/uploadOss");
 
 router.get("/batches", auth, ctrl.getBatches);
 router.get("/student-batches", auth, roleCheck("student"), ctrl.getStudentBatches);
 router.get("/student/forms/:batchId", auth, roleCheck("student"), ctrl.getStudentForm);
 router.put("/student/forms/:batchId", auth, roleCheck("student"), ctrl.updateStudentForm);
 router.post("/student/forms/:batchId/submit", auth, roleCheck("student"), ctrl.submitStudentForm);
-router.post("/student/support-materials", auth, roleCheck("student"), upload.array("files", 10), ctrl.uploadStudentSupportMaterials);
+router.post("/student/support-materials", auth, roleCheck("student"), uploadOss.array("files", 10), ctrl.uploadStudentSupportMaterials);
 router.post("/batches", auth, roleCheck("admin"), ctrl.createBatch);
 router.put("/batches/:id", auth, roleCheck("admin", "counselor"), ctrl.updateBatch);
 router.put("/batches/:id/status", auth, roleCheck("admin"), ctrl.updateBatchStatus);
