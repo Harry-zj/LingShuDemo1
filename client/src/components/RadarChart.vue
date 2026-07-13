@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="radar-chart-container" ref="chartRef"></div>
 </template>
 
@@ -56,6 +56,7 @@ function getThemeColors() {
 }
 
 function buildOption() {
+  const theme = getThemeColors()
   const indicator = props.dimensions.map(d => {
     const isActive = props.activeDimension && d.key === props.activeDimension
     return {

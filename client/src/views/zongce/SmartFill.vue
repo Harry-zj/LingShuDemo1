@@ -87,6 +87,7 @@ const materials = ref([])
 const evaluation = ref(null)
 const scoreList = ref(null)
 const templates = ref([])
+const templatesLoaded = ref(false)
 const fillResults = ref([]); const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
