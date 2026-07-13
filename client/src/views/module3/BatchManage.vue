@@ -320,41 +320,41 @@ onMounted(load);
 .batch-manage { display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s var(--easing-decelerate); }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.panel-card { display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: var(--radius-xl); }
+.panel-card { display: flex; flex-direction: column; gap: 14px; padding: 24px; border-radius: 8px !important; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: var(--font-weight-semibold); }
 .panel-count { color: var(--color-text-secondary); font-size: 13px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .form-grid.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-input, select, textarea { min-height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); }
+input, select, textarea { min-height: 40px; border: 1px solid var(--color-border); border-radius: 8px !important; padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); }
 textarea { grid-column: span 2; min-height: 80px; resize: vertical; }
 .check-row, .number-row { display: flex; align-items: center; gap: 8px; color: var(--color-text-secondary); font-size: 14px; }
 .check-row input { width: auto; min-height: auto; }
 .number-row input { width: 100px; }
 .sub-title small { color: var(--color-text-secondary); font-weight: normal; margin-left: 6px; }
 .grade-rules { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.grade-row { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: var(--radius-md); background: var(--color-bg); }
+.grade-row { display: flex; align-items: center; gap: 8px; padding: 10px; border-radius: 8px !important; background: var(--color-bg); }
 .grade-row input { width: 70px; }
 .grade-row span { font-weight: var(--font-weight-semibold); }
 .grade-row small { color: var(--color-text-secondary); }
 .btn-primary, .btn-outline, .actions button, .btn-text {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: 36px; padding: 0 14px; border-radius: var(--radius-full); cursor: pointer;
+  min-height: 36px; padding: 0 14px; border-radius: 8px !important; cursor: pointer;
   color: var(--color-text-primary); font-weight: var(--font-weight-medium); white-space: nowrap;
 }
 .btn-label { display: inline; color: inherit; font-size: 14px; line-height: 1; }
 .btn-primary { border: none; background: var(--gradient-primary); color: #fff; }
 .btn-outline, .actions button, .btn-text { background: var(--color-surface); color: var(--color-text-primary); border: 1px solid var(--color-border); }
 .batch-list { display: flex; flex-direction: column; gap: 10px; }
-.batch-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); }
+.batch-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px; border-radius: 8px !important; background: var(--color-bg); }
 .batch-row p, .batch-row small { color: var(--color-text-secondary); margin-top: 4px; }
 .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .actions .danger, .danger { border-color: rgba(239,68,68,0.35); color: #ef4444; background: rgba(239,68,68,0.08); }
 .sub-title { font-weight: var(--font-weight-semibold); margin-top: 8px; }
-.assignment-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; padding: 12px; border-radius: var(--radius-lg); background: var(--color-bg); }
+.assignment-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: start; padding: 12px; border-radius: 8px !important; background: var(--color-bg); }
 .small { min-height: 34px; }
 .empty-line { padding: 24px; text-align: center; color: var(--color-text-tertiary); }
-.history-tip { padding: 10px 12px; border-radius: var(--radius-md); background: rgba(245, 158, 11, 0.10); color: #b45309; font-size: 13px; }
+.history-tip { padding: 10px 12px; border-radius: 8px !important; background: rgba(245, 158, 11, 0.10); color: #b45309; font-size: 13px; }
 input:disabled, select:disabled, textarea:disabled { opacity: 0.68; cursor: not-allowed; }
 @media (max-width: 768px) {
   .form-grid, .form-grid.compact, .grade-rules, .assignment-row { grid-template-columns: 1fr; }
@@ -362,4 +362,10 @@ input:disabled, select:disabled, textarea:disabled { opacity: 0.68; cursor: not-
   .batch-row { flex-direction: column; }
 }
 .back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

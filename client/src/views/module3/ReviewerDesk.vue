@@ -79,8 +79,8 @@ onMounted(load);
 .page-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
 h1, h2, h3, h4 { margin: 0; color: #111827; }
 .page-head p, .form-head p { margin: 8px 0 0; color: #6b7280; line-height: 1.7; }
-button { border: none; border-radius: 10px; padding: 10px 14px; cursor: pointer; background: #e5e7eb; }
-.panel, .form-card, .bonus-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 20px; display: grid; gap: 16px; }
+button { border: none; border-radius: 8px !important; padding: 10px 14px; cursor: pointer; background: #e5e7eb; }
+.panel, .form-card, .bonus-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px !important; padding: 20px; display: grid; gap: 16px; }
 .form-head { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
 .form-head strong { color: #2563eb; }
 .bonus-list { display: grid; gap: 12px; }
@@ -88,11 +88,17 @@ button { border: none; border-radius: 10px; padding: 10px 14px; cursor: pointer;
 .bonus-card em { color: #2563eb; font-style: normal; font-size: 14px; }
 .bonus-card p { margin: 0; color: #4b5563; line-height: 1.7; }
 .evidence { display: flex; flex-wrap: wrap; gap: 8px; color: #374151; }
-.evidence span { background: #fff; border: 1px solid #e5e7eb; border-radius: 999px; padding: 4px 10px; font-size: 13px; }
-textarea { min-height: 84px; border: 1px solid #d1d5db; border-radius: 10px; padding: 12px; resize: vertical; }
+.evidence span { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px !important; padding: 4px 10px; font-size: 13px; }
+textarea { min-height: 84px; border: 1px solid #d1d5db; border-radius: 8px !important; padding: 12px; resize: vertical; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions .approve { background: #16a34a; color: #fff; }
 .actions .return { background: #f59e0b; color: #fff; }
 .actions .reject { background: #dc2626; color: #fff; }
 .empty { color: #6b7280; }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>
