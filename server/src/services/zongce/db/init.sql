@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   user_id INT NOT NULL,
   section VARCHAR(10) DEFAULT 'F3',
   item_key VARCHAR(10) NOT NULL,
-  item_name VARCHAR(50),
+  item_name VARCHAR(200),
   score_level VARCHAR(20),
   score_rank VARCHAR(50),
   score INT NOT NULL DEFAULT 0,

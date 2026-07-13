@@ -111,7 +111,7 @@ import { useSmartFillStore } from '@/stores/smartFill'
 const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array })
 const smartFillStore = useSmartFillStore()
 
-const emit = defineEmits(['upload-template','fill','download','score-changed'])
+const emit = defineEmits(['update:uploadedTemplate','upload-template','fill','download','score-changed'])
 const fileInput = ref(null)
 const isDragging = ref(false)
 const formatError = ref(false)
