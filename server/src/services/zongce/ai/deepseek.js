@@ -6,7 +6,7 @@ function apiUrl(baseUrl) { const clean = (baseUrl || '').replace(/\/+$/, ''); re
 //  流式对话（统一使用，不超时，边生成边接收）
 // ============================================================
 async function chatStream(messages, options = {}) {
-  const { temperature = 0.3, maxTokens = 4096, timeoutMs = 300000 } = options;
+  const { temperature = 0.3, maxTokens = 4096, timeoutMs = 300000, jsonMode = false } = options;
 
   const body = {
     model: DEEPSEEK.model,
@@ -15,6 +15,11 @@ async function chatStream(messages, options = {}) {
     max_tokens: maxTokens,
     stream: true,
   };
+
+  // ★ DeepSeek 支持 response_format 约束 JSON 输出，减少 preamble/截断问题
+  if (jsonMode) {
+    body.response_format = { type: "json_object" };
+  }
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -210,11 +215,93 @@ function repairTruncatedJson(text) {
   return repaired;
 }
 
+/**
+ * ★ 激进截断修复：当 JSON 被截断时，回溯找到最后一个完整的键值对，补全结构
+ * 策略：假设 matched_rule_id 和 confidence 是必须字段，如果缺失则使用默认值
+ */
+function aggressiveTruncationRepair(text) {
+  if (!text || text.length < 5) return '{}';
+  let t = text.trim();
+
+  // 1. 去 code block
+  t = t.replace(/```(?:json)?\s*\n?/gi, '').replace(/```\s*$/gi, '');
+
+  // 2. 找到第一个 {
+  const start = t.indexOf('{');
+  if (start < 0) return '{}';
+  t = t.substring(start);
+
+  // 3. 移除尾部不完整的 key/value（截断在字符串中间）
+  // 找到最后一个完整的 ", 或 "}  或 "]
+  const lastGoodComma = t.lastIndexOf('",');
+  const lastGoodBrace = t.lastIndexOf('"}');
+  const lastGoodBracket = t.lastIndexOf('"]');
+  const lastGoodNum = t.lastIndexOf(',\n'); // 数字值后面
+
+  // 取最靠后的完整断点
+  let cutPoint = Math.max(lastGoodComma, lastGoodBrace, lastGoodBracket);
+  if (cutPoint <= 0) {
+    // 没有找到完整键值对，尝试找第一个冒号后的值
+    const firstColon = t.indexOf(':');
+    if (firstColon < 0) return '{}';
+  }
+
+  if (cutPoint > 0) {
+    // 保留到完整断点，然后补全
+    if (t[cutPoint] === '"' && (t[cutPoint + 1] === ',' || t[cutPoint + 1] === '}')) {
+      cutPoint = cutPoint + 1; // 保留引号
+    }
+    t = t.substring(0, cutPoint + 1);
+  }
+
+  // 4. 去除尾部逗号
+  t = t.replace(/,\s*$/, '');
+
+  // 5. 统计括号，补全未闭合的
+  let braceDepth = 0, bracketDepth = 0;
+  let inString = false, escapeNext = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (escapeNext) { escapeNext = false; continue; }
+    if (ch === '\\') { escapeNext = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') braceDepth++;
+    else if (ch === '}') braceDepth--;
+    else if (ch === '[') bracketDepth++;
+    else if (ch === ']') bracketDepth--;
+  }
+
+  // 6. 如果 matched_rule_id 不存在于截断文本中，添加默认值
+  if (!t.includes('"matched_rule_id"')) {
+    if (t.endsWith('{')) t += '\n  "matched_rule_id": null,';
+    else t += ',\n  "matched_rule_id": null';
+    braceDepth = Math.max(braceDepth, 1); // 确保至少有一层闭合
+  }
+  if (!t.includes('"confidence"')) {
+    t += ',\n  "confidence": 0';
+  }
+  if (!t.includes('"reason"')) {
+    t += ',\n  "reason": "AI响应被截断，自动补全"';
+  }
+
+  // 7. 补全闭合括号
+  while (bracketDepth > 0) { t += ']'; bracketDepth--; }
+  while (braceDepth > 0) { t += '}'; braceDepth--; }
+
+  // 8. 最后的尾逗号清理
+  t = t.replace(/,(\s*[}\]])/g, '$1');
+
+  return t;
+}
+
 // ============================================================
 //  流式对话 → 累积为完整 JSON（增强版）
 // ============================================================
 async function chatStreamJson(messages, options = {}) {
-  const stream = await chatStream(messages, options);
+  // ★ 默认开启 jsonMode，确保 AI 输出合法 JSON（减少 preamble/截断）
+  const opts = { jsonMode: true, ...options };
+  const stream = await chatStream(messages, opts);
   let full = "";
   for await (const token of stream) full += token;
 
@@ -230,6 +317,8 @@ async function chatStreamJson(messages, options = {}) {
     { label: 'no_codeblock', fn: () => full.replace(/```(?:json)?\s*/gi, '').replace(/```\s*/gi, '').trim() },
     // 策略4: 原始文本
     { label: 'raw', fn: () => full.trim() },
+    // 策略5: ★ 更激进的截断修复：逐字符回溯找最后一个有效键值对
+    { label: 'aggressive_repair', fn: () => aggressiveTruncationRepair(full) },
   ];
 
   let lastError = null;

@@ -5,7 +5,7 @@ const { calculateScorePreview, generateDescription } = require("../../services/z
 const { matchFactPipeline, validateAndPersistMatch } = require("../../services/zongce/ai/ruleBlockMatcher");
 // New: text similarity matcher for simplified pipeline
 const { matchFactsToRulesBatch } = require("../../services/zongce/ai/textSimilarityMatcher");
-const { extractStructuredFacts } = require("../../services/zongce/ai/factExtractor");
+const { extractStructuredFacts, inferFactType } = require("../../services/zongce/ai/factExtractor");
 const { serializeMaterial, serializeFact } = require("../../services/zongce/serializer");
 
 // 创建材料
@@ -93,13 +93,43 @@ exports.extractMaterial = async (req, res) => {
           console.log('[Extract] Cache hit, running V3 auto-match...');
           let spCache = [];
           try {
-            const [spRsCache] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+            // ★ 按学生的学院+年级匹配批次，再查该批次的已发布规则集（规则由管理员上传，不以 user_id 限制）
+            const [batchRows] = await pool.execute(
+              "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+              [req.user.id, req.user.id]
+            );
+            const batchId = batchRows.length > 0 ? batchRows[0].id : null;
+            const [spRsCache] = await pool.execute(
+              "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+              [batchId]
+            );
             if (spRsCache.length) {
               for (const ef of efs) {
                 try {
-                  let fd = {}; try { fd = JSON.parse(ef.fact_data || "{}"); } catch(_){}
-                  const fo = { fact_id: String(ef.id), type: ef.fact_type || "other", value: fd.award_name || fd.competition_name || fd.value || "", detail: fd };
-                  const sp = await calculateScorePreview(fo, spRsCache[0].id, req.user.id); if (sp) { sp._ef_id = ef.id; sp.ai_description = sp.ai_description || await generateDescription(fo, sp.matched_rule, sp.score_preview); spCache.push(sp); }
+                  // ★ mysql2 自动解析 JSON 列，需兼容 string / object
+                  const fd = typeof ef.fact_data === 'string' ? JSON.parse(ef.fact_data || '{}') : (ef.fact_data || {});
+                  const rawType = ef.fact_type || fd.type || 'other';
+                  // ★ 合并所有字段，确保 buildFactDescription 能读取完整信息
+                  const mergedDetail = { ...fd, ...(fd.detail || {}), source_text: fd.source_text || '', inferred_level: fd.inferred_level || '' };
+                  const fo = {
+                    fact_id: String(ef.id),
+                    type: rawType === 'other' ? inferFactType(fd) : rawType,
+                    value: fd.value || fd.award_name || fd.competition_name || '',
+                    source_text: fd.source_text || '',         // ★ 原文
+                    inferred_level: fd.inferred_level || '',   // ★ 推断级别
+                    award_rank: fd.award_rank || fd.rank || '',
+                    detail: mergedDetail,
+                  };
+                  console.log(`[Extract] Cache fact ${ef.id}: type=${fo.type} value="${fo.value?.slice(0,50)}" source_len=${fo.source_text?.length||0} detailKeys=${Object.keys(mergedDetail).slice(0,8).join(',')}`);
+                  const sp = await calculateScorePreview(fo, spRsCache[0].id, req.user.id);
+                  // 只有匹配到具体规则（score_preview != null）才加入缓存
+                  if (sp && sp.score_preview != null) {
+                    sp._ef_id = ef.id;
+                    sp.ai_description = sp.ai_description || await generateDescription(fo, sp.matched_rule, sp.score_preview);
+                    spCache.push(sp);
+                  } else {
+                    console.log(`[Extract] 事实 ${ef.id} 未能匹配规则: ${sp?.explanation || 'unknown'}`);
+                  }
                 } catch(e2){}
               }
             }
@@ -201,16 +231,38 @@ exports.extractMaterial = async (req, res) => {
     console.log('[Extract] V3 auto-match starting, efRows:', efRows.length);
     let scorePreviews = [];
     try {
-      const [spRs] = await pool.execute("SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]);
+      // ★ 按学生的学院+年级匹配批次，再查该批次的已发布规则集
+      const [batchRows] = await pool.execute(
+        "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [req.user.id, req.user.id]
+      );
+      const batchId = batchRows.length > 0 ? batchRows[0].id : null;
+      const [spRs] = await pool.execute(
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [batchId]
+      );
       console.log('[Extract] published ruleSet found:', spRs.length > 0);
       if (spRs.length) {
         const spRid = spRs[0].id;
         for (const ef of efRows) {
           try {
-            let fd = {}; try { fd = JSON.parse(ef.fact_data || "{}"); } catch(_){}
-            const fo = { fact_id: String(ef.id), type: ef.fact_type || "other", value: fd.award_name || fd.competition_name || fd.value || "", detail: fd };
+            // ★ mysql2 自动解析 JSON 列，需兼容 string / object
+            const fd = typeof ef.fact_data === 'string' ? JSON.parse(ef.fact_data || '{}') : (ef.fact_data || {});
+            const rawType = ef.fact_type || fd.type || 'other';
+            // ★ 合并所有字段，确保 buildFactDescription 能读取完整信息
+            const mergedDetail = { ...fd, ...(fd.detail || {}), source_text: fd.source_text || '', inferred_level: fd.inferred_level || '' };
+            const fo = {
+              fact_id: String(ef.id),
+              type: rawType === 'other' ? inferFactType(fd) : rawType,
+              value: fd.value || fd.award_name || fd.competition_name || '',
+              source_text: fd.source_text || '',
+              inferred_level: fd.inferred_level || '',
+              award_rank: fd.award_rank || fd.rank || '',
+              detail: mergedDetail,
+            };
+            console.log(`[Extract] Fresh fact ${ef.id}: type=${fo.type} value="${fo.value?.slice(0,50)}" source_len=${fo.source_text?.length||0} detailKeys=${Object.keys(mergedDetail).slice(0,8).join(',')}`);
             const sp = await calculateScorePreview(fo, spRid, req.user.id);
-            if (sp) { sp._ef_id = ef.id; sp.ai_description = await generateDescription(fo, sp.matched_rule, sp.score_preview); scorePreviews.push(sp); }
+            if (sp && sp.score_preview != null) { sp._ef_id = ef.id; sp.ai_description = await generateDescription(fo, sp.matched_rule, sp.score_preview); scorePreviews.push(sp); }
           } catch(e2){}
         }
       }
@@ -239,15 +291,20 @@ exports.previewScore = async (req, res) => {
     const { fact } = req.body;
     if (!fact) return res.json(Res.error("请提供事实数据"));
 
+    // ★ 按批次查询已发布规则集（不限制 user_id）
+    const [btRows] = await pool.execute(
+      "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+      [req.user.id, req.user.id]
+    );
+    const batchId = btRows.length > 0 ? btRows[0].id : null;
     const [ruleSets] = await pool.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
-      [req.user.id]
+      "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+      [batchId]
     );
     if (!ruleSets.length) return res.json(Res.error("请先发布有效规则集"));
     const ruleSetId = ruleSets[0].id;
 
     // 跑完整匹配管线 (Phase 1+2: AI)
-    // V3.0 simplified preview: text similarity matching
     const preview = await calculateScorePreview(fact, ruleSetId, req.user.id);
 
     const v3status = preview.needs_review ? 'needs_review' : 'completed';
@@ -348,54 +405,11 @@ exports.matchMaterial = async (req, res) => {
     }
     conn.release();
 
-    // Phase 3: 识别 indicator 并写入 smart_fill_data
+    // Phase 3: 识别 indicator — 不再自动写入 smart_fill_data
+    // smart_fill_data 仅由用户通过 saveFillData 手动编辑时写入（作为覆盖）
+    // F3 数据聚合由 getFillData() 直接从 fact_rule_matches 读取
     try {
-      const [cr] = await pool.execute(
-        'SELECT frm.reason, frm.preview_data FROM fact_rule_matches frm WHERE frm.id = ?', [fact_rule_match_id]
-      );
-      if (cr.length) {
-        let pv = {}; try { pv = typeof cr[0].preview_data === 'string' ? JSON.parse(cr[0].preview_data) : (cr[0].preview_data || {}); } catch (_) {}
-        const description = (cr[0].reason && !cr[0].reason.startsWith('非候选') && !cr[0].reason.startsWith('验证'))
-          ? cr[0].reason : (pv.human_readable || pv.explanation || '');
-
-        // P0修复: 统一使用最新已发布的 rule_set_id
-        let effectiveRuleSetId = pv.rule_set_id || 0;
-        try {
-          const [latestRs] = await pool.execute(
-            "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [req.user.id]
-          );
-          if (latestRs.length) effectiveRuleSetId = latestRs[0].id;
-        } catch (_) {}
-
-        // P0修复: 从DB indicator_nodes获取权威code
-        let indCode = pv.indicator?.code || '';
-        if (pv.indicator_id) {
-          try {
-            // V3: indicator_nodes removed, get code from scoring_rules
-            let indCode2 = '';
-            try {
-              const [srRows] = await pool.execute("SELECT item_key FROM scoring_rules WHERE rule_set_id = ? LIMIT 1", [effectiveRuleSetId]);
-              if (srRows.length) indCode2 = srRows[0].item_key || '';
-            } catch (_) {}
-            const indRows = [{ code: indCode2 }];
-            if (indRows.length) indCode = indRows[0].code || indCode;
-          } catch (_) {}
-        }
-
-        let sec = 'F3', ik = 'B1';
-        if (indCode.startsWith('F1') || indCode.startsWith('A')) {
-          sec = 'F1';
-          if (/^A\d+$/i.test(indCode)) ik = indCode.toUpperCase();
-          else if (indCode.includes('A')) ik = 'A' + (indCode.match(/A(\d+)/i)?.[1] || '1');
-          else ik = 'A1';
-        } else if (/^B\d+$/i.test(indCode)) { sec = 'F3'; ik = indCode.toUpperCase(); }
-        else if (indCode.startsWith('F2')) { sec = 'F2'; ik = 'COURSE'; }
-
-        await pool.execute(
-          'INSERT INTO smart_fill_data (user_id,rule_set_id,section,item_key,score,description) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE description=VALUES(description), score=VALUES(score)',
-          [req.user.id, effectiveRuleSetId, sec, ik, pv.score_preview || 0, description]
-        );
-      }
+      // (保留 try 块结构以避免外层异常，实际逻辑已移除)
     } catch (e) { console.warn('[Mat] sfw fail:', e.message); }
 
 
@@ -432,13 +446,71 @@ exports.matchMaterial = async (req, res) => {
 
 // 删除材料（级联删除附件和识别结果）
 exports.deleteMaterial = async (req, res) => {
+  const conn = await pool.getConnection();
   try {
     const { id } = req.params;
-    await pool.execute("DELETE FROM material_recognitions WHERE material_id = ?", [id]);
-    await pool.execute("DELETE FROM attachments WHERE material_id = ?", [id]);
-    await pool.execute("DELETE FROM materials WHERE id = ? AND user_id = ?", [id, req.user.id]);
+    await conn.beginTransaction();
+
+    // 1. 查找关联的 analysis_runs
+    const [runs] = await conn.execute(
+      "SELECT id FROM material_analysis_runs WHERE material_id = ?", [id]
+    );
+    const runIds = runs.map(r => r.id);
+
+    if (runIds.length > 0) {
+      const ph = runIds.map(() => '?').join(',');
+
+      // 2. 查找关联的 extracted_facts
+      const [efs] = await conn.execute(
+        `SELECT id FROM extracted_facts WHERE analysis_run_id IN (${ph})`, runIds
+      );
+      const efIds = efs.map(e => e.id);
+
+      if (efIds.length > 0) {
+        const eph = efIds.map(() => '?').join(',');
+
+        // 3. 删除 fact_rule_matches（通过 extracted_fact_id）
+        await conn.execute(
+          `DELETE FROM fact_rule_matches WHERE extracted_fact_id IN (${eph})`, efIds
+        );
+
+        // 4. 删除 extracted_fact_sources
+        await conn.execute(
+          `DELETE FROM extracted_fact_sources WHERE extracted_fact_id IN (${eph})`, efIds
+        );
+      }
+
+      // 5. 删除 extracted_facts
+      await conn.execute(
+        `DELETE FROM extracted_facts WHERE analysis_run_id IN (${ph})`, runIds
+      );
+
+      // 6. 删除 rule_match_runs（通过 analysis_run_id）
+      await conn.execute(
+        `DELETE FROM rule_match_runs WHERE analysis_run_id IN (${ph})`, runIds
+      );
+    }
+
+    // 7. 删除 material_analysis_runs
+    await conn.execute("DELETE FROM material_analysis_runs WHERE material_id = ?", [id]);
+
+    // 8. 删除 material_recognitions（旧版表）
+    await conn.execute("DELETE FROM material_recognitions WHERE material_id = ?", [id]);
+
+    // 9. 删除 attachments
+    await conn.execute("DELETE FROM attachments WHERE material_id = ?", [id]);
+
+    // 10. 删除材料本身
+    await conn.execute("DELETE FROM materials WHERE id = ? AND user_id = ?", [id, req.user.id]);
+
+    await conn.commit();
     res.json(Res.success(null, "已删除"));
-  } catch (e) { res.json(Res.error(e.message)); }
+  } catch (e) {
+    await conn.rollback();
+    res.json(Res.error(e.message));
+  } finally {
+    conn.release();
+  }
 };
 
 // 删除单个附件
@@ -466,9 +538,15 @@ exports.confirmMatchV3 = async (req, res) => {
       if (!efs.length) { await conn.rollback(); conn.release(); return res.json(Res.error("fact not found")); }
 
       const { analysis_run_id, user_id } = efs[0];
+      // ★ 按学生批次查询已发布规则集（不限制 user_id）
+      const [btRows2] = await conn.execute(
+        "SELECT id FROM assessment_batches WHERE college = (SELECT college FROM users WHERE id = ?) AND grade = (SELECT grade FROM users WHERE id = ?) AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [user_id, user_id]
+      );
+      const matchBatchId = btRows2.length > 0 ? btRows2[0].id : null;
       const [rsRows] = await conn.execute(
-        "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
-        [user_id]
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [matchBatchId]
       );
       const ruleSetId = rsRows.length ? rsRows[0].id : 0;
 
@@ -514,13 +592,8 @@ exports.confirmMatchV3 = async (req, res) => {
         );
       }
 
-      // 6. Write to smart_fill_data
-      if (item_key && score != null) {
-        await conn.execute(
-          "INSERT INTO smart_fill_data (user_id, rule_set_id, section, item_key, score, description) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE score=VALUES(score), description=VALUES(description)",
-          [user_id, ruleSetId, 'F3', item_key, score, description]
-        );
-      }
+      // 6. smart_fill_data 不在确认时自动写入
+      // 仅在用户点击"提交审核"时通过 saveFillData 写入（作为提交历史快照）
 
       await conn.commit();
       res.json(Res.success({ match_run_id: matchRunId }, "confirmed"));

@@ -1,17 +1,18 @@
 ﻿<template>
   <div class="dashboard">
-    <!-- ★ 批次选择器 -->
-    <div class="batch-selector-bar">
-      <div class="batch-selector">
-        <label class="batch-label">选择测评批次</label>
-        <select v-model="selectedBatchId" @change="onBatchChange" class="batch-select">
-          <option value="">-- 请选择批次 --</option>
-          <option v-for="b in batches" :key="b.id" :value="b.id">{{ b.title }} ({{ b.school_year }})</option>
-        </select>
-        <span v-if="selectedBatch" class="batch-meta">
-          {{ selectedBatch.college }} · {{ selectedBatch.grade }} · <span :class="'batch-status-' + selectedBatch.status">{{ batchStatusLabel }}</span>
-        </span>
-      </div>
+    <!-- ★ 当前批次（自动匹配，只读展示） -->
+    <div v-if="currentBatch" class="batch-info-bar">
+      <span class="batch-icon">📋</span>
+      <span class="batch-title">{{ currentBatch.title }}</span>
+      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
+      <span class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
+    </div>
+    <div v-else-if="batchError" class="batch-error-bar">
+      <span class="batch-error-icon">⚠</span>
+      <span>{{ batchError }}</span>
+    </div>
+    <div v-else class="batch-info-bar batch-loading">
+      <span>加载批次信息...</span>
     </div>
 
     <h2 class="page-title">智能填表</h2>
@@ -60,14 +61,14 @@
       <div class="section-header">
         <button class="btn-back" @click="activeCard = null">返回</button>
         <h3>{{ sectionTitle }}</h3>
-        <span v-if="selectedBatch" class="section-batch-label">当前批次：{{ selectedBatch.title }}</span>
+        <span v-if="currentBatch" class="section-batch-label">当前批次：{{ currentBatch.title }}</span>
       </div>
       <SmartFillF1 v-if="activeCard === 'f1'" />
       <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
-      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
+      <SmartFillRule v-if="activeCard === 'rule'" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
       <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
       <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
+      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
     </div>
   </div>
 </template>
@@ -82,14 +83,11 @@ import SmartFillScore from './SmartFillScore.vue'
 import SmartFillForm from './SmartFillForm.vue'
 import * as api from '../../api/zongce'
 
-// ========== 批次选择 ==========
-const batches = ref([])
-const selectedBatchId = ref('')
-const previousBatchId = ref('')
-const isParsing = ref(false)
-const selectedBatch = computed(() => batches.value.find(b => b.id === selectedBatchId.value) || null)
+// ========== 批次自动匹配 ==========
+const currentBatch = ref(null)
+const batchError = ref('')
 const batchStatusLabel = computed(() => {
-  const s = selectedBatch.value?.status
+  const s = currentBatch.value?.status
   if (s === 'draft') return '草稿'
   if (s === 'published') return '进行中'
   if (s === 'closed') return '已结束'
@@ -97,27 +95,19 @@ const batchStatusLabel = computed(() => {
   return s || ''
 })
 
-async function loadBatches() {
-  const r = await api.getBatches()
-  if (r.code === 200) batches.value = r.data || []
-}
-
-async function onBatchChange() {
-  if (!selectedBatchId.value) return
-  if (isParsing.value) {
-    alert('规则正在解析中，请等待解析完成后再切换批次')
-    selectedBatchId.value = previousBatchId.value;
-    return;
+async function loadStudentBatch() {
+  try {
+    const r = await api.getStudentBatch()
+    if (r.code === 200 && r.data) {
+      currentBatch.value = r.data
+      batchError.value = ''
+    } else {
+      batchError.value = r.msg || '未找到匹配的测评批次'
+    }
+  } catch (e) {
+    batchError.value = '获取批次信息失败: ' + (e.message || e)
   }
-  if (previousBatchId.value && previousBatchId.value !== selectedBatchId.value) {
-    try { const r = await api.moveRulesBatch(previousBatchId.value, selectedBatchId.value); if (r.code === 200) console.log('[SmartFill] 规则已从批次 ' + previousBatchId.value + ' 迁移至 ' + selectedBatchId.value); } catch (_) {}
-  }
-  previousBatchId.value = selectedBatchId.value;
-  await refreshAll();
 }
-
-function onParseStart() { isParsing.value = true }
-function onParseEnd() { isParsing.value = false }
 
 // ========== 导航 ==========
 const activeCard = ref(null)
@@ -127,9 +117,9 @@ const sectionTitle = computed(() => ({
 }[activeCard.value] || ''))
 
 function openCard(name) {
-  if (!selectedBatchId.value) { alert('请先选择测评批次'); return }
-  if (name === 'rule') { activeCard.value = 'rule'; return }
-  if (!ruleReady.value) { alert('请先发布规则集后再操作'); return }
+  if (!currentBatch.value) { alert(batchError.value || '未找到测评批次，请联系管理员'); return }
+  if (name === 'rule') { activeCard.value = 'rule'; loadPublishedRules(); return }
+  if (!ruleReady.value) { alert('该批次尚无已发布的规则集，请等待管理员上传'); return }
   if (name === 'f1' || name === 'f2') { if (!ruleReady.value) { alert('请先发布规则集'); return }; activeCard.value = name; return }
   if (name === 'form' && confirmedRecCount.value === 0) { alert('暂无已确认的识别结果'); return }
   activeCard.value = name
@@ -137,21 +127,22 @@ function openCard(name) {
 }
 
 // ========== 共享状态 ==========
-const ruleSources = ref([])
-const ruleSets = ref([])
+const publishedRules = ref([])
+const ruleSets = ref([])  // 保留给其他逻辑（如 smart_fill_data 中的 rule_set_id）
 const materials = ref([])
 const evaluation = ref(null)
 const scoreList = ref(null)
 const templates = ref([])
 const templatesLoaded = ref(false)
-const fillResults = ref([]); const uploadedTemplate = ref(null)
+const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
 const publishedRuleSetId = computed(() => {
-  const pub = ruleSets.value.find(r => r.status === 'published' && (!selectedBatchId.value || r.batch_id === selectedBatchId.value))
+  const pub = ruleSets.value.find(r => r.status === 'published' && (!currentBatch.value?.id || r.batch_id === currentBatch.value?.id))
   return pub ? pub.id : 0
 })
-const ruleReady = computed(() => publishedRuleSetCount.value > 0)
+// ★ ruleReady 现在基于已发布规则（不再基于 ruleSets）
+const ruleReady = computed(() => publishedRules.value.length > 0)
 const materialCount = computed(() => materials.value.length)
 const confirmedRecCount = computed(() =>
   materials.value.reduce((sum, m) => sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0)
@@ -160,8 +151,7 @@ const totalScore = computed(() => evaluation.value?.total_score ?? null)
 
 // ========== 刷新 ==========
 async function refreshAll() {
-  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()])
-  // 从服务端恢复 F1/F2 数据到 Pinia Store，解决刷新后 Store 数据丢失问题
+  await Promise.all([loadPublishedRules(), loadRuleSets(), refreshMaterials(), refreshEval(), refreshTemplates()])
   await restoreStoreFromPreview()
   if (templates.value.length > 0) {
     const latest = templates.value[0]
@@ -170,10 +160,33 @@ async function refreshAll() {
   refreshScoreList()
 }
 
+async function loadPublishedRules() {
+  if (!currentBatch.value?.id) { publishedRules.value = []; return }
+  try {
+    const r = await api.getPublishedRules(currentBatch.value.id)
+    if (r.code === 200 && r.data) {
+      publishedRules.value = r.data.rules || []
+      // 同时更新 ruleSets（供其他逻辑使用 publishedRuleSetId）
+      if (r.data.rule_set) {
+        const existing = ruleSets.value.find(rs => rs.id === r.data.rule_set.id)
+        if (!existing) ruleSets.value = [r.data.rule_set]
+      }
+    }
+  } catch (e) { console.error('[SmartFill] loadPublishedRules error:', e.message) }
+}
+
+async function loadRuleSets() {
+  if (!currentBatch.value?.id) return
+  try {
+    const r = await api.getRuleSets(currentBatch.value.id)
+    if (r.code === 200) ruleSets.value = r.data || []
+  } catch (_) {}
+}
+
 // ★ 从服务端 fill-preview 数据恢复到 Pinia Store（仅在 Store 为默认值时覆盖）
 async function restoreStoreFromPreview() {
   try {
-    const r = await api.getFillPreview(selectedBatchId.value || undefined)
+    const r = await api.getFillPreview(currentBatch.value?.id)
     if (r.code !== 200 || !r.data) return
     const d = r.data
     // 恢复 F1
@@ -194,15 +207,6 @@ async function restoreStoreFromPreview() {
   } catch (_) {}
 }
 
-async function refreshRules() {
-  const [s, rs] = await Promise.all([
-    api.getRuleSources(selectedBatchId.value || undefined),
-    api.getRuleSets(selectedBatchId.value || undefined)
-  ])
-  if (s.code === 200) ruleSources.value = s.data || []
-  if (rs.code === 200) ruleSets.value = rs.data || []
-}
-
 async function refreshMaterials() {
   const r = await api.getMaterials()
   if (r.code === 200) materials.value = r.data || []
@@ -220,20 +224,11 @@ async function refreshTemplates() {
 }
 
 onMounted(async () => {
-  await loadBatches()
-  if (batches.value.length > 0) {
-    selectedBatchId.value = batches.value[0].id
-    previousBatchId.value = batches.value[0].id
+  await loadStudentBatch()
+  if (currentBatch.value) {
     await refreshAll()
   }
 })
-
-async function removeRuleSource(id) {
-  if (!confirm('确定删除该规则文件吗？\n\n相关的文档结构、解析记录、规则集和计分规则将一并删除，此操作不可恢复。')) return
-  const res = await api.deleteRuleSource(id)
-  if (res.code === 200) refreshRules()
-  else alert(res.msg)
-}
 
 async function createMaterial() {
   const res = await api.createMaterial('')
@@ -260,7 +255,7 @@ async function onCalculate(ruleSetId) {
   const mids = materials.value.filter(m =>
     (m.facts || []).some(f => f.match?.review_status === 'confirmed')
   ).map(m => m.id)
-  const res = await api.calculateScore(ruleSetId, mids, selectedBatchId.value || undefined)
+  const res = await api.calculateScore(ruleSetId, mids, currentBatch.value?.id)
   if (res.code === 200) alert(res.msg)
   else alert(res.msg)
   refreshEval()
@@ -270,10 +265,10 @@ async function onCalculate(ruleSetId) {
 async function refreshScoreList() {
   try {
     const publishedRs = ruleSets.value.find(r =>
-      r.status === 'published' && (!selectedBatchId.value || r.batch_id === selectedBatchId.value)
+      r.status === 'published' && (!currentBatch.value?.id || r.batch_id === currentBatch.value?.id)
     )
     if (!publishedRs) return
-    const sl = await api.getScoreList(publishedRs.id, selectedBatchId.value || undefined)
+    const sl = await api.getScoreList(publishedRs.id, currentBatch.value?.id)
     if (sl.code === 200) scoreList.value = sl.data
   } catch (e) { console.error('[SmartFill] refreshScoreList error:', e.message) }
 }
@@ -285,7 +280,7 @@ async function onUploadTemplate(file) {
   else alert(res.msg)
 }
 async function doFill(tplId) {
-  const res = await api.doFill(tplId, selectedBatchId.value || undefined)
+  const res = await api.doFill(tplId, currentBatch.value?.id)
   if (res.code === 200) alert(res.msg)
   else alert(res.msg)
 }
@@ -307,7 +302,12 @@ function downloadFill(id) {
     }
   })
 }
-function removeTemplate() { uploadedTemplate.value = null }
+async function removeTemplate() {
+  if (uploadedTemplate.value?.id) {
+    try { await api.deleteTemplate(uploadedTemplate.value.id) } catch (e) { console.warn('deleteTemplate:', e.message) }
+  }
+  uploadedTemplate.value = null
+}
 function onScoreChanged() { refreshEval(); refreshScoreList() }
 function onF1F2Saved() {
   const items = []
@@ -318,7 +318,7 @@ function onF1F2Saved() {
   if (f2Courses.length) {
     items.push({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: f2Courses, rule_set_id: 0 })
   }
-  if (items.length) api.saveFillData(items, selectedBatchId.value || undefined)
+  if (items.length) api.saveFillData(items, currentBatch.value?.id)
 }
 import { useSmartFillStore } from '@/stores/smartFill'
 const store = useSmartFillStore()
@@ -327,26 +327,28 @@ const store = useSmartFillStore()
 <style scoped>
 .dashboard { display: flex; flex-direction: column; gap: 24px; }
 .page-title { font-size: 24px; margin: 0; }
-.batch-selector-bar {
+.batch-info-bar {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  padding: 16px 20px;
+  padding: 14px 20px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
 }
-.batch-selector { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.batch-label { font-size: 14px; font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; }
-.batch-select {
-  padding: 8px 14px; border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-btn); font-size: 14px; font-family: inherit;
-  background: var(--color-bg); color: var(--color-text);
-  min-width: 240px; cursor: pointer;
-}
-.batch-select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+.batch-info-bar.batch-loading { color: var(--color-text-tertiary); font-size: 14px; }
+.batch-icon { font-size: 18px; }
+.batch-title { font-size: 15px; font-weight: 600; color: var(--color-text); }
 .batch-meta { font-size: 13px; color: var(--color-text-tertiary); }
-.batch-status-draft { color: #E37400; }
-.batch-status-published { color: #34A853; }
-.batch-status-closed { color: #D93025; }
-.batch-status-archived { color: #999; }
+.batch-status-tag { font-size: 12px; padding: 2px 10px; border-radius: 12px; font-weight: 500; }
+.batch-status-tag.status-draft { background: #fef7e0; color: #E37400; }
+.batch-status-tag.status-published { background: #e6f4ea; color: #34A853; }
+.batch-status-tag.status-closed { background: #fce8e6; color: #D93025; }
+.batch-status-tag.status-archived { background: #f1f3f4; color: #999; }
+.batch-error-bar {
+  background: #fef7e0; border: 1px solid #f0c040;
+  border-radius: var(--radius-card); padding: 14px 20px;
+  display: flex; align-items: center; gap: 8px; font-size: 14px; color: #E37400;
+}
+.batch-error-icon { font-size: 16px; }
 .status-bar { display: flex; gap: 16px; }
 .status-item {
   flex: 1; text-align: center; padding: 14px;

@@ -79,6 +79,7 @@ const configs = {
       { title: '账号管理', description: '创建、导入和查询账号，重置用户密码', icon: 'mdi:account-cog-outline', to: '/module3/account-manage' },
       { title: '组织结构管理', description: '维护学院、专业和班级的层级关系', icon: 'mdi:domain', to: '/module3/org-manage' },
       { title: '批次与流程配置', description: '创建批次，设置评价链、注册和异议规则', icon: 'mdi:calendar-plus-outline', to: '/module3/batch-manage' },
+      { title: '批次规则管理', description: '上传评分规则文件，AI解析并发布规则集', icon: 'mdi:file-document-edit-outline', to: '/module3/admin/rules' },
       { title: '进度与结果统计', description: '查看各批次评价进度并导出汇总结果', icon: 'mdi:chart-timeline-variant', to: '/module3/teacher' },
     ],
     secondary: [
