@@ -1,168 +1,99 @@
-﻿<template>
+<template>
   <div class="material-page">
     <div class="add-bar">
-      <button class="btn primary" @click="$emit('create')">+ 新建材料项</button>
+      <button class="btn-create" @click="$emit('create')">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        新建材料项
+      </button>
       <span class="hint">上传证书/证明文件，AI 自动识别并计算分数</span>
     </div>
 
-    <div v-if="!materials.length" class="empty">暂无材料，点击上方按钮创建</div>
+    <div v-if="!materials.length" class="empty-state">
+      <span class="empty-icon">📂</span>
+      <p>暂无材料，点击上方按钮创建第一个材料项</p>
+    </div>
 
-    <div v-for="mat in materials" :key="mat.id" class="material-item">
-      <div class="mat-top">
-        <div class="mat-left">
-          <span class="mat-title">{{ mat.title || '未命名材料' }}</span>
-          <span v-if="mat.attachments?.length" class="file-count">{{ mat.attachments.length }} 文件</span>
-          <template v-if="mat.preview_summary">
-            <span v-if="mat._bestCat" class="tag-cat">{{ mat._bestCat }}</span>
-            <template v-if="mat.preview_summary.scored_fact_count > 0 && mat.preview_summary.candidate_fact_count === 0">
-              <span v-if="mat.preview_summary.confirmed_score > 0" class="tag-score plus">+{{ mat.preview_summary.confirmed_score }}</span>
-              <span v-else class="tag-score zero">0</span>
-            </template>
-            <template v-else-if="mat.preview_summary.candidate_fact_count > 0">
-              <span v-if="mat.preview_summary.scored_fact_count > 0" class="tag-score plus">+{{ mat.preview_summary.confirmed_score }}</span>
-              <span class="tag-score candidate">+{{ mat.preview_summary.candidate_score }}待确认</span>
-            </template>
-            <span v-else-if="mat.preview_summary.total_fact_count > 0 && mat.preview_summary.scored_fact_count === 0" class="tag-score na-label">
-              {{ mat.preview_summary.failed_fact_count > 0 ? '维度待映射' : '待计算' }}
-            </span>
-            <span v-else-if="!mat.preview_summary.total_fact_count" class="tag-score na-label">待提取</span>
+    <div class="card-grid">
+      <div v-for="mat in materials" :key="mat.id" class="mat-card" :class="{ hasResult: mat.score_previews?.length }">
+        <!-- 图片预览区 -->
+        <div class="card-media" @click="toggleExpand(mat)">
+          <template v-if="getImages(mat).length">
+            <div class="media-scroll">
+              <img v-for="(img, i) in getImages(mat)" :key="i" :src="img.url" :alt="img.name" class="media-img" loading="lazy" />
+            </div>
+            <span class="media-count" v-if="getImages(mat).length > 1">{{ getImages(mat).length }} 张</span>
           </template>
-          <span v-else-if="mat.facts?.length" class="tag-score na-label">待计算</span>
+          <div v-else class="media-placeholder">
+            <svg width="40" height="40" viewBox="0 0 40 40"><rect x="6" y="8" width="28" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 26l8-8 6 6 4-4 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="16" r="2.5" fill="currentColor"/></svg>
+            <span>点击上传证明材料</span>
+          </div>
+          <div class="media-overlay" v-if="mat.score_previews?.length">
+            <span class="overlay-badge" v-if="mat._bestCat">{{ mat._bestCat }}</span>
+            <span class="overlay-score" v-if="mat.preview_summary?.confirmed_score > 0">+{{ mat.preview_summary.confirmed_score }}</span>
+          </div>
         </div>
-        <div class="mat-right">
-          <template v-if="!mat.facts?.length">
-            <button class="btn-text" @click="fileInputs[mat.id]?.click()">+ 上传证明</button>
+
+        <!-- 信息区 -->
+        <div class="card-info">
+          <div class="card-title-row">
+            <span class="card-title">{{ mat.title || '未命名材料' }}</span>
+            <span class="card-file-count" v-if="mat.attachments?.length">{{ mat.attachments.length }} 个文件</span>
+          </div>
+          <div class="card-tags" v-if="mat.attachments?.length">
+            <span v-for="att in mat.attachments" :key="att.id" class="file-tag">
+              {{ att.file_name }}
+              <button class="tag-del" @click.stop="deleteAttach(mat.id, att.id)">×</button>
+            </span>
+          </div>
+          <div class="card-actions">
+            <button class="act-upload" @click="fileInputs[mat.id]?.click()">
+              <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2v8M3 6l4-4 4 4M2 10v1.5c0 .28.22.5.5.5h9a.5.5 0 00.5-.5V10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              上传
+            </button>
             <input :ref="el => fileInputs[mat.id] = el" type="file" hidden multiple accept=".png,.jpg,.jpeg,.pdf,.docx" @change="e => onFiles(mat.id, e)" />
-            <button v-if="!extractingIds.has(mat.id)" class="btn primary sm" @click="doExtract(mat)" :disabled="!mat.attachments?.length">AI 识别</button>
-            <button v-else class="btn primary sm" disabled>识别中...</button>
-          </template>
-          <button class="btn-text danger" @click="$emit('remove', mat.id)">删除</button>
-        </div>
-      </div>
-
-      <div v-if="mat.attachments?.length" class="attach-row">
-        <span v-for="att in mat.attachments" :key="att.id" class="attach-tag">
-          {{ att.file_name }}
-          <button class="attach-del" @click.stop="deleteAttach(mat.id, att.id)" title="删除附件">×</button>
-        </span>
-      </div>
-
-      <template v-if="mat.facts?.length">
-        <div class="extract-card">
-          <div class="extract-header clickable" @click="toggleCollapse(mat.id)">
-            <span class="eh-left">
-              <span class="eh-arrow">{{ collapsedMap[mat.id] ? '▶' : '▼' }}</span>
-              <span class="eh-title">识别结果</span>
-              <span class="eh-status" :class="statusLabel(mat)">{{ statusLabel(mat) }}</span>
-              <span v-if="matchedCount(mat) < mat.facts.length" class="match-progress">
-                <span class="spinner-sm"></span> 匹配规则 {{ matchedCount(mat) }}/{{ mat.facts.length }}
-              </span>
-            </span>
-            <button class="btn-text sm" @click.stop="doExtract(mat)">🔄 重新识别</button>
+            <button v-if="!extractingIds.has(mat.id)" class="act-extract" :disabled="!mat.attachments?.length" @click="doExtract(mat)">AI 识别</button>
+            <button v-else class="act-extract loading" disabled>识别中…</button>
+            <button class="act-delete" @click="$emit('remove', mat.id)">删除</button>
           </div>
 
-          <div v-show="!collapsedMap[mat.id]" class="extract-body">
-          <!-- V3 简化匹配卡片 -->
-          <template v-if="mat.score_previews && mat.score_previews.length">
-            <div v-for="(sp, spi) in mat.score_previews" :key="spi"
-              class="match-card-v3"
-              :class="{ confirmed: sp._confirmed, 'needs-review': sp.needs_review }">
-
-              <!-- 卡片头部：维度标签 + 匹配度 -->
-              <div class="match-header-v3">
-                <div class="mh-left">
-                  <span class="cat-badge">{{ sp.indicator_code || sp.matched_rule?.category || '?' }}</span>
-                  <span class="cat-name">{{ sp.matched_rule?.name || sp.indicator_name || '未识别' }}</span>
+          <!-- ★ 识别结果（保留） -->
+          <div v-if="mat.score_previews?.length" class="results-section">
+            <div class="results-header">
+              <span class="results-title">识别结果</span>
+              <span class="results-count">{{ mat.score_previews.length }} 条匹配</span>
+            </div>
+            <div v-for="(sp, spi) in mat.score_previews" :key="spi" class="result-card" :class="{ confirmed: sp._confirmed }">
+              <div class="res-top">
+                <span class="res-indicator">{{ sp.indicator_code || sp.matched_rule?.category || '?' }}</span>
+                <span class="res-name">{{ sp.matched_rule?.name || sp.indicator_name || '未识别' }}</span>
+                <span class="res-sim" :class="sp.needs_review ? 'low' : 'ok'">{{ Math.round((sp.similarity_score||0)*100) }}%</span>
+                <span v-if="sp._confirmed" class="res-done">✓ 已确认</span>
+              </div>
+              <div class="res-body">
+                <div class="res-score-row">
+                  <label>加分数</label>
+                  <input v-model.number="sp.score_preview" type="number" class="res-score-inp" :disabled="sp._confirmed" min="0" />
+                  <span>分</span>
                 </div>
-                <div class="mh-right">
-                  <span class="sim-badge" :class="sp.needs_review ? 'sim-low' : 'sim-ok'">
-                    <svg width="12" height="12" viewBox="0 0 12 12" style="vertical-align:-2px;margin-right:2px">
-                      <circle cx="6" cy="6" r="5" fill="none" stroke="currentColor" stroke-width="1.2"/>
-                      <path d="M6 3.5v3.5M6 8.2v.3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                    </svg>
-                    匹配 {{ Math.round((sp.similarity_score||0)*100) }}%
-                  </span>
-                  <span v-if="sp._confirmed" class="confirmed-badge">✓ 已确认</span>
+                <div class="res-desc-row">
+                  <label>加分描述</label>
+                  <button v-if="!sp._genDescLoading && !sp._confirmed" class="btn-ai-mini" @click.stop="genDesc(mat, sp, spi)">🤖 AI生成</button>
+                  <span v-if="sp._genDescLoading">⏳ 生成中…</span>
+                  <textarea v-model="sp.ai_description" rows="2" class="res-desc-inp" :placeholder="sp._confirmed ? '' : '输入或AI生成…'" :disabled="sp._confirmed"></textarea>
                 </div>
               </div>
-
-              <!-- 卡片主体：得分 + 加分描述 -->
-              <div class="match-body-v3">
-                <!-- 得分行 -->
-                <div class="score-row-v3">
-                  <div class="sr-label">
-                    <svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px">
-                      <polygon points="7,1 9.5,5 14,5.8 10.5,9.5 11.3,14 7,11.5 2.7,14 3.5,9.5 0,5.8 4.5,5" fill="currentColor" opacity="0.8"/>
-                    </svg>
-                    <span>加分数</span>
-                  </div>
-                  <div class="sr-input-group">
-                    <input v-model.number="sp.score_preview" type="number" class="score-inp-v3"
-                      :disabled="sp._confirmed" :min="0" />
-                    <span class="sr-unit">分</span>
-                  </div>
-                </div>
-
-                <!-- 描述行 -->
-                <div class="desc-row-v3">
-                  <div class="sr-label">
-                    <svg width="14" height="14" viewBox="0 0 14 14" style="vertical-align:-2px">
-                      <rect x="1" y="3" width="12" height="9" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2"/>
-                      <line x1="3.5" y1="6.5" x2="10.5" y2="6.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                      <line x1="3.5" y1="9" x2="8.5" y2="9" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-                    </svg>
-                    <span>加分描述</span>
-                    <button v-if="!sp._genDescLoading && !sp._confirmed" class="btn-ai-sm" @click.stop="generateDescription(mat, sp, spi)" title="AI 生成描述">
-                      🤖 生成
-                    </button>
-                    <span v-if="sp._genDescLoading" class="gen-desc-loading">⏳ 生成中...</span>
-                  </div>
-                  <div class="desc-input-wrap">
-                    <textarea v-model="sp.ai_description" rows="2" class="desc-input-v3"
-                      :placeholder="sp._confirmed ? '' : '输入加分描述或点击 AI 生成...'"
-                      :disabled="sp._confirmed"></textarea>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 卡片底部：确认按钮 -->
-              <div class="match-footer-v3">
-                <div v-if="sp._confirmed" class="confirmed-info">
-                  <svg width="16" height="16" viewBox="0 0 16 16" style="vertical-align:-3px">
-                    <circle cx="8" cy="8" r="7" fill="#34A853"/>
-                    <polyline points="5,8.5 7.5,11 11,5.5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                  <span>已确认</span>
-                </div>
-                <div v-else class="footer-actions">
-                  <div class="footer-score-summary">
-                    <span class="fss-label">规则建议:</span>
-                    <span class="fss-value">+{{ sp.score_preview || 0 }} 分</span>
-                  </div>
-                  <button class="btn-confirm" @click="doConfirmV3(mat, sp, spi)"
-                    :disabled="sp._confirming">
-                    <svg v-if="sp._confirming" class="spinning" width="14" height="14" viewBox="0 0 14 14">
-                      <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-dasharray="20" stroke-dashoffset="5"/>
-                    </svg>
-                    <span v-else>✓</span>
-                    {{ sp._confirming ? '确认中...' : '确认加分' }}
-                  </button>
-                </div>
+              <div class="res-footer" v-if="!sp._confirmed">
+                <span class="res-score-hint">建议 +{{ sp.score_preview || 0 }} 分</span>
+                <button class="btn-confirm" @click="doConfirmV3(mat, sp, spi)" :disabled="sp._confirming">{{ sp._confirming ? '确认中…' : '✓ 确认加分' }}</button>
               </div>
             </div>
-          </template>
-          <div v-else class="no-match-v3">
-            <div class="no-match-icon">📋</div>
-            <div class="no-match-title">暂未匹配到计分规则</div>
-            <div class="no-match-desc">请确认已有已发布的规则集，且规则数据正常</div>
-          </div>
           </div>
         </div>
-      </template>
-
+      </div>
     </div>
   </div>
 </template>
+
 <script setup>
 import { watch, ref } from 'vue'
 import * as api from '../../api/zongce'
@@ -171,445 +102,145 @@ const props = defineProps({ materials: Array })
 const emit = defineEmits(['create', 'upload', 'remove', 'score-recalc'])
 const fileInputs = {}
 const extractingIds = ref(new Set())
-const collapsedMap = ref({})
-function toggleCollapse(matId) { collapsedMap.value[matId] = !collapsedMap.value[matId] }
 
-watch(() => props.materials, (mats) => {
-  for (const mat of (mats || [])) {
-    // 从 facts 或 score_previews 更新 _bestCat（材料列表分类标签）
-    if (!mat._bestCat) {
-      if (mat.score_previews?.length) {
-        mat._bestCat = mat.score_previews[0].indicator_code || mat.score_previews[0].matched_rule?.category || ''
-      } else if (mat.facts?.length) {
-        for (const f of mat.facts) {
-          if (f.match?.indicator?.code) { mat._bestCat = f.match.indicator.code; break }
-        }
-      }
+function getImages(mat) {
+  const imgs = []
+  if (!mat.attachments) return imgs
+  for (const att of mat.attachments) {
+    const ext = (att.file_name || '').split('.').pop().toLowerCase()
+    if (['png','jpg','jpeg','gif','webp','bmp'].includes(ext)) {
+      imgs.push({ url: `/uploads/${att.file_path || att.file_name}`, name: att.file_name })
     }
-    if (!(mat.id in collapsedMap.value)) { collapsedMap.value[mat.id] = allConfirmed(mat) }
-    if (mat.score_previews) mat.score_previews.forEach(sp => {
-      sp._confirmed = sp._confirmed || !!sp.confirmed || false;
-      sp._confirming = false;
-    })
   }
-}, { deep: true, immediate: true })
-
-function onFiles(matId, e) {
-  const files = Array.from(e.target.files)
-  if (files.length) emit('upload', matId, files)
+  return imgs
 }
+
+function toggleExpand(mat) { /* future use */ }
+function onFiles(matId, e) { const files = Array.from(e.target.files); if (files.length) emit('upload', matId, files) }
+
 async function deleteAttach(matId, attId) {
   if (!confirm('确定删除该附件？')) return
   try {
     const res = await api.deleteAttachment(matId, attId)
     if (res.code === 200) {
-      // 从本地材料列表中移除该附件
       const mat = (props.materials || []).find(m => m.id === matId)
-      if (mat && mat.attachments) {
-        mat.attachments = mat.attachments.filter(a => a.id !== attId)
-      }
-    } else {
-      alert(res.msg || '删除失败')
-    }
-  } catch (e) {
-    alert('删除异常: ' + (e.response?.data?.msg || e.message))
-  }
+      if (mat && mat.attachments) mat.attachments = mat.attachments.filter(a => a.id !== attId)
+    } else alert(res.msg || '删除失败')
+  } catch (e) { alert('删除异常: ' + (e.response?.data?.msg || e.message)) }
 }
-function allConfirmed(mat) { return mat.facts?.length && mat.facts.every(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
-function someConfirmed(mat) { return mat.facts?.some(f => f.match?.review_status === 'confirmed' || f.fact_data?.confirmed === true) }
-function statusLabel(mat) {
-  if (!mat.facts?.length) return '待提取'
-  if (allConfirmed(mat)) return '已入库'
-  if (someConfirmed(mat)) return '部分已确认'
-  return '待确认'
-}
-function matchedCount(mat) { return (mat.facts || []).filter(f => f.match || (f.fact_data && f.fact_data.match_score != null)).length }
 
 async function doExtract(mat) {
   extractingIds.value.add(mat.id)
   try {
     const res = await api.extractMaterial(mat.id)
     if (res.code === 200) {
-      mat.facts = (res.data.facts || []).map(f => ({
-        fact_id: f.fact_id || null,
-        fact_data: f.fact_data || f,
-      }))
-      mat.score_previews = (res.data.score_previews || []).map(sp => ({
-        ...sp,
-        _confirmed: false,
-        _confirming: false,
-        _genDescLoading: false,
-        ai_description: sp.ai_description || '',
-      }))
-      collapsedMap.value[mat.id] = false
-    } else { alert(res.msg) }
+      mat.facts = (res.data.facts || []).map(f => ({ fact_id: f.fact_id || null, fact_data: f.fact_data || f }))
+      mat.score_previews = (res.data.score_previews || []).map(sp => ({ ...sp, _confirmed: false, _confirming: false, _genDescLoading: false, ai_description: sp.ai_description || '' }))
+    } else alert(res.msg)
   } catch (e) { alert('识别失败: ' + e.message) }
   extractingIds.value.delete(mat.id)
 }
 
-// ★ 使用 API 模块（携带 auth token）代替 raw fetch，修复 401 错误
 async function doConfirmV3(mat, sp, spi) {
   sp._confirming = true
   try {
-    const res = await api.confirmMatchMaterial(mat.id, {
-      material_id: mat.id,
-      ef_id: sp._ef_id || 0,
-      item_key: sp.indicator_code || sp.matched_rule?.category || '',
-      score: sp.score_preview,
-      description: sp.ai_description
-    })
-    if (res.code === 200) { sp._confirmed = true; sp._confirmedAt = new Date().toLocaleString(); if (mat.facts) mat.facts.forEach(f => { if (f.fact_data && (f.fact_data._ef_id === sp._ef_id || f.fact_id === sp._ef_id)) { f.fact_data.confirmed = true; if (f.match) f.match.review_status = 'confirmed'; } }); collapsedMap.value[mat.id] = allConfirmed(mat); emit('score-recalc')
-    } else {
-      alert(res.msg || '确认失败')
-    }
-  } catch(e) {
-    alert('确认异常: ' + (e.response?.data?.msg || e.message))
-  }
+    const res = await api.confirmMatchMaterial(mat.id, { material_id: mat.id, ef_id: sp._ef_id || 0, item_key: sp.indicator_code || sp.matched_rule?.category || '', score: sp.score_preview, description: sp.ai_description })
+    if (res.code === 200) { sp._confirmed = true; emit('score-recalc') }
+    else alert(res.msg || '确认失败')
+  } catch (e) { alert('确认异常: ' + (e.response?.data?.msg || e.message)) }
   sp._confirming = false
 }
 
-// ★ AI 生成加分描述
-async function generateDescription(mat, sp, spi) {
+async function genDesc(mat, sp, spi) {
   sp._genDescLoading = true
   try {
-    const res = await api.generateMatchDescription(mat.id, {
-      ef_id: sp._ef_id || 0,
-      indicator_code: sp.indicator_code || sp.matched_rule?.category || '',
-      score: sp.score_preview,
-      fact_data: sp.fact_data || {}
-    })
-    if (res.code === 200 && res.data?.description) {
-      sp.ai_description = res.data.description
-    } else {
-      // 后端未返回时自动生成一条默认描述
-      sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分`
-    }
-  } catch(e) {
-    // 网络失败时也使用本地默认描述
-    sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分`
-  }
+    const res = await api.generateMatchDescription(mat.id, { ef_id: sp._ef_id || 0, indicator_code: sp.indicator_code || sp.matched_rule?.category || '', score: sp.score_preview, fact_data: sp.fact_data || {} })
+    if (res.code === 200 && res.data?.description) sp.ai_description = res.data.description
+    else sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分`
+  } catch (e) { sp.ai_description = `获得${sp.matched_rule?.name || sp.indicator_name || '该维度'}加分${sp.score_preview}分` }
   sp._genDescLoading = false
 }
+
+watch(() => props.materials, (mats) => {
+  for (const mat of (mats || [])) {
+    if (!mat._bestCat && mat.score_previews?.length) mat._bestCat = mat.score_previews[0].indicator_code || mat.score_previews[0].matched_rule?.category || ''
+    if (mat.score_previews) mat.score_previews.forEach(sp => { sp._confirmed = sp._confirmed || !!sp.confirmed || false; sp._confirming = false })
+  }
+}, { deep: true, immediate: true })
 </script>
 
 <style scoped>
-.material-page { display: flex; flex-direction: column; gap: 16px; }
+.material-page { display: flex; flex-direction: column; gap: 22px; }
+.add-bar { display: flex; align-items: center; gap: 14px; }
+.hint { font-size: 13px; color: var(--color-text-tertiary); }
+.btn-create { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border: 1.5px dashed rgba(196,168,130,0.35); border-radius: 12px; background: rgba(196,168,130,0.06); color: #c4a882; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+.btn-create:hover { background: rgba(196,168,130,0.14); border-color: rgba(196,168,130,0.55); }
+.empty-state { text-align: center; padding: 56px 20px; color: var(--color-text-tertiary); }
+.empty-icon { font-size: 40px; display: block; margin-bottom: 10px; }
 
-/* ===== 顶部栏 ===== */
-.add-bar { display: flex; align-items: center; gap: 16px; }
-.add-bar .hint { font-size: 13px; color: var(--color-text-tertiary); }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; }
 
-/* ===== 按钮 ===== */
-.btn { padding: 8px 20px; border: none; border-radius: var(--radius-btn); cursor: pointer; font-size: 14px; font-family: inherit; }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn.primary { background: var(--color-primary); color: #fff; }
-.btn.sm { padding: 6px 16px; font-size: 13px; }
-.btn-text { padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-btn); background: var(--color-surface); cursor: pointer; font-size: 13px; font-family: inherit; color: var(--color-text); }
-.btn-text.danger { color: #D93025; border-color: transparent; }
-.btn-text.sm { font-size: 12px; padding: 2px 8px; }
+.mat-card { border-radius: 18px; overflow: hidden; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); backdrop-filter: blur(14px); transition: all 0.3s ease; display: flex; flex-direction: column; }
+.mat-card:hover { border-color: rgba(196,168,130,0.20); box-shadow: 0 8px 32px rgba(0,0,0,0.18); }
 
-/* ===== 材料项 ===== */
-.material-item { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-card); padding: 16px; }
-.mat-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.mat-left { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
-.mat-title { font-size: 15px; font-weight: 600; color: var(--color-text); }
-.mat-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
-.file-count { font-size: 12px; color: var(--color-text-tertiary); background: var(--color-surface-variant); padding: 2px 8px; border-radius: var(--radius-tag); }
-.attach-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-.attach-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px; background: var(--color-surface-variant); border-radius: var(--radius-tag); }
-.attach-del { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; border-radius: 50%; background: transparent; color: #999; cursor: pointer; font-size: 14px; line-height: 1; transition: all .15s; }
-.attach-del:hover { background: #D93025; color: #fff; }
-.empty { text-align: center; color: var(--color-gray); padding: 40px 0; }
-.tag-cat { font-size: 12px; padding: 3px 10px; border-radius: 12px; background: #e8f0fe; color: #1a73e8; font-weight: 500; }
-.tag-score { font-size: 12px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
-.tag-score.plus { background: #e6f4ea; color: #34A853; }
-.tag-score.zero { background: #f1f3f4; color: #888; }
-.tag-score.candidate { background: #fef7e0; color: #E37400; }
-.tag-score.na-label { background: #f1f3f4; color: #888; }
+.card-media { position: relative; width: 100%; height: 200px; overflow: hidden; background: rgba(0,0,0,0.15); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.media-scroll { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; width: 100%; height: 100%; }
+.media-scroll::-webkit-scrollbar { height: 3px; }
+.media-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+.media-img { scroll-snap-align: start; flex-shrink: 0; height: 100%; object-fit: cover; min-width: 100%; }
+.media-count { position: absolute; bottom: 8px; right: 8px; padding: 3px 8px; border-radius: 8px; background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 600; }
+.media-placeholder { display: flex; flex-direction: column; align-items: center; gap: 8px; color: rgba(255,255,255,0.15); font-size: 12px; }
+.media-overlay { position: absolute; top: 10px; left: 10px; display: flex; gap: 6px; }
+.overlay-badge { padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; background: rgba(196,168,130,0.82); color: #fff; }
+.overlay-score { padding: 3px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; background: rgba(125,155,118,0.82); color: #fff; }
 
-/* ===== 识别结果卡片 ===== */
-.extract-card { margin-top: 12px; border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
-.extract-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: linear-gradient(135deg, #f8faff, #f0f4ff); border-bottom: 1px solid #e8edf2; font-size: 14px; }
-.extract-header.clickable { cursor: pointer; }
-.extract-header.clickable:hover { background: linear-gradient(135deg, #f0f4ff, #e8f0fe); }
-.eh-left { display: flex; align-items: center; gap: 8px; }
-.eh-arrow { font-size: 11px; color: #8892a0; width: 14px; flex-shrink: 0; }
-.eh-title { font-weight: 600; color: #1a1a2e; }
-.eh-status { font-size: 11px; padding: 2px 10px; border-radius: 20px; background: #f1f3f4; color: #888; font-weight: 500; }
-.eh-status.已入库 { background: #e6f4ea; color: #34A853; }
-.eh-status.部分已确认 { background: #fef7e0; color: #E37400; }
-.eh-status.待确认 { background: #fef7e0; color: #E37400; }
-.eh-status.待提取 { background: #e8f0fe; color: #1a73e8; }
-.match-progress { font-size: 12px; color: #E37400; font-weight: 400; display: inline-flex; align-items: center; gap: 4px; }
-.spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid #f0c040; border-top-color: transparent; border-radius: 50%; animation: spin-sm .8s linear infinite; }
-@keyframes spin-sm { to { transform: rotate(360deg); } }
+.card-info { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card-title { font-size: 15px; font-weight: 600; color: var(--color-text); }
+.card-file-count { font-size: 11px; color: var(--color-text-tertiary); }
+.card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.file-tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 6px; font-size: 11px; background: rgba(255,255,255,0.05); color: var(--color-text-secondary); border: 1px solid rgba(255,255,255,0.06); }
+.tag-del { width: 16px; height: 16px; border: none; border-radius: 50%; background: transparent; color: rgba(255,255,255,0.3); cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+.tag-del:hover { background: rgba(220,80,80,0.6); color: #fff; }
 
-.extract-body { padding: 4px 16px 16px; }
+.card-actions { display: flex; gap: 6px; padding-top: 4px; }
+.card-actions button { padding: 6px 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; background: rgba(255,255,255,0.03); color: var(--color-text-secondary); transition: all 0.15s; display: inline-flex; align-items: center; gap: 4px; }
+.act-upload:hover { background: rgba(196,168,130,0.10); border-color: rgba(196,168,130,0.25); color: #c4a882; }
+.act-extract { color: #7d9b76 !important; }
+.act-extract:hover:not(:disabled) { background: rgba(125,155,118,0.12); border-color: rgba(125,155,118,0.25); }
+.act-extract:disabled { opacity: 0.35; cursor: not-allowed; }
+.act-extract.loading { opacity: 0.6; }
+.act-delete:hover { background: rgba(220,80,80,0.08); border-color: rgba(220,80,80,0.25); color: #d44; }
 
-/* ===== V3 匹配卡片 - 全新美化样式 ===== */
-.match-card-v3 {
-  border: 1px solid #e4e8ef;
-  border-radius: 12px;
-  padding: 16px;
-  margin: 12px 0;
-  background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,.04);
-  transition: all .2s ease;
-}
-.match-card-v3:hover {
-  box-shadow: 0 4px 16px rgba(0,0,0,.08);
-  border-color: #c8d0dd;
-}
-.match-card-v3.confirmed {
-  background: #f6faf8;
-  border-color: #b8d8c8;
-  box-shadow: 0 1px 4px rgba(52,168,83,.08);
-}
-.match-card-v3.needs-review {
-  border-left: 3px solid #E37400;
-}
+/* ===== 识别结果 ===== */
+.results-section { margin-top: 4px; display: flex; flex-direction: column; gap: 8px; }
+.results-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+.results-title { font-size: 13px; font-weight: 600; color: var(--color-text); }
+.results-count { font-size: 11px; color: var(--color-text-tertiary); }
+.results-empty { font-size: 13px; color: var(--color-text-tertiary); text-align: center; padding: 12px; }
 
-/* 卡片头部 */
-.match-header-v3 {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #f0f2f5;
-}
-.mh-left { display: flex; align-items: center; gap: 10px; }
-.mh-right { display: flex; align-items: center; gap: 8px; }
-.cat-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 36px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 6px;
-  font-weight: 700;
-  font-size: 13px;
-  background: linear-gradient(135deg, #4A90D9, #357ABD);
-  color: #fff;
-  letter-spacing: .5px;
-}
-.cat-name { font-weight: 600; font-size: 14px; color: #2c3e50; }
-.sim-badge {
-  font-size: 12px;
-  padding: 3px 10px;
-  border-radius: 20px;
-  font-weight: 500;
-  display: inline-flex;
-  align-items: center;
-}
-.sim-ok { background: #e6f4ea; color: #34A853; }
-.sim-low { background: #fef7e0; color: #E37400; }
-.confirmed-badge {
-  font-size: 11px;
-  padding: 2px 10px;
-  border-radius: 20px;
-  background: #34A853;
-  color: #fff;
-  font-weight: 600;
-}
+.result-card { padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); }
+.result-card.confirmed { background: rgba(125,155,118,0.05); border-color: rgba(125,155,118,0.12); }
+.res-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.res-indicator { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 5px; background: rgba(196,168,130,0.15); color: #c4a882; }
+.res-name { font-size: 13px; font-weight: 600; flex: 1; color: var(--color-text); }
+.res-sim { font-size: 11px; padding: 2px 7px; border-radius: 6px; }
+.res-sim.ok { background: rgba(125,155,118,0.12); color: #7d9b76; }
+.res-sim.low { background: rgba(196,168,130,0.12); color: #c4a882; }
+.res-done { font-size: 11px; color: #7d9b76; font-weight: 600; }
 
-/* 卡片主体 */
-.match-body-v3 { display: flex; flex-direction: column; gap: 10px; }
-.sr-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #5a6a7a;
-  margin-bottom: 6px;
-}
-.sr-label svg { color: #8892a0; flex-shrink: 0; }
+.res-body { display: flex; flex-direction: column; gap: 6px; }
+.res-body label { font-size: 11px; color: var(--color-text-tertiary); display: block; margin-bottom: 2px; }
+.res-score-inp { width: 64px; padding: 6px 8px; border: 1.5px solid rgba(255,255,255,0.10); border-radius: 8px; font-size: 15px; font-weight: 700; text-align: center; color: #c4a882; background: rgba(255,255,255,0.04); font-family: inherit; }
+.res-score-inp:disabled { background: rgba(255,255,255,0.02); color: #7d9b76; border-color: rgba(125,155,118,0.15); }
+.res-desc-inp { width: 100%; padding: 6px 10px; border: 1.5px solid rgba(255,255,255,0.08); border-radius: 8px; font-size: 12px; font-family: inherit; background: rgba(255,255,255,0.03); color: var(--color-text); resize: vertical; min-height: 44px; box-sizing: border-box; }
 
-/* 得分行 */
-.score-row-v3 {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: #f8faff;
-  border-radius: 8px;
-  border: 1px solid #e8edf5;
-}
-.sr-input-group {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.score-inp-v3 {
-  width: 64px;
-  padding: 7px 10px;
-  border: 1.5px solid #d0d8e5;
-  border-radius: 8px;
-  font-size: 18px;
-  font-weight: 700;
-  text-align: center;
-  color: #1a73e8;
-  background: #fff;
-  transition: all .2s;
-}
-.score-inp-v3:focus {
-  outline: none;
-  border-color: #1a73e8;
-  box-shadow: 0 0 0 3px rgba(26,115,232,.1);
-}
-.score-inp-v3:disabled {
-  background: #f0f2f5;
-  color: #34A853;
-  border-color: #b8d8c8;
-}
-.sr-unit { font-size: 14px; color: #8892a0; font-weight: 500; }
+.btn-ai-mini { padding: 3px 10px; border: 1px solid rgba(196,168,130,0.22); border-radius: 8px; background: rgba(196,168,130,0.08); color: #c4a882; font-size: 11px; cursor: pointer; font-family: inherit; margin-left: 8px; }
+.btn-ai-mini:hover { background: rgba(196,168,130,0.18); }
 
-/* 描述行 */
-.desc-row-v3 {
-  padding: 10px 14px;
-  background: #fafbfc;
-  border-radius: 8px;
-  border: 1px solid #eef0f4;
-}
-.desc-input-wrap { position: relative; }
-.desc-input-v3 {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1.5px solid #e0e4ea;
-  border-radius: 8px;
-  font-size: 13px;
-  line-height: 1.5;
-  font-family: inherit;
-  resize: vertical;
-  transition: all .2s;
-  background: #fff;
-  box-sizing: border-box;
-  min-height: 48px;
-  color: #333;
-}
-.desc-input-v3:focus {
-  outline: none;
-  border-color: #4A90D9;
-  box-shadow: 0 0 0 3px rgba(74,144,217,.08);
-}
-.desc-input-v3:disabled {
-  background: #f5f6f8;
-  color: #555;
-  border-color: #e0e4ea;
-}
-.desc-input-v3::placeholder { color: #b0b8c4; font-size: 12px; }
-
-.btn-ai-sm {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  border: 1px solid #c8d8f0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f0f6ff, #e8f0fe);
-  color: #4A90D9;
-  cursor: pointer;
-  transition: all .2s;
-  margin-left: 4px;
-}
-.btn-ai-sm:hover { background: linear-gradient(135deg, #d6e4ff, #c8d8f0); border-color: #4A90D9; }
-.gen-desc-loading { font-size: 11px; color: #E37400; margin-left: 4px; }
-
-/* 卡片底部 */
-.match-footer-v3 {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid #f0f2f5;
-}
-.confirmed-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: #34A853;
-  font-weight: 500;
-  padding: 6px 12px;
-  background: #f0faf4;
-  border-radius: 8px;
-}
-.footer-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.footer-score-summary {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.fss-label { font-size: 12px; color: #8892a0; }
-.fss-value { font-size: 16px; font-weight: 700; color: #E37400; }
-
-.btn-confirm {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 20px;
-  border: none;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
-  background: linear-gradient(135deg, #34A853, #2d9249);
-  color: #fff;
-  cursor: pointer;
-  transition: all .2s;
-  box-shadow: 0 2px 6px rgba(52,168,83,.2);
-}
-.btn-confirm:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(52,168,83,.3);
-}
-.btn-confirm:disabled {
-  opacity: .6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-.spinning { animation: spin-btn .8s linear infinite; }
-@keyframes spin-btn { to { transform: rotate(360deg); } }
-
-/* 无匹配提示 */
-.no-match-v3 {
-  padding: 30px 20px;
-  text-align: center;
-}
-.no-match-icon { font-size: 36px; margin-bottom: 8px; }
-.no-match-title { font-size: 15px; font-weight: 600; color: #666; margin-bottom: 4px; }
-.no-match-desc { font-size: 13px; color: #999; }
-
-/* 老版预览样式（保留兼容） */
-.preview-block { margin-top: 10px; padding: 12px; background: #fff; border: 1px solid #e8e8e8; border-radius: 6px; }
-.preview-block.matching-block { background: #fef9e7; border-color: #f0c040; }
-.preview-status { margin-bottom: 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
-.badge.ok { background: #e6f4ea; color: #34A853; }
-.badge.review { background: #fef7e0; color: #E37400; }
-.badge.conflict { background: #fce8e6; color: #D93025; }
-.badge.matching { background: #e8f0fe; color: #1a73e8; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-.preview-body { display: flex; flex-direction: column; gap: 6px; }
-.preview-row { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 4px 0; }
-.preview-row label { font-size: 11px; color: var(--color-text-tertiary); min-width: 48px; text-align: right; }
-.preview-row b { color: var(--color-primary); }
-.reason-text { color: var(--color-text); line-height: 1.5; font-style: italic; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; border-left: 3px solid #1a73e8; }
-.rule-type-tag { font-size: 10px; background: #e8f0fe; color: #1a73e8; padding: 1px 6px; border-radius: 8px; }
-.preview-score { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px dashed #e0e0e0; }
-.score-num { font-size: 20px; font-weight: 700; }
-.score-num.plus { color: #34A853; }
-.score-num.zero { color: #999; }
-.score-num.na { color: #ccc; }
-.score-unit { font-size: 13px; color: var(--color-text-secondary); }
-.score-unit.na-text { color: #D93025; font-size: 12px; }
-.score-hint { font-size: 11px; color: #E37400; background: #fef7e0; padding: 2px 6px; border-radius: 4px; }
-.matching-hint { font-size: 13px; color: #888; font-style: italic; }
+.res-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.04); }
+.res-score-hint { font-size: 13px; font-weight: 600; color: #c4a882; }
+.btn-confirm { padding: 6px 16px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; background: rgba(125,155,118,0.20); color: #7d9b76; transition: all 0.2s; }
+.btn-confirm:hover:not(:disabled) { background: rgba(125,155,118,0.35); }
+.btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

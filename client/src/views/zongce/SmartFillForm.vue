@@ -142,6 +142,28 @@ const fillData = ref({
   F3_B8_score: 0, F3_B8_detail: '',
 })
 
+// ★ 从 scoreList 同步 F3 数据到 fillData（单一数据源，避免被 loadFillData 覆盖）
+function syncF3FromScoreList() {
+  const newVal = props.scoreList
+  if (!newVal || !newVal.indicators) return
+  const indicators = newVal.indicators.filter(ind => /^B\d+$/.test(ind.code))
+  let f3Total = 0
+  for (const ind of indicators) {
+    const scoreKey = 'F3_' + ind.code + '_score'
+    const detailKey = 'F3_' + ind.code + '_detail'
+    fillData.value[scoreKey] = ind.score || 0
+    const autoDesc = (ind.facts || []).map(f => {
+      const name = f.award_name || f.competition_name || '加分项'
+      return name + '(+' + (f.score || 0) + '分)'
+    }).filter(Boolean).join('；')
+    fillData.value[detailKey] = autoDesc || fillData.value[detailKey]
+    f3Total += ind.score || 0
+  }
+  fillData.value.F3_total = f3Total
+  fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1))
+  updateTotalScore()
+}
+
 async function loadFillData() {
   try {
     const r = await api.getFillPreview(props.batchId)
@@ -155,6 +177,9 @@ async function loadFillData() {
     }
   } catch (e) { console.error('[SmartFillForm] loadFillData 失败:', e.message || e) }
   syncF1F2Data()
+  // ★ 关键修复: loadFillData 是异步的，可能在 scoreList watcher 之后完成，
+  // 会覆盖 watcher 刚同步的 F3 数据。这里用 scoreList 重新覆盖，确保 F3 以评分清单为准。
+  syncF3FromScoreList()
 }
 loadFillData()
 
@@ -208,28 +233,10 @@ const placeholderGroups = [
 
 
 // ★ 监听评分清单变化，同步 F3 数据到预览面板（只读展示）
-watch(() => props.scoreList, (newVal) => {
-  if (!newVal || !newVal.indicators) return;
-  const indicators = newVal.indicators.filter(ind => /^B\d+$/.test(ind.code));
-  let f3Total = 0;
-  for (const ind of indicators) {
-    const key = ind.code;
-    const scoreKey = 'F3_' + key + '_score';
-    const detailKey = 'F3_' + key + '_detail';
-    fillData.value[scoreKey] = ind.score || 0;
-    // 从 facts 拼接描述
-    const autoDesc = (ind.facts || []).map(f => {
-      const name = f.award_name || f.competition_name || '加分项';
-      return name + '(+' + (f.score || 0) + '分)';
-    }).filter(Boolean).join('；');
-    fillData.value[detailKey] = autoDesc || fillData.value[detailKey];
-    f3Total += ind.score || 0;
-  }
-  fillData.value.F3_total = f3Total;
-  fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1));
-  updateTotalScore();
-  syncF1F2Data();
-}, { deep: true });
+watch(() => props.scoreList, () => {
+  syncF3FromScoreList()
+  syncF1F2Data()
+}, { deep: true, immediate: true });
 
 // ★ 从服务端数据恢复到 Pinia Store（仅恢复 Store 中仍为默认值的项）
 // 解决刷新后 Store 为空、syncF1F2Data() 用空数据覆盖服务端数据的问题
