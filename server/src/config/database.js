@@ -90,6 +90,36 @@ async function initDatabase() {
     // 模块三：先兼容升级旧数据库，再执行使用新字段的幂等种子数据。
     await migrateModule3(conn);
 
+    // ★ 修复：init.sql 末尾的 ALTER TABLE 移到此处用 try/catch 保护（原位置会因重复执行崩溃）
+    const initMigrations = [
+      "ALTER TABLE assessment_form_items ADD INDEX idx_items_form_id (form_id)",
+      "ALTER TABLE assessment_review_records ADD INDEX idx_records_form_id (form_id)",
+      "ALTER TABLE assessment_item_reviews  ADD INDEX idx_item_reviews_form_id (form_id)",
+      "ALTER TABLE assessment_objections    ADD INDEX idx_objections_form_id (form_id)",
+    ];
+    for (const s of initMigrations) {
+      try { await conn.execute(s); } catch (e) {
+        if (e.errno !== 1061 && e.errno !== 1091) console.warn("[DB] init迁移:", e.message);
+      }
+    }
+
+
+    // ★ V4 迁移：rule_sets → assessment_batches 关联
+    try { await conn.execute("ALTER TABLE rule_sets ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V4迁移 rule_sets.batch_id:", e.message); }
+    try { await conn.execute("ALTER TABLE rule_sets ADD INDEX idx_rule_sets_batch (batch_id)"); }
+    catch (e) { if (e.errno !== 1061) console.warn("[DB] V4迁移 idx_rule_sets_batch:", e.message); }
+    try { await conn.execute("ALTER TABLE smart_fill_data ADD COLUMN batch_id INT DEFAULT NULL AFTER rule_set_id"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V4迁移 smart_fill_data.batch_id:", e.message); }
+    try { await conn.execute("ALTER TABLE smart_fill_data ADD INDEX idx_sfd_batch (batch_id)"); }
+    catch (e) { if (e.errno !== 1061) console.warn("[DB] V4迁移 idx_sfd_batch:", e.message); }
+
+    // ★ V5 迁移：scoring_rules 直接关联批次
+    try { await conn.execute("ALTER TABLE scoring_rules ADD COLUMN batch_id INT DEFAULT NULL AFTER rule_set_id"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V5迁移 scoring_rules.batch_id:", e.message); }
+    try { await conn.execute("ALTER TABLE scoring_rules ADD INDEX idx_sr_batch (batch_id)"); }
+    catch (e) { if (e.errno !== 1061) console.warn("[DB] V5迁移 idx_sr_batch:", e.message); }
+
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 

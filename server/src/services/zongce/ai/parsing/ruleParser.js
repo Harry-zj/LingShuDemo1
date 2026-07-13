@@ -1,4 +1,4 @@
-﻿const { pool } = require("../../../../config/database");
+const { pool } = require("../../../../config/database");
 const { chatStreamJson } = require("../deepseek");
 const { V3_RULE_PARSE_SYSTEM } = require("../prompts");
 const { validateV2RuleParse } = require("../schemas");
@@ -456,7 +456,7 @@ function validateMergedResult(merged) {
 // ============================================================
 //  V2 规则解析
 // ============================================================
-async function parseRuleSourceV2(sourceId, userId, onProgress) {
+async function parseRuleSourceV2(sourceId, userId, onProgress, batchId) {
   const [sources] = await pool.execute("SELECT * FROM rule_sources WHERE id = ?", [sourceId]);
   if (!sources.length) throw new Error("规则来源不存在");
   const source = sources[0];
@@ -479,7 +479,7 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
   if (onProgress) await onProgress('extracting', { blocks: blocks.length, headings: blocks.filter(b=>b.block_type==='heading').length });
 
   // ===== 2. 创建 rule_set + 写 doc_blocks =====
-  const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, version_label, status) VALUES (?, ?, 'draft')", [userId, source.file_name || '规则集']);
+  const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, batch_id, version_label, status) VALUES (?, ?, ?, 'draft')", [userId, batchId || null, source.file_name || '规则集']);
   const ruleSetId = rs.insertId;
   await pool.execute("INSERT INTO rule_set_documents (rule_set_id, rule_source_id, document_role) VALUES (?, ?, 'primary')", [ruleSetId, sourceId]);
   const [parseRun] = await pool.execute(
@@ -612,8 +612,8 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
       const maxScore = r.max_score || null;
       const dedupGroup = r.dedup_group || null;
       await conn.execute(
-        "INSERT INTO scoring_rules (rule_set_id, user_id, section, item_key, item_name, score_level, score_rank, score, keywords, description, max_score, dedup_group, status) VALUES (?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
-        [ruleSetId, userId, itemKey, itemName, scoreLevel, scoreRank, score, keywords, description, maxScore, dedupGroup]
+        "INSERT INTO scoring_rules (rule_set_id, batch_id, user_id, section, item_key, item_name, score_level, score_rank, score, keywords, description, max_score, dedup_group, status) VALUES (?, ?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+        [ruleSetId, batchId || null, userId, itemKey, itemName, scoreLevel, scoreRank, score, keywords, description, maxScore, dedupGroup]
       );
       ruleCount++;
     }

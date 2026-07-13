@@ -12,49 +12,11 @@ exports.getSmartResult = async (req, res) => {
 
 exports.updateSmartResult = async (req, res) => {
   try {
-    const [forms] = await pool.execute("SELECT * FROM assessment_forms WHERE student_id = ? LIMIT 1", [req.user.id]);
-    let form;
-    if (forms.length === 0) {
-      const [users] = await pool.execute("SELECT real_name, student_no, college, major, grade, class_name FROM users WHERE id = ?", [req.user.id]);
-      if (!users.length) return res.json(Res.error("用户不存在"));
-      const u = users[0];
-      const [result] = await pool.execute(
-        "INSERT INTO assessment_forms (batch_id, student_id, student_name, student_no, college, major, grade, class_name, from_smart_fill, status, scores) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        [1, req.user.id, u.real_name || '', u.student_no || '', u.college || '', u.major || '', u.grade || '', u.class_name || '', 1, 'smart_ready',
-         JSON.stringify({ f1_basic_quality:0, f2_course_learning:0, f3_innovation_practice:0, total:0 })]
-      );
-      form = { id: result.insertId, status: 'smart_ready', level: '', manual_level: '' };
-    } else {
-      form = forms[0];
-    }
-    const { items: newItems, personal_summary } = req.body || {};
-    if (personal_summary !== undefined) await pool.execute("UPDATE assessment_forms SET personal_summary = ? WHERE id = ?", [personal_summary, form.id]);
-    if (Array.isArray(newItems)) {
-      const f1 = newItems.filter(i => i.section === 'F1').reduce((s, i) => s + Number(i.score || 0), 0);
-      const f2 = newItems.filter(i => i.section === 'F2').reduce((s, i) => s + Number(i.score || 0), 0);
-      const f3 = newItems.filter(i => i.section === 'F3').reduce((s, i) => s + Number(i.score || 0), 0);
-      const scores = { f1_basic_quality: f1, f2_course_learning: f2, f3_innovation_practice: f3, total: f1 + f2 + f3 };
-      await pool.execute("UPDATE assessment_forms SET scores = ?, level = ? WHERE id = ?", [JSON.stringify(scores), calcLevel(scores.total), form.id]);
-      await pool.execute("DELETE FROM assessment_form_items WHERE form_id = ?", [form.id]);
-      for (let i = 0; i < newItems.length; i++) {
-        const it = newItems[i];
-        await pool.execute("INSERT INTO assessment_form_items (form_id, section, sub_key, title, reason, score, evidence_ids, editable, sort_order) VALUES (?,?,?,?,?,?,?,?,?)",
-          [form.id, it.section, it.subKey, it.title||'', it.reason||'', it.score||0, JSON.stringify(it.evidence_ids||[]), it.editable?1:0, i]);
-      }
-      // Sync to evaluation_results for personal evaluation
-      const aScores={}, bScores={};
-      newItems.filter(i=>i.section==='F1').forEach(i=>{aScores[i.subKey]=Number(i.score)||0});
-      newItems.filter(i=>i.section==='F3').forEach(i=>{bScores[i.subKey]=Number(i.score)||0});
-      const t = f1*0.1 + f2*0.65 + f3*0.25;
-      const g = t>=90?'优秀':t>=80?'良好':t>=70?'中等':t>=60?'合格':'待提升';
-      await pool.execute('INSERT INTO evaluation_results (user_id,batch_id,total_score,grade,formula,dimension_scores) VALUES (?,101,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score),grade=VALUES(grade),dimension_scores=VALUES(dimension_scores)',
-        [req.user.id, parseFloat(t.toFixed(2)), g, 'F=F1*0.1+F2*0.65+F3*0.25', JSON.stringify({aScores,bScores,scores:{F1:f1,F2:f2,F3:f3},classAvg:{},rank:0,totalStudents:0})]);
-    }
-    const [items] = await pool.execute("SELECT * FROM assessment_form_items WHERE form_id = ? ORDER BY sort_order", [form.id]);
-    const [records] = await pool.execute("SELECT * FROM assessment_review_records WHERE form_id = ?", [form.id]);
-    const [updated] = await pool.execute("SELECT * FROM assessment_forms WHERE id = ?", [form.id]);
-    res.json(Res.success(formView(updated[0], items, records), "智能填表结果已修改"));
-  } catch (e) { res.json(Res.error(e.message)); }
+    const result = await module3Service.updateSmartResult(req.user.id, req.body || {});
+    res.json(Res.success(result, "智能填表结果已修改"));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
 };
 
 exports.submitSmartResult = async (req, res) => {

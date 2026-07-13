@@ -1,4 +1,8 @@
-﻿import request from "./request";
+import request from "./request";
+
+// ===== 测评批次（智能填表模块使用） =====
+export const getBatches = () =>
+  request.get("/zongce/batches");
 
 // ===== 规则 =====
 export const uploadRuleFiles = (formData) =>
@@ -65,10 +69,10 @@ export const generateMatchDescription = (materialId, data) =>
   request.post(`/zongce/materials/${materialId}/generate-description`, data, { timeout: 30000 });
 
 // ===== 评分 =====
-export const calculateScore = () =>
-  request.post("/zongce/evaluation/calculate");
+export const calculateScore = (rule_set_id, material_ids, batch_id) =>
+  request.post("/zongce/evaluation/calculate", { rule_set_id, material_ids, batch_id });
 
-export const getScoreList = (ruleSetId) => request.get("/zongce/evaluation/score-list", { params: { rule_set_id: ruleSetId } });
+export const getScoreList = (ruleSetId, batchId) => request.get("/zongce/evaluation/score-list", { params: { rule_set_id: ruleSetId, batch_id: batchId } });
 export const getEvaluation = () =>
   request.get("/zongce/evaluation/result");
 
@@ -81,20 +85,20 @@ export const uploadTemplate = (formData) =>
 export const getTemplates = () =>
   request.get("/zongce/templates");
 
-export const doFill = (templateId) =>
+export const doFill = (templateId, batchId) =>
   request.post(`/zongce/fill/${templateId}`);
 
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });
 
-export const getFillPreview = () =>
-  request.get("/zongce/fill-preview");
+export const getFillPreview = (batchId) =>
+  request.get("/zongce/fill-preview", { params: { batch_id: batchId } });
 // ===== 智能填表数据保存 =====
-export const saveFillData = (items) =>
-  request.post("/zongce/smart-fill/save", { items });
+export const saveFillData = (items, batchId) =>
+  request.post("/zongce/smart-fill/save", { items, batch_id: batchId });
 
-export const getSmartFillData = (ruleSetId) =>
-  request.get("/zongce/smart-fill/data", { params: { rule_set_id: ruleSetId } });
+export const getSmartFillData = (ruleSetId, batchId) =>
+  request.get("/zongce/smart-fill/data", { params: { rule_set_id: ruleSetId, batch_id: batchId } });
 
 export const generateF1Description = (section, item_key, item_name) =>
   request.post("/zongce/smart-fill/generate-f1", { section, item_key, item_name });
@@ -130,18 +134,18 @@ export const chatFillDoFill = (templateId, fieldContents) =>
 
 
 // ===== V2 规则集 =====
-export const createRuleSet = () => request.post("/zongce/rule-sets");
-export const getRuleSets = () => request.get("/zongce/rule-sets");
+export const createRuleSet = (batchId) => request.post("/zongce/rule-sets", { batch_id: batchId });
+export const getRuleSets = (batchId) => request.get("/zongce/rule-sets", { params: { batch_id: batchId } });
 export const getRuleSet = (id) => request.get(`/zongce/rule-sets/${id}`);
 export const publishRuleSet = (id) => request.post(`/zongce/rule-sets/${id}/publish`);
 export const deleteRuleSet = (id) => request.delete(`/zongce/rule-sets/${id}`);
 
 // ===== V2 规则解析 =====
-export const parseRuleSource = (id) =>
-  request.post(`/zongce/rules/sources/${id}/parse`, null, { timeout: 30000 });
+export const parseRuleSource = (id, batchId) =>
+  request.post(`/zongce/rules/sources/${id}/parse`, null, { params: { batch_id: batchId }, timeout: 30000 });
 
 // ===== V2 评分 =====
-export const calculateScoreV2 = (rule_set_id, material_ids) =>
-  request.post("/zongce/evaluation/calculate", { rule_set_id, material_ids });
+export const calculateScoreV2 = (rule_set_id, material_ids, batch_id) =>
+  request.post("/zongce/evaluation/calculate", { rule_set_id, material_ids, batch_id });
 export const getCalculation = (id) => request.get(`/zongce/calculations/${id}`);
 export const resumeCalculation = (id) => request.post(`/zongce/calculations/${id}/resume`);

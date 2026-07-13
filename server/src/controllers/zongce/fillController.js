@@ -58,7 +58,8 @@ exports.doFill = async (req, res) => {
     if (!fs.existsSync(templatePath)) return res.json(Res.error("模板文件丢失，请重新上传"));
 
     // ★ 从数据库获取当前用户的真实填表数据
-    const fillData = await getFillData(req.user.id);
+    const { batch_id } = req.query;
+    const fillData = await getFillData(req.user.id, batch_id);
 
     const templateBuffer = fs.readFileSync(templatePath);
     const outputBuffer = smartFill(templateBuffer, fillData);
@@ -121,7 +122,8 @@ exports.downloadFill = async (req, res) => {
 // ★ 获取当前用户的填表预览数据（替代原来的 mock-data）
 exports.getFillPreview = async (req, res) => {
   try {
-    const preview = await getFillDataPreview(req.user.id);
+    const { batch_id } = req.query;
+    const preview = await getFillDataPreview(req.user.id, batch_id);
     res.json(Res.success(preview));
   } catch (e) {
     console.error("[预览] 失败:", e.message);

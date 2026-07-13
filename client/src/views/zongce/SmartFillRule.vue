@@ -102,7 +102,7 @@ import { ref, computed } from 'vue'
 import { useUserStore } from '../../stores/user'
 import * as api from '../../api/zongce'
 
-const props = defineProps({ ruleSources: Array, ruleSets: Array })
+const props = defineProps({ ruleSources: Array, ruleSets: Array, batchId: { type: [Number, String], default: '' } })
 const emit = defineEmits(['remove-source', 'refresh'])
 
 const ruleText = ref('')
@@ -229,7 +229,7 @@ async function doParse(sourceId) {
   parsingId.value = sourceId
   parseProgress.value = { completed: 0, total: 1 }
   try {
-    const startRes = await api.parseRuleSource(sourceId)
+    const startRes = await api.parseRuleSource(sourceId, props.batchId || undefined)
     if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
 
     const taskId = startRes.data.taskId

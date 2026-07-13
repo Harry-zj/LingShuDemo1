@@ -65,7 +65,7 @@ exports.parseRuleSource = async (req, res) => {
     const taskId = r.insertId;
 
     // 后台执行（不 await），通过 ai_tasks 表追踪进度
-    runParseV2InBackground(taskId, req.params.id, req.user.id);
+    runParseV2InBackground(taskId, req.params.id, req.user.id, req.query.batch_id);
 
     res.json(Res.success({ taskId }, "解析任务已启动"));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -128,7 +128,7 @@ exports.streamParseProgress = async (req, res) => {
   req.on("close", () => { clearInterval(timer); });
 };
 
-async function runParseV2InBackground(taskId, sourceId, userId) {
+async function runParseV2InBackground(taskId, sourceId, userId, batchId) {
   console.log(`[V2Parse] 开始解析 sourceId=${sourceId} userId=${userId} taskId=${taskId}`);
 
   // 进度回调：更新 ai_tasks.result 供 SSE 轮询
@@ -142,7 +142,7 @@ async function runParseV2InBackground(taskId, sourceId, userId) {
   };
 
   try {
-    const result = await parseRuleSourceV2(sourceId, userId, reportProgress);
+    const result = await parseRuleSourceV2(sourceId, userId, reportProgress, batchId);
     console.log(`[V2Parse] 解析成功: ${JSON.stringify(result)}`);
     await pool.execute(
       "UPDATE ai_tasks SET status = 'completed', result = ? WHERE id = ?",

@@ -158,13 +158,13 @@ async function matchSummaryToRules(summaryText, fact, ruleSetId, userId) {
 
   // V3: Single table query - scoring_rules
   let [scoringRules] = await pool.execute(
-    `SELECT id, rule_set_id, user_id, section, item_key, item_name,
+    `SELECT id, rule_set_id, batch_id, user_id, section, item_key, item_name,
             score_level, score_rank, score, keywords, description,
             max_score, dedup_group
      FROM scoring_rules
-     WHERE status = 'active' AND (user_id = ? OR rule_set_id = ?)
+     WHERE status = 'active' AND (rule_set_id = ? OR (user_id = ? AND batch_id IS NULL))
      ORDER BY item_key, score_level, score_rank`,
-    [userId, ruleSetId || 0]
+    [ruleSetId || 0, userId]
   );
 
   // Normalize to common format

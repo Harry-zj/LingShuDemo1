@@ -1,6 +1,9 @@
-const router = require("express").Router();
+﻿const router = require("express").Router();
 const auth = require("../middleware/auth");  // 开发模式，正式上线改回 ../middleware/auth
 const upload = require("../middleware/upload");
+const { pool } = require("../config/database");
+const Res = require("../utils/response");
+
 
 const ruleCtrl = require("../controllers/zongce/ruleController");
 const ruleSetCtrl = require("../controllers/zongce/ruleSetController");
@@ -84,5 +87,16 @@ router.post("/chat-fill/upload",      auth, upload.single("file"), chatFillCtrl.
 router.post("/chat-fill/analyze/:templateId", auth, chatFillCtrl.analyzeTemplate);
 router.post("/chat-fill/chat",        auth, chatFillCtrl.chatField);
 router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
+
+
+// ===== 测评批次（智能填表模块使用） =====
+router.get("/batches", auth, async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      "SELECT id, school_year, title, college, grade, status, start_time, end_time FROM assessment_batches WHERE status <> 'deleted' ORDER BY created_at DESC"
+    );
+    res.json(Res.success(rows));
+  } catch (e) { res.json(Res.error(e.message)); }
+});
 
 module.exports = router;
