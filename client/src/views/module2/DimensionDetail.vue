@@ -36,8 +36,7 @@
 
       <div class="de-acts">
         <div class="de-act-card" v-for="(act, i) in displayActs" :key="i"
-          :style="{ animationDelay: (0.08 * i) + 's' }"
-          @click="openDetail(act)">
+          :style="{ animationDelay: (0.08 * i) + 's' }">
           <div class="de-act-bar" :style="{background: 'linear-gradient(90deg,' + dim.color + ',' + dim.color + '44)'}"></div>
           <div class="de-act-content">
             <div class="de-act-head">
@@ -58,32 +57,11 @@
       </div>
     </div>
 
-    <!-- 详情弹窗 -->
-    <teleport to="body">
-      <div class="modal-overlay" v-if="detailAct" @click.self="detailAct = null">
-        <div class="modal-card" @click.stop>
-          <div class="modal-accent" :style="{background:dim.color}"></div>
-          <div class="modal-header">
-            <h3>{{ detailAct.title }}</h3>
-            <button class="modal-close" @click="detailAct = null"><VIcon icon="mdi:close" /></button>
-          </div>
-          <span class="modal-cat" v-if="detailAct.cat" :style="{color:dim.color, background:dim.color+'10'}">{{ detailAct.cat }}</span>
-          <p class="modal-desc">{{ detailAct.fullDesc || detailAct.desc }}</p>
-          <div class="modal-info" v-if="detailAct.url">
-            <VIcon icon="mdi:web" /> 官方网址：
-            <a :href="detailAct.url" target="_blank" class="modal-link">{{ detailAct.url }}</a>
-          </div>
-          <div class="modal-info" v-if="detailAct.score">
-            <VIcon icon="mdi:star-outline" /> 预计加分：<strong>{{ detailAct.score }}</strong>
-          </div>
-        </div>
-      </div>
-    </teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from "vue"
+import { computed, ref, onMounted, onUnmounted } from "vue"
 import { useRoute } from "vue-router"
 import { useUserStore } from "../../stores/user"
 import { DIMENSION_CONFIG } from "../../utils/scoreHelper"
@@ -93,15 +71,16 @@ const userStore = useUserStore()
 const dimKey = computed(() => route.params.key || 'de')
 const dim = computed(() => DIMENSION_CONFIG.find(d => d.key === dimKey.value) || DIMENSION_CONFIG[0])
 const displayActs = ref([])
-const detailAct = ref(null)
 const addedSet = ref(new Set())
 const currentSlide = ref(0)
+let slideTimer = null
 
 const carouselImages = computed(() => displayActs.value.filter(a => a.image).map(a => a.image))
-function prevSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value - 1 + carouselImages.value.length) % carouselImages.value.length }
-function nextSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value + 1) % carouselImages.value.length }
-
-function openDetail(act) { detailAct.value = act }
+function prevSlide() { resetTimer(); if (carouselImages.value.length) currentSlide.value = (currentSlide.value - 1 + carouselImages.value.length) % carouselImages.value.length }
+function nextSlide() { resetTimer(); if (carouselImages.value.length) currentSlide.value = (currentSlide.value + 1) % carouselImages.value.length }
+function startTimer() { stopTimer(); if (carouselImages.value.length > 1) slideTimer = setInterval(nextSlide, 3500) }
+function stopTimer() { if (slideTimer) { clearInterval(slideTimer); slideTimer = null } }
+function resetTimer() { stopTimer(); startTimer() }
 
 function seededRandom(seed) {
   let h = 0; for (let i = 0; i < seed.length; i++) { h = ((h << 5) - h) + seed.charCodeAt(i); h |= 0 }
@@ -237,8 +216,8 @@ onMounted(() => {
   const pool = allPools[dimKey.value] || allPools.de
   const count = PICK_COUNT[dimKey.value] || 5
   const uid = userStore.user?.id || userStore.user?.username || 'default'
-  const seed = `dim_v7_${dimKey.value}_${uid}`
-  const cacheKey = `lingshu_dim_acts_v7_${dimKey.value}_${uid}`
+  const seed = `dim_v9_${dimKey.value}_${uid}`
+  const cacheKey = `lingshu_dim_acts_v9_${dimKey.value}_${uid}`
 
   const cached = localStorage.getItem(cacheKey)
   if (cached) {
@@ -255,10 +234,19 @@ onMounted(() => {
       return bMatch - aMatch  // 匹配的排前面
     })
   }
-  const picked = pickSeeded(sorted.slice(0, 12), Math.min(count, pool.length), seed)
+  // 有图片的活动优先入选
+  const withImage = sorted.filter(a => a.image)
+  const withoutImage = sorted.filter(a => !a.image)
+  const imgPicked = pickSeeded(withImage, Math.min(withImage.length, count), seed + '_img')
+  const remaining = count - imgPicked.length
+  const restPicked = remaining > 0 ? pickSeeded(withoutImage, Math.min(remaining, withoutImage.length), seed + '_rest') : []
+  const picked = [...imgPicked, ...restPicked]
   displayActs.value = picked
   localStorage.setItem(cacheKey, JSON.stringify(picked))
+  startTimer()
 })
+
+onUnmounted(() => stopTimer())
 </script>
 
 <style scoped>
@@ -292,7 +280,7 @@ onMounted(() => {
 .de-hero-count { text-align:center; margin-top:8px; font-size:13px; color:var(--color-text-tertiary); }
 
 .de-acts { flex:1; display:flex; flex-direction:column; gap:16px; min-width:0; }
-.de-act-card { position:relative; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; box-shadow:0 1px 8px rgba(0,0,0,0.02); transition:all 0.25s ease; opacity:0; animation:cardIn 0.5s ease forwards; cursor:pointer; }
+.de-act-card { position:relative; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; box-shadow:0 1px 8px rgba(0,0,0,0.02); transition:all 0.25s ease; opacity:0; animation:cardIn 0.5s ease forwards; }
 .de-act-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.06); transform:translateY(-2px); }
 @keyframes cardIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 .de-act-bar { height:3px; }
@@ -307,20 +295,6 @@ onMounted(() => {
 .de-act-desc { font-size:15px; color:var(--color-text-secondary); line-height:1.7; padding-left:42px; }
 .de-act-url { display:flex; align-items:center; gap:4px; margin-top:8px; padding-left:42px; font-size:12px; color:var(--color-primary); text-decoration:none; opacity:0.7; transition:opacity 0.15s; }
 .de-act-url:hover { opacity:1; text-decoration:underline; }
-
-/* 弹窗 */
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.15); backdrop-filter:blur(4px); z-index:1000; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.2s ease; }
-.modal-card { background:#fff; border-radius:20px; padding:0; max-width:520px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 12px 48px rgba(0,0,0,0.1); position:relative; }
-.modal-accent { height:4px; opacity:0.5; border-radius:4px 4px 0 0; }
-.modal-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 8px; }
-.modal-header h3 { font-size:18px; font-weight:700; margin:0; color:var(--color-text); }
-.modal-close { width:32px;height:32px; border-radius:50%; border:1px solid var(--color-border); background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); }
-.modal-close:hover { border-color:var(--color-primary); color:var(--color-primary); }
-.modal-cat { display:inline-block; margin:0 24px 12px; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:500; }
-.modal-desc { padding:0 24px; font-size:15px; color:var(--color-text-secondary); line-height:1.8; }
-.modal-info { display:flex; align-items:center; gap:6px; padding:10px 24px; font-size:13px; color:var(--color-text-secondary); }
-.modal-info strong { color:#059669; }
-.modal-link { color:var(--color-primary); word-break:break-all; }
 
 @media (max-width:768px) {
   .de-layout { flex-direction:column; }
