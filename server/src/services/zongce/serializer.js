@@ -136,6 +136,24 @@ async function serializeMaterial(mat) {
     total_fact_count: result.facts.length,
   };
 
+  // ★ 构建 score_previews：从已匹配的 facts 中提取，供前端 V3 匹配卡片渲染
+  const score_previews = [];
+  for (const f of result.facts) {
+    if (!f.match || f.match.score_preview == null) continue;
+    score_previews.push({
+      _ef_id: f.fact_id,
+      indicator_code: f.match.indicator?.code || '',
+      indicator_name: f.match.indicator?.name || '',
+      matched_rule: f.match.rule || f.match.indicator || {},
+      score_preview: f.match.score_preview,
+      similarity_score: f.match.confidence || 0,
+      needs_review: f.match.needs_review || false,
+      ai_description: f.match.reason || '',
+      confirmed: f.match.review_status === 'confirmed',
+    });
+  }
+  result.score_previews = score_previews;
+
   return result;
 }
 

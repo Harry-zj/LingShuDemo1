@@ -34,18 +34,87 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, onBeforeUnmount } from 'vue'
 import { useSmartFillStore } from '@/stores/smartFill'
+import * as api from '@/api/zongce'
 
 const emit = defineEmits(['saved'])
 const store = useSmartFillStore()
 const isCompleted = ref(false)
+
+// ★ 自动保存：监听 F2 课程变化，debounce 800ms 后保存到服务端
+let saveTimer = null
+watch(
+  () => store.f2Courses.map(c => ({ name: c.name, credit: c.credit, score: c.score })),
+  () => {
+    clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      const validCourses = store.f2Courses.filter(c => c.name)
+      if (validCourses.length > 0) {
+        api.saveFillData([{
+          section: 'F2',
+          item_key: 'COURSE',
+          score: 0,
+          description: '',
+          extra_data: validCourses,
+          rule_set_id: 0
+        }]).catch(() => {})
+      }
+    }, 800)
+  },
+  { deep: true }
+)
+
+// 组件卸载前立即保存 F1 + F2
+onBeforeUnmount(() => {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  const validCourses = store.f2Courses.filter(c => c.name)
+  const items = store.f1Items.map(a => ({
+    section: 'F1',
+    item_key: a.key,
+    score: a.base - a.score,
+    description: a.detail,
+    rule_set_id: 0
+  }))
+  if (validCourses.length > 0) {
+    items.push({
+      section: 'F2',
+      item_key: 'COURSE',
+      score: 0,
+      description: '',
+      extra_data: validCourses,
+      rule_set_id: 0
+    })
+  }
+  if (items.length > 0) api.saveFillData(items).catch(() => {})
+})
 
 function handleComplete() {
   // 至少保证有一行空行
   if (store.f2Courses.length === 0) store.f2Courses.push({ name: '', credit: 2, score: 0 })
   isCompleted.value = true
   emit('saved')
+  // 立即保存
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
+  const validCourses = store.f2Courses.filter(c => c.name)
+  const items = store.f1Items.map(a => ({
+    section: 'F1',
+    item_key: a.key,
+    score: a.base - a.score,
+    description: a.detail,
+    rule_set_id: 0
+  }))
+  if (validCourses.length > 0) {
+    items.push({
+      section: 'F2',
+      item_key: 'COURSE',
+      score: 0,
+      description: '',
+      extra_data: validCourses,
+      rule_set_id: 0
+    })
+  }
+  if (items.length > 0) api.saveFillData(items).catch(() => {})
   setTimeout(() => { isCompleted.value = false }, 2000)
 }
 
