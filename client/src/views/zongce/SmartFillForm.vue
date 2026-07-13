@@ -300,13 +300,19 @@ function removeTemplate(){emit("update:uploadedTemplate",null);emit("remove-temp
 
 let currentFillId=null
 async function handleDoFill(){
-  if(!props.uploadedTemplate)return;
+  if(!props.uploadedTemplate){fillError.value='请先上传模板';return}
   isFilling.value=true;fillError.value='';
   try{
-    const fd=new FormData();fd.append('file',props.uploadedTemplate.file);
-    const upRes=await api.uploadTemplate(fd);
-    if(upRes.code!==200){fillError.value=upRes.msg;return}
-    const fillRes=await api.doFill(upRes.data.id);
+    let templateId = props.uploadedTemplate.id;
+    // ★ 新上传的模板（有 file 对象）需先上传；服务器恢复的模板（有 id）直接用
+    if (!templateId && props.uploadedTemplate.file) {
+      const fd=new FormData();fd.append('file',props.uploadedTemplate.file);
+      const upRes=await api.uploadTemplate(fd);
+      if(upRes.code!==200){fillError.value=upRes.msg;return}
+      templateId = upRes.data.id;
+    }
+    if (!templateId) {fillError.value='模板无效，请重新上传';return}
+    const fillRes=await api.doFill(templateId, props.batchId);
     if(fillRes.code!==200){fillError.value=fillRes.msg;return}
     currentFillId=fillRes.data.fillId;fillDone.value=true
   }catch(e){fillError.value='失败:'+(e.response?.data?.msg||e.message)}

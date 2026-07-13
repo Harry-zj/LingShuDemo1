@@ -61,7 +61,7 @@
       <div class="section-header">
         <button class="btn-back" @click="activeCard = null">返回</button>
         <h3>{{ sectionTitle }}</h3>
-        <span v-if="selectedBatch" class="section-batch-label">当前批次：{{ selectedBatch.title }}</span>
+        <span v-if="currentBatch" class="section-batch-label">当前批次：{{ currentBatch.title }}</span>
       </div>
       <SmartFillF1 v-if="activeCard === 'f1'" />
       <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
