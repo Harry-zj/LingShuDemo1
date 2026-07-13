@@ -85,19 +85,19 @@ onMounted(load);
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
 .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-.stat-card { padding: 20px; border-radius: 8px; background: var(--color-surface); display: flex; align-items: center; gap: 16px; border: 1px solid var(--color-border); }
+.stat-card { padding: 20px; border-radius: 8px !important; background: var(--color-surface); display: flex; align-items: center; gap: 16px; border: 1px solid var(--color-border); }
 .stat-card .stat-icon { font-size: 32px; }
 .stat-card.warning .stat-icon { color: #E37400; }
 .stat-card.success .stat-icon { color: #34A853; }
 .stat-card.error .stat-icon { color: #D93025; }
 .stat-num { font-size: 24px; font-weight: var(--font-weight-semibold); }
 .stat-lbl { font-size: 13px; color: var(--color-text-secondary); }
-.review-list { padding: 20px; border-radius: 8px; }
+.review-list { padding: 20px; border-radius: 8px !important; }
 .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
-.panel-badge { padding: 4px 10px; border-radius: 8px; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
+.panel-badge { padding: 4px 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
 .student-list { display: flex; flex-direction: column; gap: 12px; }
-.student-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; padding: 16px; border-radius: 8px; background: var(--color-bg); cursor: pointer; animation: slideInUp 0.4s var(--easing-decelerate) both; }
+.student-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 16px; padding: 16px; border-radius: 8px !important; background: var(--color-bg); cursor: pointer; animation: slideInUp 0.4s var(--easing-decelerate) both; }
 .student-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .student-name { font-weight: var(--font-weight-semibold); margin-bottom: 4px; }
 .student-meta { font-size: 13px; color: var(--color-text-secondary); line-height: 1.5; }
@@ -111,4 +111,10 @@ onMounted(load);
   .stats-row { grid-template-columns: 1fr; }
   .student-row { grid-template-columns: 1fr; }
 }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

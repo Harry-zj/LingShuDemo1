@@ -311,15 +311,15 @@ onMounted(load);
 .page-header h2 { margin-top: 5px; font-size: 24px; font-weight: var(--font-weight-semibold); }
 .eyebrow { color: var(--color-text-tertiary); font-size: 12px; }
 .page-desc { margin-top: 5px; color: var(--color-text-secondary); font-size: 14px; }
-.section-icon { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 8px; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 27px; }
-.panel-card { padding: 24px; border-radius: 8px; display: flex; flex-direction: column; gap: 16px; }
+.section-icon { display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 27px; }
+.panel-card { padding: 24px; border-radius: 8px !important; display: flex; flex-direction: column; gap: 16px; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; }
 .panel-count { color: var(--color-text-secondary); font-size: 13px; }
 .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .field-block { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .field-block > span { color: var(--color-text-secondary); font-size: 12px; }
-.scope-summary, .assignment-guide { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px; background: var(--color-bg); color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
+.scope-summary, .assignment-guide { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
 .assignment-guide > svg, .scope-summary > svg { flex: 0 0 auto; margin-top: 2px; color: var(--color-primary); }
 .assignment-guide div { display: flex; flex-direction: column; gap: 2px; }
 .assignment-guide strong { color: var(--color-text-primary); }
@@ -327,11 +327,11 @@ onMounted(load);
 .scope-tip { color: var(--color-text-secondary); font-size: 13px; }
 .member-toolbar { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
 .batch-field { min-width: min(440px, 100%); }
-.search-bar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); }
+.search-bar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); }
 .search-bar input { flex: 1; border: none; background: transparent; padding: 0; min-height: auto; }
-input, select { min-height: 42px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); outline: none; }
+input, select { min-height: 42px; border: 1px solid var(--color-border); border-radius: 8px !important; padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); outline: none; }
 select[multiple] { min-height: 96px; }
-.btn-primary, .btn-outline, .danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.btn-primary, .btn-outline, .danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 8px !important; cursor: pointer; white-space: nowrap; }
 .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
 .btn-primary { border: none; background: var(--gradient-primary); color: white; }
 .btn-outline { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); }
@@ -342,13 +342,13 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--color-border); font-size: 13px; white-space: nowrap; }
 th { color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
 .status-text { color: var(--color-text-secondary); }
-.tag { padding: 4px 10px; border-radius: 8px; background: var(--color-bg); color: var(--color-text-secondary); }
+.tag { padding: 4px 10px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-text-secondary); }
 .tag.active { background: rgba(52,168,83,.12); color: #34a853; }
-.batch-config { padding: 17px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-bg); display: flex; flex-direction: column; gap: 14px; }
+.batch-config { padding: 17px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); display: flex; flex-direction: column; gap: 14px; }
 .batch-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .batch-title > div { display: flex; flex-direction: column; gap: 4px; }
 .batch-title span { color: var(--color-text-secondary); font-size: 13px; }
-.relation-count { padding: 4px 10px; border-radius: 8px; background: var(--color-surface); }
+.relation-count { padding: 4px 10px; border-radius: 8px !important; background: var(--color-surface); }
 .assignment-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; padding-top: 12px; border-top: 1px solid var(--color-border); }
 .row-delete { margin-bottom: 2px; }
 .config-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
@@ -359,4 +359,10 @@ th { color: var(--color-text-secondary); font-weight: var(--font-weight-medium);
   .section-icon { display: none; }
   .config-actions { justify-content: stretch; }
 }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

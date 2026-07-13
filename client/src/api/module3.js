@@ -1,8 +1,9 @@
 import request from "./request";
 export const getBatches = (p) => request.get("/module3/batches", { params: p });
 export const getStudentBatches = () => request.get("/module3/student-batches");
-export const ensureStudentExampleForm = (d) => request.post("/module3/student/example-form", d);
-export const deleteStudentExampleForm = (batchId) => request.delete(`/module3/student/example-form/${batchId}`);
+export const getStudentForm = (batchId) => request.get(`/module3/student/forms/${batchId}`);
+export const updateStudentForm = (batchId, data) => request.put(`/module3/student/forms/${batchId}`, data);
+export const submitStudentForm = (batchId) => request.post(`/module3/student/forms/${batchId}/submit`);
 export const uploadStudentSupportMaterials = (formData) => request.post("/module3/student/support-materials", formData, { headers: { "Content-Type": "multipart/form-data" } });
 export const createBatch = (d) => request.post("/module3/batches", d);
 export const updateBatch = (id, d) => request.put(`/module3/batches/${id}`, d);
@@ -16,8 +17,8 @@ export const updateCounselorScope = (d) => request.put("/module3/counselor/scope
 export const setAssessmentMember = (id, d) => request.put(`/module3/students/${id}/member`, d);
 export const getMyMaterials = (p) => request.get("/module3/materials", { params: p });
 export const getFormDetail = (id) => request.get(`/module3/forms/${id}`);
-export const getFormDocumentPreview = (id) => request.get(`/module3/forms/${id}/document/preview`);
-export const downloadFormDocument = (id) => request.get(`/module3/forms/${id}/document/download`, { responseType: "blob" });
+export const getFormWordPreview = (id) => request.get(`/module3/forms/${id}/word-preview`);
+export const downloadFormWord = (id) => request.get(`/module3/forms/${id}/word`, { responseType: "blob" });
 export const setFormLevel = (id, d) => request.put(`/module3/forms/${id}/level`, d);
 export const reviewMaterial = (id, d) => request.put(`/module3/materials/${id}/review`, d);
 export const submitObjection = (id, d) => request.post(`/module3/forms/${id}/objections`, d);

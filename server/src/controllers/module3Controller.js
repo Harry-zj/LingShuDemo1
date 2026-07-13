@@ -1,4 +1,5 @@
 const fs = require("fs");
+const mammoth = require("mammoth");
 const Res = require("../utils/response");
 const service = require("../services/module3/service");
 const adminService = require("../services/module3/adminService");
@@ -38,22 +39,30 @@ exports.getStudentBatches = async (req, res) => {
   }
 };
 
-exports.ensureStudentExampleForm = async (req, res) => {
+exports.getStudentForm = async (req, res) => {
+  try {
+    res.json(Res.success(await service.getSmartResult(req.user.id, req.params.batchId)));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
+};
+
+exports.updateStudentForm = async (req, res) => {
   try {
     res.json(Res.success(
-      await service.ensureStudentExampleForm(req.user.id, req.body?.batch_id),
-      "示例综测表已准备"
+      await service.updateSmartResult(req.user.id, { ...(req.body || {}), batch_id: Number(req.params.batchId) }),
+      "综测明细已保存"
     ));
   } catch (error) {
     res.json(Res.error(error.message));
   }
 };
 
-exports.deleteStudentExampleForm = async (req, res) => {
+exports.submitStudentForm = async (req, res) => {
   try {
     res.json(Res.success(
-      await service.deleteStudentExampleForm(req.user.id, req.params.batchId),
-      "示例综测表已删除"
+      await service.submitSmartResult(req.user.id, { ...(req.body || {}), batch_id: Number(req.params.batchId) }),
+      "已提交并分配给跨班评价小组成员"
     ));
   } catch (error) {
     res.json(Res.error(error.message));
@@ -128,24 +137,26 @@ exports.getFormDetail = async (req, res) => {
   }
 };
 
-exports.getFormDocumentPreview = async (req, res) => {
+exports.getFormWordPreview = async (req, res) => {
   try {
-    res.json(Res.success(await service.getFormDocumentPreview(req.params.id, await currentUser(req))));
+    const source = await service.getFormWordSource(req.params.id, await currentUser(req));
+    const result = await mammoth.convertToHtml({ path: source.path });
+    res.json(Res.success({
+      html: result.value || "<p>该 Word 文档暂无可预览内容。</p>",
+      messages: (result.messages || []).map(message => message.message).filter(Boolean),
+      name: source.name,
+    }));
   } catch (error) {
     res.json(Res.error(error.message));
   }
 };
 
-exports.downloadFormDocument = async (req, res) => {
+exports.downloadFormWord = async (req, res) => {
   try {
-    const document = await service.getFormDocumentFile(req.params.id, await currentUser(req));
-    const stat = fs.statSync(document.filePath);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`);
-    res.setHeader("Content-Length", stat.size);
-    fs.createReadStream(document.filePath).pipe(res);
+    const source = await service.getFormWordSource(req.params.id, await currentUser(req));
+    res.download(source.path, source.name);
   } catch (error) {
-    res.status(404).json(Res.error(error.message));
+    res.json(Res.error(error.message));
   }
 };
 

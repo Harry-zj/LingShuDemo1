@@ -117,31 +117,37 @@ onMounted(loadBatches);
 <style scoped>
 .batch-page { display: flex; flex-direction: column; gap: 24px; animation: fadeIn .35s var(--easing-decelerate); }
 .back-link { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 0; border: 0; background: transparent; color: var(--color-primary); cursor: pointer; }
-.page-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 28px; border-radius: 8px; }
+.page-hero { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; padding: 28px; border-radius: 8px !important; }
 .eyebrow { display: inline-block; margin-bottom: 7px; color: var(--color-primary); font-size: 11px; font-weight: 700; letter-spacing: .13em; }
 .page-hero h2 { font-size: 25px; }
 .page-hero p { max-width: 760px; margin-top: 7px; color: var(--color-text-secondary); line-height: 1.7; }
-.hero-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 8px; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 28px; }
-.profile-warning { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border-radius: 8px; background: rgba(245,158,11,.10); }
+.hero-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 28px; }
+.profile-warning { display: flex; gap: 14px; align-items: flex-start; padding: 20px; border-radius: 8px !important; background: rgba(245,158,11,.10); }
 .profile-warning > svg { font-size: 28px; color: #d97706; }
 .profile-warning h3 { margin-bottom: 5px; font-size: 16px; }
 .profile-warning p { margin-bottom: 12px; color: var(--color-text-secondary); font-size: 13px; }
-.btn-primary.small { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: 8px; background: var(--gradient-primary); color: white; text-decoration: none; font-size: 13px; }
+.btn-primary.small { display: inline-flex; align-items: center; min-height: 34px; padding: 0 14px; border-radius: 8px !important; background: var(--gradient-primary); color: white; text-decoration: none; font-size: 13px; }
 .batch-section { display: flex; flex-direction: column; gap: 16px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; }
 .section-heading h3 { font-size: 18px; }
 .section-heading p, .section-heading > span { margin-top: 4px; color: var(--color-text-secondary); font-size: 13px; }
 .batch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
-.batch-card { display: flex; flex-direction: column; align-items: stretch; gap: 9px; min-height: 210px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px; color: var(--color-text-primary); text-align: left; cursor: pointer; transition: transform var(--duration-fast), border-color var(--duration-fast), box-shadow var(--duration-fast); }
+.batch-card { display: flex; flex-direction: column; align-items: stretch; gap: 9px; min-height: 210px; padding: 20px; border: 1px solid var(--color-border); border-radius: 8px !important; color: var(--color-text-primary); text-align: left; cursor: pointer; transition: transform var(--duration-fast), border-color var(--duration-fast), box-shadow var(--duration-fast); }
 .batch-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border)); box-shadow: var(--shadow-level-2); }
 .batch-head { display: flex; justify-content: space-between; align-items: center; }
 .batch-head > svg { color: var(--color-primary); }
-.status-pill { width: fit-content; padding: 5px 10px; border-radius: 8px; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: 12px; }
+.status-pill { width: fit-content; padding: 5px 10px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: 12px; }
 .batch-card strong { margin-top: 12px; font-size: 17px; }
 .batch-card p, .batch-card small { color: var(--color-text-secondary); line-height: 1.5; }
 .batch-card em { margin-top: auto; color: var(--color-primary); font-size: 12px; font-style: normal; font-weight: 600; }
-.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 20px; border-radius: 8px; color: var(--color-text-tertiary); text-align: center; }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 20px; border-radius: 8px !important; color: var(--color-text-tertiary); text-align: center; }
 .empty-state > svg { font-size: 42px; }
 .empty-state strong { color: var(--color-text-primary); }
 @media (max-width: 720px) { .page-hero, .section-heading { flex-direction: column; align-items: stretch; } .hero-icon { display: none; } }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

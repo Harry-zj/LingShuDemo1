@@ -159,18 +159,18 @@ onMounted(loadOrg);
 .org-page { display:flex; flex-direction:column; gap:22px; animation:fadeIn .35s var(--easing-decelerate); }
 .page-header h2 { font-size:22px; font-weight:var(--font-weight-semibold); }
 .page-desc { margin-top:4px; color:var(--color-text-secondary); font-size:13px; }
-.panel { padding:22px; border-radius: 8px; }
+.panel { padding:22px; border-radius: 8px !important; }
 .panel-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:14px; }
 .panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }
 .panel-header span { color:var(--color-text-secondary); font-size:13px; }
 .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
 .create-row { display:flex; gap:10px; }
 .create-row input { flex:1; }
-input, select { width:100%; height:40px; padding:0 12px; border:1px solid var(--color-border); border-radius: 8px; background:var(--color-surface); color:var(--color-text-primary); outline:none; }
-.btn-primary { display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 16px; margin-top:14px; border:0; border-radius: 8px; background:var(--gradient-primary); color:#fff; cursor:pointer; }
+input, select { width:100%; height:40px; padding:0 12px; border:1px solid var(--color-border); border-radius: 8px !important; background:var(--color-surface); color:var(--color-text-primary); outline:none; }
+.btn-primary { display:inline-flex; align-items:center; justify-content:center; height:40px; padding:0 16px; margin-top:14px; border:0; border-radius: 8px !important; background:var(--gradient-primary); color:#fff; cursor:pointer; }
 .create-row .btn-primary { margin-top:0; }
 .tag-list { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
-.tag-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; border-radius: 8px; background:var(--color-bg); }
+.tag-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px; border-radius: 8px !important; background:var(--color-bg); }
 .tag-row span { color:var(--color-text-secondary); font-size:12px; }
 .table-wrap { overflow:auto; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -180,4 +180,10 @@ th { color:var(--color-text-secondary); font-weight:600; }
 .link-danger { border:0; background:transparent; color:#dc2626; cursor:pointer; }
 .back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
 @media (max-width:800px) { .form-grid, .tag-list { grid-template-columns:1fr; } .create-row { flex-direction:column; } }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

@@ -82,9 +82,9 @@
     </div>
         <div v-if="props.uploadedTemplate" class="action-bar">
       <button class="btn primary large" :disabled="isFilling" @click="handleDoFill"><span v-if="isFilling" class="spinner"></span>一键填充</button>
+      <button v-if="!fillDone" class="btn success large" :disabled="isFilling" @click="submitToReview">提交审核</button>
       <button v-if="fillDone" class="btn success large" @click="handleDownload">下载已填写文件</button>
       <button v-if="fillDone" class="btn outline" @click="resetFill">重新填表</button>
-      <span v-if="fillDone" class="module3-sync-tip">Word 与 F1/F2/F3 数据已同步，可前往模块三选择批次查看。</span>
     </div>
     <details class="placeholder-guide">
       <summary>占位符使用说明</summary>
@@ -104,6 +104,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 import * as api from '@/api/zongce'
+import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
@@ -288,54 +289,15 @@ function validateAndUpload(file){
 }
 function removeTemplate(){emit("update:uploadedTemplate",null);fillDone.value=false;fillError.value=''}
 
-async function persistCurrentFillData() {
-  syncF1F2Data();
-  const items = [];
-  ["A1", "A2", "A3", "A4", "A5"].forEach(key => {
-    items.push({
-      section: "F1",
-      item_key: key,
-      score: Number(fillData.value[`F1_${key}_score`] || 0),
-      description: fillData.value[`F1_${key}_detail`] || "",
-      rule_set_id: props.ruleSetId || 0,
-    });
-  });
-  items.push({
-    section: "F2",
-    item_key: "COURSE",
-    score: Number(fillData.value.F2_weighted_avg || 0),
-    description: (fillData.value.F2_courses || []).map(course => course.name).filter(Boolean).join("；"),
-    extra_data: fillData.value.F2_courses || [],
-    rule_set_id: props.ruleSetId || 0,
-  });
-  ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8"].forEach(key => {
-    items.push({
-      section: "F3",
-      item_key: key,
-      score: Number(fillData.value[`F3_${key}_score`] || 0),
-      description: fillData.value[`F3_${key}_detail`] || "",
-      rule_set_id: props.ruleSetId || 0,
-    });
-  });
-  const result = await api.saveFillData(items);
-  if (result.code !== 200) throw new Error(result.msg || "智能填表数据保存失败");
-}
-
 let currentFillId=null
 async function handleDoFill(){
   if(!props.uploadedTemplate)return;
   isFilling.value=true;fillError.value='';
   try{
-    await persistCurrentFillData();
-    let templateId = props.uploadedTemplate.id;
-    if (!templateId) {
-      if (!props.uploadedTemplate.file) throw new Error('模板文件不可用，请重新上传');
-      const fd=new FormData();fd.append('file',props.uploadedTemplate.file);
-      const upRes=await api.uploadTemplate(fd);
-      if(upRes.code!==200){fillError.value=upRes.msg;return}
-      templateId = upRes.data.id;
-    }
-    const fillRes=await api.doFill(templateId);
+    const fd=new FormData();fd.append('file',props.uploadedTemplate.file);
+    const upRes=await api.uploadTemplate(fd);
+    if(upRes.code!==200){fillError.value=upRes.msg;return}
+    const fillRes=await api.doFill(upRes.data.id);
     if(fillRes.code!==200){fillError.value=fillRes.msg;return}
     currentFillId=fillRes.data.fillId;fillDone.value=true
   }catch(e){fillError.value='失败:'+(e.response?.data?.msg||e.message)}
@@ -344,7 +306,7 @@ async function handleDoFill(){
 function handleDownload(){if(currentFillId)emit('download',currentFillId)}
 function resetFill(){fillDone.value=false;fillError.value='';currentFillId=null}
 function formatSize(b){if(!b)return'';return b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(2)+' MB'}
-
+async function submitToReview(){try{const r=await api.getFillPreview();if(r.code!==200){alert("获取填表数据失败");return};const d=r.data;const items=[];const titles={A1:"思想政治表现",A2:"道德品质修养",A3:"学习态度作风",A4:"组织纪律观念",A5:"身心健康素质",B1:"职业技能类",B2:"学科竞赛类",B3:"科研学术活动类",B4:"文学艺术创作与宣传报道类",B5:"社会工作类",B6:"社会实践类",B7:"文体艺术活动类",B8:"劳育类"};["A1","A2","A3","A4","A5"].forEach(k=>items.push({section:"F1",subKey:k,title:titles[k]||k,reason:d["F1_"+k+"_detail"]||"",score:d["F1_"+k+"_score"]||0}));["B1","B2","B3","B4","B5","B6","B7","B8"].forEach(k=>items.push({section:"F3",subKey:k,title:titles[k]||k,reason:d["F3_"+k+"_detail"]||"",score:d["F3_"+k+"_score"]||0}));const f2Courses=d.F2_courses||[];items.push({section:"F2",subKey:"COURSE",title:"课程成绩",reason:(f2Courses.map(c=>c.name+"("+c.credit+"学分)").join("；")),score:d.F2_weighted_avg||0});const res=await updateSmartResult({items});if(res.code===200){alert("已提交到审核流程，可在信息管理页查看")}else{alert(res.msg)}}catch(e){alert("提交失败"+(e.message||e))}}
 </script>
 
 <style scoped>
@@ -395,7 +357,6 @@ function formatSize(b){if(!b)return'';return b<1048576?(b/1024).toFixed(1)+' KB'
 .btn:disabled{opacity:.6;cursor:not-allowed}.btn.primary{background:var(--color-primary);color:#fff}
 .btn.success{background:#34A853;color:#fff}.btn.outline{background: var(--color-surface);color:var(--color-primary);border:1px solid var(--color-primary)}
 .btn.large{padding:12px 36px;font-size:16px}
-.module3-sync-tip{font-size:13px;color:var(--color-text-secondary);line-height:1.5}
 .btn-text{padding:6px 14px;border:1px solid var(--color-border);border-radius:6px;background: var(--color-surface);cursor:pointer;font-size:13px;font-family:inherit}
 .btn-text.danger{color:#D93025;border-color:transparent}
 .spinner{width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}

@@ -31,7 +31,7 @@
           </div>
           <p class="overview-meta" v-if="selectedBatch">{{ selectedBatch.college }} · {{ selectedBatch.grade }}</p>
           <p class="overview-note" v-if="viewMode === 'form' && form">
-            {{ canEdit ? 'Word 文档与 F1/F2/F3 数据来自智能填表；可核对并修改数据库同步结果，确认后提交评价。' : (form.readonly_reason || '当前流程状态暂不允许学生端修改。') }}
+            {{ canEdit ? '可逐项修改内容；保存仅更新草稿，确认提交后进入评价流程。' : (form.readonly_reason || '当前流程状态暂不允许学生端修改。') }}
           </p>
         </div>
         <div class="overview-actions">
@@ -42,7 +42,7 @@
       </section>
 
       <template v-if="viewMode === 'form' && form">
-        <AssessmentFormPanel :form="form" :editable="canEdit" :show-student-info="false" :show-evidence="false" />
+        <AssessmentFormPanel :form="form" :editable="canEdit" :show-student-info="false" />
 
         <div class="form-actions">
           <div class="action-help">
@@ -142,7 +142,10 @@
       <div class="empty-state glass-card" v-if="!form && !loading">
         <VIcon icon="mdi:inbox-outline" />
         <span>{{ formLoadMessage }}</span>
-        <button class="btn-outline" @click="backToBatchList">返回选择其他批次</button>
+        <div class="empty-actions">
+          <router-link v-if="viewMode === 'form'" class="btn-primary empty-link" to="/zongce/smart-fill">前往智能填表</router-link>
+          <button class="btn-outline" @click="backToBatchList">返回选择其他批次</button>
+        </div>
       </div>
 
       <div class="loading-card glass-card" v-if="loading">
@@ -155,8 +158,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getSmartResult, submitSmartResult, updateSmartResult } from '../../api/module1';
-import { getStudentBatches, submitObjection } from '../../api/module3';
+import { getStudentBatches, getStudentForm, submitObjection, submitStudentForm, updateStudentForm } from '../../api/module3';
 import { useUserStore } from '../../stores/user';
 import AssessmentFormPanel from './AssessmentFormPanel.vue';
 
@@ -169,7 +171,7 @@ const route = useRoute();
 const router = useRouter();
 const batches = ref([]);
 const form = ref(null);
-const formLoadMessage = ref('尚未发现智能填表生成的综测 Word 文档');
+const formLoadMessage = ref('当前批次暂无综测表');
 const saving = ref(false);
 const submitting = ref(false);
 const loading = ref(false);
@@ -188,7 +190,7 @@ const selectedObjectionIds = computed(() => Object.keys(objectionSelections).fil
 const selectedObjectionCount = computed(() => selectedObjectionIds.value.length);
 const pageMeta = computed(() => viewMode.value === 'result'
   ? { shortTitle: '结果详情', title: '综测结果与异议详情', description: '查看当前批次结果，在分类支撑材料中标记异议项目并统一提交。' }
-  : { shortTitle: '填写详情', title: '综测信息填写详情', description: '查看智能填表生成的 Word 文档，并核对数据库中的 F1、F2、F3 数据。' });
+  : { shortTitle: '填写详情', title: '综测信息填写详情', description: '预览智能填表生成的 Word 综测表，并核对、保存和提交数据库明细。' });
 
 function statusText(status) {
   return ({ draft: '草稿', published: '已发布', closed: '已关闭', archived: '已归档' }[status] || status);
@@ -212,7 +214,7 @@ async function loadDetail() {
   }
 
   loading.value = true;
-  formLoadMessage.value = viewMode.value === 'result' ? '当前批次还没有可以查看的综测结果' : '尚未发现智能填表生成的综测 Word 文档';
+  formLoadMessage.value = viewMode.value === 'result' ? '当前批次还没有可以查看的综测结果' : '当前批次暂无综测表';
   try {
     const batchRes = await getStudentBatches();
     if (batchRes.code === 200) batches.value = batchRes.data || [];
@@ -221,12 +223,13 @@ async function loadDetail() {
       return;
     }
 
-    const res = await getSmartResult({ batch_id: batchId.value });
-    if (res.code === 200 && res.data) {
+    const res = await getStudentForm(batchId.value);
+    if (res.code === 200) {
       form.value = res.data;
-    } else {
-      formLoadMessage.value = res.code === 200 ? '尚未发现智能填表生成的 Word 文档。请先前往智能填表完成自动填表，再返回当前批次查看。' : (res.msg || '当前批次数据加载失败');
-    }
+      if (!form.value) {
+        formLoadMessage.value = '当前批次尚未关联智能填表结果。请先在智能填表中生成 Word 文档，再返回本页。';
+      }
+    } else formLoadMessage.value = res.msg || formLoadMessage.value;
   } catch (error) {
     formLoadMessage.value = error?.response?.data?.msg || error?.message || formLoadMessage.value;
   } finally {
@@ -259,8 +262,7 @@ async function saveEdit(options = {}) {
 
   saving.value = true;
   try {
-    const res = await updateSmartResult({
-      batch_id: batchId.value,
+    const res = await updateStudentForm(batchId.value, {
       personal_summary: form.value.personal_summary || '',
       items: (form.value.items || []).map(normalizeItem),
     });
@@ -292,7 +294,7 @@ async function submit() {
 
   submitting.value = true;
   try {
-    const res = await submitSmartResult({ batch_id: batchId.value });
+    const res = await submitStudentForm(batchId.value);
     if (res.code === 200) {
       form.value = res.data;
       alert('已提交并分配给跨班评价小组成员');
@@ -363,7 +365,7 @@ onMounted(loadDetail);
 .eyebrow { display: inline-block; margin-bottom: 5px; color: var(--color-text-tertiary); font-size: 12px; }
 .page-header h2 { font-size: 22px; font-weight: var(--font-weight-semibold); }
 .page-desc { font-size: 14px; color: var(--color-text-secondary); margin-top: 2px; }
-.my-materials, .profile-warning, .result-notice, .objection-submit-panel, .loading-card { padding: 20px; border-radius: 8px; }
+.my-materials, .profile-warning, .result-notice, .objection-submit-panel, .loading-card { padding: 20px; border-radius: 8px !important; }
 .profile-warning { display: flex; gap: 14px; align-items: flex-start; background: rgba(245, 158, 11, 0.12); }
 .profile-warning svg { font-size: 28px; color: #d97706; }
 .profile-warning h3 { font-size: 16px; margin-bottom: 6px; }
@@ -378,32 +380,31 @@ onMounted(loadDetail);
 .overview-title-row h3 { font-size: 20px; }
 .overview-meta, .overview-note { margin-top: 6px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
 .overview-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
-.status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: 8px; background: color-mix(in srgb, var(--color-primary) 11%, transparent); color: var(--color-primary); font-size: 12px; }
+.status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 11%, transparent); color: var(--color-primary); font-size: 12px; }
 .status-chip.muted { background: var(--color-bg); color: var(--color-text-secondary); }
-.status-chip.demo { background: rgba(99,102,241,.10); color: #6366f1; }
 .status-chip.readonly { background: rgba(245,158,11,.12); color: #d97706; }
-.danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(239,68,68,.35); background: transparent; color: #ef4444; cursor: pointer; white-space: nowrap; }
-.danger-btn:disabled { opacity: .55; cursor: not-allowed; }
+.empty-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.empty-link { text-decoration:none; }
 .form-actions { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 18px 0 2px; border-top: 1px solid var(--color-border); }
 .action-help { display: flex; flex-direction: column; gap: 5px; }
 .action-help strong { font-size: 15px; }
 .action-help span { color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
 .action-buttons { display: flex; gap: 10px; flex: 0 0 auto; }
 .objection-submit-panel { display: flex; justify-content: space-between; gap: 16px; align-items: center; }
-.btn-outline, .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.btn-outline, .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 0 16px; border-radius: 8px !important; cursor: pointer; white-space: nowrap; }
 .btn-outline { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); }
 .btn-primary { border: none; background: var(--gradient-primary); color: white; visibility: visible; opacity: 1; }
 .btn-outline:disabled, .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }
 .material-list { display: flex; flex-direction: column; gap: 10px; }
-.material-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px; border-radius: 8px; background: var(--color-bg); }
+.material-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 14px; border-radius: 8px !important; background: var(--color-bg); }
 .row-left { display: flex; align-items: flex-start; gap: 12px; }
 .row-icon { font-size: 22px; color: var(--color-primary); }
 .row-desc { margin-top: 4px; font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
-.status-tag { padding: 4px 10px; border-radius: 8px; font-size: 12px; white-space: nowrap; }
+.status-tag { padding: 4px 10px; border-radius: 8px !important; font-size: 12px; white-space: nowrap; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px; color: var(--color-text-tertiary); text-align: center; }
 .empty-state .v-icon { font-size: 40px; }
 .result-notice, .result-waiting { display: flex; align-items: flex-start; gap: 14px; background: rgba(52,168,83,.10); }
-.result-waiting { padding: 20px; border-radius: 8px; background: rgba(245,158,11,.10); }
+.result-waiting { padding: 20px; border-radius: 8px !important; background: rgba(245,158,11,.10); }
 .result-waiting > svg { flex: 0 0 auto; font-size: 28px; color: #d97706; }
 .result-waiting h3, .result-notice h3 { margin-bottom: 5px; }
 .result-waiting p, .result-notice p, .result-notice small { color: var(--color-text-secondary); line-height: 1.6; }
@@ -417,4 +418,10 @@ onMounted(loadDetail);
   .detail-overview, .form-actions, .objection-submit-panel { flex-direction: column; align-items: stretch; }
   .overview-actions, .action-buttons { flex-wrap: wrap; }
 }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

@@ -282,6 +282,15 @@ async function backfillOrganizations(conn) {
   }
 }
 
+async function removeLegacyDemoForms(conn) {
+  await conn.query(`DELETE r FROM assessment_item_reviews r JOIN assessment_forms f ON f.id=r.form_id WHERE f.is_demo=1`);
+  await conn.query(`DELETE o FROM assessment_objections o JOIN assessment_forms f ON f.id=o.form_id WHERE f.is_demo=1`);
+  await conn.query(`DELETE r FROM assessment_review_records r JOIN assessment_forms f ON f.id=r.form_id WHERE f.is_demo=1`);
+  await conn.query(`DELETE t FROM assessment_review_tasks t JOIN assessment_forms f ON f.id=t.form_id WHERE f.is_demo=1`);
+  await conn.query(`DELETE i FROM assessment_form_items i JOIN assessment_forms f ON f.id=i.form_id WHERE f.is_demo=1`);
+  await conn.query("DELETE FROM assessment_forms WHERE is_demo=1");
+}
+
 async function migrateModule3(conn) {
   await tryQuery(conn, "ALTER TABLE users ADD COLUMN is_assessment_member TINYINT(1) NOT NULL DEFAULT 0 AFTER role");
   await tryQuery(conn, "ALTER TABLE assessment_batches ADD COLUMN school_year VARCHAR(20) NOT NULL DEFAULT '' AFTER id");
@@ -291,6 +300,9 @@ async function migrateModule3(conn) {
 
   await createModule3Tables(conn);
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN is_demo TINYINT(1) NOT NULL DEFAULT 0 AFTER from_smart_fill");
+  await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN fill_result_id INT DEFAULT NULL AFTER is_demo");
+  await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN smart_fill_rule_set_id INT DEFAULT NULL AFTER fill_result_id");
+  await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN smart_fill_synced_at DATETIME DEFAULT NULL AFTER smart_fill_rule_set_id");
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN result_released_at DATETIME DEFAULT NULL AFTER personal_summary");
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN pre_objection_status VARCHAR(50) NOT NULL DEFAULT '' AFTER result_released_at");
   await tryQuery(conn, "ALTER TABLE assessment_review_tasks ADD COLUMN stage VARCHAR(30) NOT NULL DEFAULT 'initial' AFTER status");
@@ -302,6 +314,7 @@ async function migrateModule3(conn) {
   await backfillClasses(conn);
   await backfillOrganizations(conn);
   await backfillBatches(conn);
+  await removeLegacyDemoForms(conn);
 
   const bcrypt = require("bcryptjs");
   const adminPwd = await bcrypt.hash("a000001", 10);
