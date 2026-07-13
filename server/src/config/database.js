@@ -10,7 +10,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "135246",
+  password: process.env.DB_PASSWORD || "123456",
   database: "lingshu_zongce",
   charset: "utf8mb4",
   multipleStatements: true,
@@ -25,7 +25,7 @@ async function initDatabase() {
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "135246",
+    password: process.env.DB_PASSWORD || "123456",
     charset: "utf8mb4",
     multipleStatements: true,
   });
