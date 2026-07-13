@@ -84,8 +84,8 @@ exports.doFill = async (req, res) => {
     if (!fs.existsSync(templatePath)) return res.json(Res.error("模板文件丢失，请重新上传"));
 
     // ★ 从数据库获取当前用户的真实填表数据
-    const { batch_id } = req.query;
-    const fillData = await getFillData(req.user.id, batch_id);
+    const batchId = Number(req.query.batch_id || 0) || null;
+    const fillData = await getFillData(req.user.id, batchId);
 
     const templateBuffer = fs.readFileSync(templatePath);
     const outputBuffer = smartFill(templateBuffer, fillData);
@@ -96,8 +96,8 @@ exports.doFill = async (req, res) => {
     try {
       const namePart = tpl.name.replace(/.docx$/i, "");
       const [fr] = await pool.execute(
-        "INSERT INTO fill_results (user_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?)",
-        [req.user.id, templateId, outputFileName,
+        "INSERT INTO fill_results (user_id, batch_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?, ?)",
+        [req.user.id, batchId, templateId, outputFileName,
           namePart + "_已填写_" + fillData.real_name + "_" + fillData.student_id + ".docx"]
       );
       fillResultId = fr.insertId;

@@ -8,7 +8,6 @@ CREATE DATABASE IF NOT EXISTS lingshu_zongce CHARACTER SET utf8mb4 COLLATE utf8m
 USE lingshu_zongce;
 
 -- ============================================================
--- ============================================================
 -- 一、用户表（扩展版：支持多角色 + 学生信息字段）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
@@ -46,7 +45,8 @@ CREATE TABLE IF NOT EXISTS rule_sources (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===========================================================-- 简化的计分规则表（V3 替代 V1/V2 多表体系）
+-- ============================================================
+-- 三、简化的计分规则表（V3 替代 V1/V2 多表体系）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS scoring_rules (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   user_id INT NOT NULL,
   section VARCHAR(10) DEFAULT 'F3',
   item_key VARCHAR(10) NOT NULL,
-  item_name VARCHAR(200),
+  item_name VARCHAR(50),
   score_level VARCHAR(20),
   score_rank VARCHAR(50),
   score INT NOT NULL DEFAULT 0,
@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   INDEX idx_sr_level_rank (score_level, score_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ============================================================
 -- 四、材料表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS materials (
@@ -190,10 +191,12 @@ CREATE TABLE IF NOT EXISTS ai_tasks (
 CREATE TABLE IF NOT EXISTS fill_results (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   template_id INT NOT NULL,
   result_path VARCHAR(500) NOT NULL,
   original_name VARCHAR(300) DEFAULT '',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_fill_results_user_batch (user_id, batch_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
@@ -414,8 +417,6 @@ CREATE TABLE IF NOT EXISTS assessment_review_tasks (
   KEY idx_task_batch_status_stage (batch_id, status, stage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-
-
 CREATE TABLE IF NOT EXISTS assessment_item_reviews (
   id INT AUTO_INCREMENT PRIMARY KEY,
   form_id INT NOT NULL,
@@ -505,6 +506,7 @@ CREATE TABLE IF NOT EXISTS chat_fill_sessions (
 CREATE TABLE IF NOT EXISTS rule_sets (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   version_label VARCHAR(100) DEFAULT '',
   cloned_from_id INT DEFAULT NULL,
   status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft',
@@ -802,15 +804,3 @@ CREATE TABLE IF NOT EXISTS zongce_config (
 
 -- ALTER TABLE document_parse_runs
 --   MODIFY COLUMN status ENUM('running','completed','failed','parse_structure_failed') DEFAULT 'running';
-
--- 1. 给 form_id 加索引（高频查询，必须加）
--- ALTER TABLE assessment_form_items ADD INDEX idx_items_form_id (form_id); -- moved to database.js
-
--- 2. 可选：给其他 form_id 关联表也加索引
--- ALTER TABLE assessment_review_records ADD INDEX idx_records_form_id (form_id); -- moved to database.js
--- ALTER TABLE assessment_item_reviews ADD INDEX idx_item_reviews_form_id (form_id); -- moved to database.js
--- ALTER TABLE assessment_objections ADD INDEX idx_objections_form_id (form_id); -- moved to database.js
-
--- 3. 可选：如果要加真正的外键约束（注意：外键会影响删除性能）
--- ALTER TABLE assessment_form_items ADD CONSTRAINT fk_items_form
---   FOREIGN KEY (form_id) REFERENCES assessment_forms(id) ON DELETE CASCADE;

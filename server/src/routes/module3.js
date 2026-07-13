@@ -6,8 +6,9 @@ const upload = require("../middleware/upload");
 
 router.get("/batches", auth, ctrl.getBatches);
 router.get("/student-batches", auth, roleCheck("student"), ctrl.getStudentBatches);
-router.post("/student/example-form", auth, roleCheck("student"), ctrl.ensureStudentExampleForm);
-router.delete("/student/example-form/:batchId", auth, roleCheck("student"), ctrl.deleteStudentExampleForm);
+router.get("/student/forms/:batchId", auth, roleCheck("student"), ctrl.getStudentForm);
+router.put("/student/forms/:batchId", auth, roleCheck("student"), ctrl.updateStudentForm);
+router.post("/student/forms/:batchId/submit", auth, roleCheck("student"), ctrl.submitStudentForm);
 router.post("/student/support-materials", auth, roleCheck("student"), upload.array("files", 10), ctrl.uploadStudentSupportMaterials);
 router.post("/batches", auth, roleCheck("admin"), ctrl.createBatch);
 router.put("/batches/:id", auth, roleCheck("admin", "counselor"), ctrl.updateBatch);
@@ -24,7 +25,9 @@ router.put("/students/:id/member", auth, roleCheck("admin", "counselor"), ctrl.s
 
 router.get("/materials", auth, ctrl.getMyMaterials);
 router.get("/forms/:id", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormDetail);
-router.put("/forms/:id/level", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.setFormLevel);
+router.get("/forms/:id/word-preview", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormWordPreview);
+router.get("/forms/:id/word", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.downloadFormWord);
+router.put("/forms/:id/level", auth, roleCheck("counselor", "student_affairs"), ctrl.setFormLevel);
 router.put("/materials/:id/review", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.reviewMaterial);
 router.post("/forms/:id/objections", auth, roleCheck("student"), ctrl.submitObjection);
 router.get("/pending", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.getPendingReviews);

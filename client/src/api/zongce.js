@@ -99,7 +99,9 @@ export const deleteTemplate = (id) =>
   request.delete(`/zongce/templates/${id}`);
 
 export const doFill = (templateId, batchId) =>
-  request.post(`/zongce/fill/${templateId}`);
+  request.post(`/zongce/fill/${templateId}`, null, {
+    params: batchId ? { batch_id: batchId } : {},
+  });
 
 export const downloadFill = (id) =>
   request.get(`/zongce/fill/${id}/download`, { responseType: "blob" });

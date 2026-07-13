@@ -1,11 +1,10 @@
 <template>
   <div class="assessment-wrapper" v-if="form">
-    <section class="assessment-table glass-card">
+    <section class="assessment-document glass-card">
       <div class="panel-header">
-        <h3><VIcon icon="mdi:table-large" />综测表</h3>
-        <span class="panel-count">{{ form.status_label }}</span>
+        <h3><VIcon icon="mdi:file-word-outline" />综测表</h3>
+        <span class="panel-count">{{ form.word_document ? '来自智能填表' : '尚未生成' }}</span>
       </div>
-
       <div class="student-grid" v-if="showStudentInfo">
         <span>学号：{{ form.student_no }}</span>
         <span>姓名：{{ form.student_name }}</span>
@@ -14,64 +13,17 @@
         <span>年级：{{ form.enrollment_grade || form.grade }}</span>
         <span>专业：{{ form.major }}</span>
       </div>
-
-      <div class="summary-card">
-        <div class="summary-title">个人综测说明</div>
-        <textarea
-          v-if="editable"
-          v-model="form.personal_summary"
-          class="summary-textarea"
-          placeholder="请输入个人综测说明"
-        ></textarea>
-        <p v-else class="summary-text">{{ form.personal_summary || '暂无个人综测说明' }}</p>
-      </div>
-
-      <table class="score-table">
-        <thead>
-          <tr>
-            <th>测评项</th>
-            <th>子项</th>
-            <th>分值</th>
-            <th>说明</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>F1 基本素质评分</td>
-            <td>A1-A5</td>
-            <td>{{ form.scores.f1_basic_quality }}</td>
-            <td>占比 10%，含思想政治、道德品质、学习态度、组织纪律、身心健康</td>
-          </tr>
-          <tr>
-            <td>F2 课程学习成绩评分</td>
-            <td>课程成绩</td>
-            <td>{{ form.scores.f2_course_learning }}</td>
-            <td>占比 65%，依据课程学分与成绩自动计算</td>
-          </tr>
-          <tr>
-            <td>F3 创新素质与实践能力评分</td>
-            <td>B1-B8</td>
-            <td>{{ form.scores.f3_innovation_practice }}</td>
-            <td>占比 25%，含职业技能、学科竞赛、科研学术、社会工作、社会实践等</td>
-          </tr>
-          <tr class="total-row">
-            <td>综合素质最后得分</td>
-            <td>自动等级：{{ form.auto_level }}</td>
-            <td>{{ form.scores.total }}</td>
-            <td>当前等级：{{ form.level }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <WordPreviewWindow :form-id="form.id" :document="form.word_document" />
     </section>
 
     <section class="assessment-materials glass-card">
       <div class="panel-header">
-        <h3><VIcon icon="mdi:folder-multiple-outline" />分类支撑材料</h3>
-        <span class="panel-count">按 F1 / F2 / F3 和表内子目录归档</span>
+        <h3><VIcon icon="mdi:format-list-bulleted-square" />F1 / F2 / F3 综测明细</h3>
+        <span class="panel-count">明细数据来自智能填表数据库</span>
       </div>
 
       <div v-if="editable" class="edit-tip">
-        可以逐项修改项目名称、计分理由、分值、分类和子目录，也可以新增项目并为每个项目手动添加支撑材料。
+        以下明细已从智能填表数据导入，可以逐项核对项目名称、计分理由、分值、分类和子目录。
       </div>
 
       <div class="section-block" v-for="section in localGrouped" :key="section.key">
@@ -209,6 +161,7 @@
 import { computed, reactive } from 'vue';
 import { uploadStudentSupportMaterials } from '../../api/module3';
 import { FORM_STRUCTURE } from '../../utils/constants';
+import WordPreviewWindow from './WordPreviewWindow.vue';
 
 const props = defineProps({
   form: { type: Object, required: true },
@@ -347,35 +300,27 @@ function removeItem(item) {
 
 <style scoped>
 .assessment-wrapper { display: flex; flex-direction: column; gap: 20px; }
-.assessment-table, .assessment-materials { padding: 20px; border-radius: var(--radius-xl); }
+.assessment-document, .assessment-materials { padding: 20px; border-radius: 8px !important; }
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; }
 .panel-count { font-size: 13px; color: var(--color-text-secondary); }
 .student-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
-.student-grid span { padding: 8px 10px; border-radius: var(--radius-md); background: var(--color-bg); font-size: 13px; }
-.summary-card { padding: 14px; border-radius: var(--radius-lg); background: var(--color-bg); margin-bottom: 16px; }
-.summary-title { font-weight: var(--font-weight-semibold); margin-bottom: 8px; }
-.summary-text { color: var(--color-text-secondary); line-height: 1.7; }
-.summary-textarea { width: 100%; min-height: 88px; resize: vertical; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-primary); padding: 10px; line-height: 1.6; }
-.score-table { width: 100%; border-collapse: collapse; }
-.score-table th, .score-table td { padding: 10px; border: 1px solid var(--color-border); text-align: left; font-size: 13px; }
-.score-table th { color: var(--color-text-secondary); background: var(--color-bg); }
-.total-row td { font-weight: var(--font-weight-semibold); }
-.edit-tip { padding: 12px 14px; border-radius: var(--radius-lg); background: var(--color-bg); color: var(--color-text-secondary); line-height: 1.6; font-size: 13px; margin-bottom: 16px; }
+.student-grid span { padding: 8px 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 13px; }
+.edit-tip { padding: 12px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-text-secondary); line-height: 1.6; font-size: 13px; margin-bottom: 16px; }
 .section-block { margin-top: 18px; }
 .section-title { display: flex; align-items: baseline; gap: 8px; font-size: 18px; margin-bottom: 12px; }
 .section-title small { color: var(--color-text-secondary); font-size: 13px; }
-.sub-block { padding: 14px; margin-bottom: 12px; border-radius: var(--radius-lg); background: var(--color-bg); }
+.sub-block { padding: 14px; margin-bottom: 12px; border-radius: 8px !important; background: var(--color-bg); }
 .sub-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
 .sub-title { font-weight: var(--font-weight-semibold); }
 .item-list { display: flex; flex-direction: column; gap: 10px; }
-.item-card { padding: 12px; border-radius: var(--radius-md); background: var(--color-surface); border: 1px solid var(--color-border); }
+.item-card { padding: 12px; border-radius: 8px !important; background: var(--color-surface); border: 1px solid var(--color-border); }
 .item-edit-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; font-weight: var(--font-weight-semibold); }
 .field-label { display: block; margin: 10px 0 6px; font-size: 12px; color: var(--color-text-secondary); }
 .item-title { font-weight: var(--font-weight-semibold); }
 .item-title span { color: var(--color-primary); }
 .item-reason { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin-top: 6px; }
-.item-review-result, .item-objection { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px; border-radius: var(--radius-md); background: var(--color-bg); font-size: 12px; }
+.item-review-result, .item-objection { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; padding: 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 12px; }
 .item-review-result > div { display: grid; gap: 4px; }
 .item-review-result span, .item-review-result p, .item-objection p { color: var(--color-text-secondary); line-height: 1.5; }
 .item-objection { background: rgba(245,158,11,.10); }
@@ -386,11 +331,11 @@ function removeItem(item) {
 .evidence-editor-head strong { font-size: 13px; }
 .evidence-editor-head small, .evidence-notice { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.5; }
 .evidence-notice { margin-top: 8px; color: var(--color-primary); }
-.evidence-upload-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-surface); color: var(--color-primary); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.evidence-upload-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-primary); font-size: 12px; cursor: pointer; white-space: nowrap; }
 .evidence-upload-btn input { display: none; }
 .evidence-upload-btn.disabled { opacity: .55; cursor: not-allowed; }
 .evidence-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.evidence-chip { display: inline-flex; align-items: center; min-width: 0; border: 1px solid var(--color-border); border-radius: var(--radius-full); background: var(--color-bg); overflow: hidden; }
+.evidence-chip { display: inline-flex; align-items: center; min-width: 0; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); overflow: hidden; }
 .evidence-chip a, .evidence-file-name { display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 5px 9px; color: var(--color-text-secondary); font-size: 12px; text-decoration: none; }
 .evidence-chip a:hover { color: var(--color-primary); }
 .evidence-chip a span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -400,13 +345,13 @@ function removeItem(item) {
 .evidence-empty { color: var(--color-text-tertiary); font-size: 12px; }
 .empty-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-tertiary); font-size: 13px; }
 .item-input, .item-textarea, .edit-row input, .edit-row select {
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
+  border: 1px solid var(--color-border); border-radius: 8px !important;
   background: var(--color-bg); color: var(--color-text-primary); padding: 8px; width: 100%;
 }
 .item-textarea { min-height: 72px; resize: vertical; }
 .edit-row { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 10px; margin-top: 8px; }
 .edit-row label { font-size: 12px; color: var(--color-text-secondary); }
-.mini-btn, .danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: var(--radius-full); cursor: pointer; white-space: nowrap; }
+.mini-btn, .danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 30px; padding: 0 10px; border-radius: 8px !important; cursor: pointer; white-space: nowrap; }
 .mini-btn { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-primary); }
 .danger-btn { border: 1px solid rgba(239, 68, 68, 0.35); background: rgba(239, 68, 68, 0.08); color: #ef4444; }
 @media (max-width: 768px) {
@@ -416,12 +361,18 @@ function removeItem(item) {
   .evidence-upload-btn { width: fit-content; }
 }
 
-.item-objection { margin-top: 12px; padding: 12px; border-radius: var(--radius-lg); background: color-mix(in srgb, #f59e0b 9%, var(--color-surface)); border: 1px solid color-mix(in srgb, #f59e0b 25%, var(--color-border)); }
+.item-objection { margin-top: 12px; padding: 12px; border-radius: 8px !important; background: color-mix(in srgb, #f59e0b 9%, var(--color-surface)); border: 1px solid color-mix(in srgb, #f59e0b 25%, var(--color-border)); }
 .item-objection strong { color: #d97706; font-size: 13px; }
 .item-objection p { margin-top: 6px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
 .objection-check { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-primary); font-size: 13px; font-weight: 600; cursor: pointer; }
 .objection-check.disabled { color: var(--color-text-tertiary); cursor: not-allowed; }
 .objection-check input { width: 16px; height: 16px; accent-color: var(--color-primary); }
-.objection-reason { width: 100%; min-height: 82px; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-text-primary); resize: vertical; }
+.objection-reason { width: 100%; min-height: 82px; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); resize: vertical; }
 .item-objection small, .objection-not-selected { display: block; margin-top: 7px; color: var(--color-text-tertiary); font-size: 12px; }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

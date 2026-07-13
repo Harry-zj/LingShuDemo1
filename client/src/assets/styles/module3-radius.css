@@ -1,0 +1,39 @@
+/* 模块三页面专属小圆角：仅覆盖模块三内容区域，不影响顶部或侧边导航。 */
+body :is(
+  .admin-page,
+  .assessment-wrapper,
+  .batch-manage,
+  .class-leader-desk,
+  .counselor-console,
+  .feature-menu-page,
+  .profile-page,
+  .workbench-page,
+  .org-page,
+  .review-detail,
+  .reviewer-audit-detail,
+  .reviewer-student-list,
+  .batch-page,
+  .student-db,
+  .teacher-console,
+  .module3-legacy-page
+),
+body :is(
+  .admin-page,
+  .assessment-wrapper,
+  .batch-manage,
+  .class-leader-desk,
+  .counselor-console,
+  .feature-menu-page,
+  .profile-page,
+  .workbench-page,
+  .org-page,
+  .review-detail,
+  .reviewer-audit-detail,
+  .reviewer-student-list,
+  .batch-page,
+  .student-db,
+  .teacher-console,
+  .module3-legacy-page
+) * {
+  border-radius: 8px !important;
+}
