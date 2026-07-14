@@ -1,0 +1,9 @@
+{
+  "appId": "com.lingshu.app",
+  "appName": "灵枢",
+  "webDir": "dist",
+  "server": {
+    "url": "http://47.102.99.27:8000",
+    "cleartext": true
+  }
+}
