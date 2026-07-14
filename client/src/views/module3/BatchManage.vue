@@ -43,14 +43,6 @@
         <label class="number-row">异议期限（天）<input type="number" min="0" v-model.number="form.objectionDays" /></label>
       </div>
       <button class="btn-primary" @click="handleCreate"><VIcon icon="mdi:send-outline" /><span class="btn-label">发布</span></button>
-
-      <div v-if="createdBatch" class="rule-inline">
-        <div class="rule-inline-header">
-          <h4>📄 上传规则文件 — {{ createdBatch.title }}</h4>
-          <button class="btn-text" @click="createdBatch = null">清除</button>
-        </div>
-        <BatchRuleManager :batch="createdBatch" :editable="true" />
-      </div>
     </div>
 
 
@@ -90,7 +82,6 @@
           </div>
           <div class="actions">
             <button @click="openEdit(batch)"><span class="btn-label">查看/修改</span></button>
-            <button @click="openRuleModal(batch)"><span class="btn-label">规则文件</span></button>
             <button @click="setStatus(batch.id, 'closed')"><span class="btn-label">关闭</span></button>
             <button class="danger" @click="removeBatch(batch.id)"><span class="btn-label">删除</span></button>
           </div>
@@ -113,7 +104,6 @@
           </div>
           <div class="actions">
             <button @click="openEdit(batch)"><span class="btn-label">查看/修改</span></button>
-            <button @click="openRuleModal(batch)"><span class="btn-label">规则文件</span></button>
           </div>
         </div>
         <div class="empty-line" v-if="!historyBatches.length">暂无历史批次</div>
@@ -180,24 +170,6 @@
         </div>
       </Transition>
     </teleport>
-
-    <teleport to="body">
-        <div v-show="showRuleModal" class="modal-overlay" @click.self="closeRuleModal">
-          <div v-if="ruleModalBatch" class="modal-card glass-card modal-card-wide" @click.stop>
-            <div class="modal-header">
-              <h3>规则文件 — {{ ruleModalBatch.title }}</h3>
-              <button class="modal-close" @click="closeRuleModal"><VIcon icon="mdi:close" /></button>
-            </div>
-            <div class="modal-body">
-              <p class="modal-batch-info">{{ ruleModalBatch.college }} · {{ ruleModalBatch.grade }} · {{ ruleModalBatch.school_year }}</p>
-              <BatchRuleManager :batch="ruleModalBatch" :editable="canEditBatchRules(ruleModalBatch)" />
-            </div>
-            <div class="modal-footer">
-              <button class="btn-outline" @click="closeRuleModal">关闭</button>
-            </div>
-          </div>
-        </div>
-    </teleport>
   </div>
 </template>
 
@@ -205,7 +177,6 @@
 import { computed, onMounted, ref } from 'vue';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
 import { createBatch, deleteBatch, getBatches, getScopeOptions, getSettings, updateBatch, updateBatchStatus, updateSettings } from '../../api/module3';
-import BatchRuleManager from './BatchRuleManager.vue';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
 const view = computed(() => props.view || 'menu');
@@ -230,8 +201,6 @@ const options = ref({ colleges: [], grades: [], classes: [], members: [], batch_
 const editing = ref(null);
 
 // 规则文件管理（创建页内嵌 + active/history 弹窗）
-const createdBatch = ref(null);
-const ruleModalBatch = ref(null);
 
 function currentAcademicYearStart() {
   const today = new Date();
@@ -304,7 +273,7 @@ async function handleCreate() {
   if (!form.value.start_time || !form.value.end_time) return alert('请选择开始时间和结束时间');
   const res = await createBatch({ ...form.value, status: 'published' });
   if (res.code === 200) {
-    createdBatch.value = res.data;
+    alert('批次已发布');
     await load();
   } else alert(res.msg);
 }
@@ -357,12 +326,6 @@ async function saveSettings() {
   } else alert(res.msg);
 }
 
-
-// ===== 规则文件弹窗 =====
-const showRuleModal = ref(false);
-function openRuleModal(batch) { ruleModalBatch.value = batch; showRuleModal.value = true; }
-function closeRuleModal() { showRuleModal.value = false; }
-function canEditBatchRules(b) { return b && ['draft', 'published'].includes(b.status); }
 
 onMounted(load);
 </script>
@@ -430,9 +393,6 @@ input:disabled, select:disabled, textarea:disabled { opacity: 0.68; cursor: not-
 .modal-body { padding:16px 24px 24px; }
 .modal-batch-info { font-size:13px; color:var(--color-text-tertiary); margin-bottom:16px; }
 .modal-footer { display:flex; gap:10px; justify-content:flex-end; padding:0 24px 20px; }
-.rule-inline { margin-top:20px; padding:20px; border-radius:8px; background:var(--color-bg); border:1px solid var(--color-border); }
-.rule-inline-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
-.rule-inline-header h4 { font-size:15px; font-weight:600; margin:0; }
 
 /* ===== 弹窗通用样式（批次编辑 & 规则文件共用）===== */
 .modal-overlay {
