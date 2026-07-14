@@ -468,22 +468,22 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); bChart?.
 
 /* 左侧详情面板 */
 .expand-detail { flex:0 0 48%; min-width:0; padding:12px 16px; border:1px solid var(--color-border); border-radius:10px; background:var(--color-bg); overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
-.ed-header { display:flex; align-items:center; gap:6px; flex-shrink:0; }
-.ed-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-.ed-name { font-size:14px; font-weight:600; color:var(--color-text); }
-.ed-score { font-size:22px; font-weight:700; color:var(--color-primary); margin-left:auto; }
-.ed-score small { font-size:12px; font-weight:400; color:var(--color-text-secondary); }
-.ed-level { font-size:11px; padding:2px 8px; border-radius:var(--radius-full); font-weight:500; white-space:nowrap; }
+.ed-header { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+.ed-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.ed-name { font-size:16px; font-weight:600; color:var(--color-text); }
+.ed-score { font-size:24px; font-weight:700; color:var(--color-primary); margin-left:auto; }
+.ed-score small { font-size:14px; font-weight:400; color:var(--color-text-secondary); }
+.ed-level { font-size:12px; padding:2px 10px; border-radius:var(--radius-full); font-weight:500; white-space:nowrap; }
 
 .ed-table-wrap { flex-shrink:0; }
-.ed-table { width:100%; border-collapse:collapse; font-size:12px; }
-.ed-table th { text-align:left; padding:4px 6px; color:var(--color-text-secondary); font-weight:500; font-size:10px; border-bottom:1px solid var(--color-border); }
-.ed-table td { padding:4px 6px; border-bottom:1px dashed var(--color-border); color:var(--color-text); }
-.ed-table .td-num { text-align:center; font-family:monospace; font-size:11px; }
+.ed-table { width:100%; border-collapse:collapse; font-size:14px; }
+.ed-table th { text-align:left; padding:6px 8px; color:var(--color-text-secondary); font-weight:500; font-size:13px; border-bottom:1px solid var(--color-border); }
+.ed-table td { padding:6px 8px; border-bottom:1px dashed var(--color-border); color:var(--color-text); }
+.ed-table .td-num { text-align:center; font-family:monospace; font-size:13px; }
 .ed-table .td-highlight { color:var(--color-primary); font-weight:600; }
 
 .ed-formula { flex-shrink:0; }
-.ed-formula-text { display:block; padding:6px 10px; background:var(--color-surface-variant); border-radius:4px; font-size:12px; color:var(--color-text); font-family:monospace; }
+.ed-formula-text { display:block; padding:8px 12px; background:var(--color-surface-variant); border-radius:4px; font-size:14px; color:var(--color-text); font-family:monospace; }
 
 .ed-source { flex-shrink:0; }
 .ed-source p { font-size:12px; color:var(--color-text-secondary); line-height:1.5; margin:0; }
