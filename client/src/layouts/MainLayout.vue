@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .main-layout {
   --nav-height: 76px;
-  --side-width: 250px;
+  --side-width: 220px;
 
   min-height: 100vh;
   position: relative;
@@ -1117,10 +1117,10 @@ onBeforeUnmount(() => {
 
 .content {
   width: 100%;
-  max-width: 1500px;
+  max-width: 1140px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 34px 40px 70px;
+  padding: 52px 48px 70px;
 }
 
 /* ==================================================
@@ -1315,7 +1315,7 @@ onBeforeUnmount(() => {
   }
 
   .content {
-    padding: 22px 16px 55px;
+    padding: 36px 16px 55px;
   }
 }
 

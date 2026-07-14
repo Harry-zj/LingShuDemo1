@@ -92,7 +92,8 @@ exports.chatField = async (req, res) => {
 
 exports.doFill = async (req, res) => {
   try {
-    const { templateId, fieldContents } = req.body;
+    const { templateId, fieldContents, batch_id } = req.body;
+    const batchId = Number(batch_id || 0) || null;
     const [rows] = await pool.execute("SELECT * FROM fill_templates WHERE id=? AND user_id=?", [templateId, req.user.id]);
     if (rows.length === 0) return res.json(Res.error("模板不存在"));
     const tplPath = path.join(__dirname, "../../../uploads", rows[0].file_path);
@@ -107,8 +108,8 @@ exports.doFill = async (req, res) => {
     try {
       const namePart = rows[0].name.replace(/.docx$/i, "");
       const [fr] = await pool.execute(
-        "INSERT INTO fill_results (user_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?)",
-        [req.user.id, templateId, outputFileName, namePart + "_对话填写_" + (fieldContents.real_name || "结果") + ".docx"]
+        "INSERT INTO fill_results (user_id, batch_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?, ?)",
+        [req.user.id, batchId, templateId, outputFileName, namePart + "_对话填写_" + (fieldContents.real_name || "结果") + ".docx"]
       );
       fillResultId = fr.insertId;
     } catch (e) { fillResultId = Date.now(); }

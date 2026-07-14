@@ -1,58 +1,51 @@
 ﻿<template>
   <div class="dashboard">
-    <!-- ★ 批次选择器 -->
-    <div class="batch-selector-bar">
-      <div class="batch-selector">
-        <label class="batch-label">选择测评批次</label>
-        <select v-model="selectedBatchId" @change="onBatchChange" class="batch-select">
-          <option value="">-- 请选择批次 --</option>
-          <option v-for="b in batches" :key="b.id" :value="b.id">{{ b.title }} ({{ b.school_year }})</option>
-        </select>
-        <span v-if="selectedBatch" class="batch-meta">
-          {{ selectedBatch.college }} · {{ selectedBatch.grade }} · <span :class="'batch-status-' + selectedBatch.status">{{ batchStatusLabel }}</span>
-        </span>
+    <!-- ★ 当前批次（自动匹配，只读展示） -->
+    <div v-if="currentBatch" class="batch-info-bar">
+      <span class="batch-icon">📋</span>
+      <span class="batch-title">{{ currentBatch.title }}</span>
+      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
+      <span class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
+    </div>
+    <div v-else-if="batchError" class="batch-error-bar">
+      <span class="batch-error-icon">⚠</span>
+      <span>{{ batchError }}</span>
+    </div>
+    <div v-else class="batch-info-bar batch-loading">
+      <span>加载批次信息...</span>
+    </div>
+
+    <!-- 标题 + 总分 -->
+    <div class="page-top">
+      <div>
+        <h2 class="page-title">智能填表</h2>
+        <p class="page-sub">完成 6 个步骤，生成综测登记表</p>
+      </div>
+      <div class="total-chip" v-if="totalScore !== null">
+        <span class="total-num">{{ totalScore }}</span>
+        <span class="total-label">总分</span>
       </div>
     </div>
 
-    <h2 class="page-title">智能填表</h2>
-
-    <div class="status-bar">
-      <div class="status-item" :class="{ ready: ruleReady }">
-        <span class="status-num">{{ publishedRuleSetCount }}</span>
-        <span class="status-label">已发布规则集</span>
-      </div>
-      <div class="status-item" :class="{ ready: materialCount > 0 }">
-        <span class="status-num">{{ materialCount }}</span>
-        <span class="status-label">已上传材料</span>
-      </div>
-      <div class="status-item" :class="{ ready: confirmedRecCount > 0 }">
-        <span class="status-num">{{ confirmedRecCount }}</span>
-        <span class="status-label">已确认识别</span>
-      </div>
-      <div class="status-item" :class="{ ready: totalScore !== null }">
-        <span class="status-num">{{ totalScore !== null ? totalScore : '-' }}</span>
-        <span class="status-label">总分</span>
-      </div>
-    </div>
-
-    <div class="card-grid">
-      <div class="func-card" :class="{ active: activeCard === 'rule' }" @click="openCard('rule')">
-        <div class="card-icon">①</div><div class="card-content"><h3>规则管理</h3><p>上传规则，AI解析</p><span class="card-status done">{{ ruleReady ? '已发布' : '待发布' }}</span></div>
-      </div>
-      <div class="func-card" :class="{ active: activeCard === 'material' }" @click="openCard('material')">
-        <div class="card-icon">②</div><div class="card-content"><h3>材料上传与识别</h3><p>上传证明，AI识别加分</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady ? materialCount+'份' : '请先发布规则集' }}</span></div>
-      </div>
-      <div class="func-card" :class="{ active: activeCard === 'score' }" @click="openCard('score')">
-        <div class="card-icon">③</div><div class="card-content"><h3>F3 评分清单</h3><p>B1-B8加分明细</p><span class="card-status" :class="confirmedRecCount>0?'ready':'locked'">{{ confirmedRecCount>0 ? confirmedRecCount+'条确认' : '请先确认' }}</span></div>
-      </div>
-      <div class="func-card" :class="{ active: activeCard === 'f1' }" @click="openCard('f1')">
-        <div class="card-icon">④</div><div class="card-content"><h3>F1 基本素质</h3><p>思想政治、道德品质评分</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady?'填写评分':'请先发布规则集' }}</span></div>
-      </div>
-      <div class="func-card" :class="{ active: activeCard === 'f2' }" @click="openCard('f2')">
-        <div class="card-icon">⑤</div><div class="card-content"><h3>F2 课程成绩</h3><p>录入课程学分和成绩</p><span class="card-status" :class="ruleReady?'ready':'locked'">{{ ruleReady?'录入成绩':'请先发布规则集' }}</span></div>
-      </div>
-      <div class="func-card" :class="{ active: activeCard === 'form' }" @click="openCard('form')">
-        <div class="card-icon">⑥</div><div class="card-content"><h3>自动填表</h3><p>上传模板，一键填充下载</p><span class="card-status" :class="confirmedRecCount>0?'ready':'locked'">自动填表</span></div>
+    <!-- 水平步进条 -->
+    <div class="stepper">
+      <div v-for="(step, idx) in steps" :key="step.key"
+        class="step-item"
+        :class="{ done: step.ready, active: activeCard === step.key, locked: step.locked && !step.ready }"
+        @click="!step.locked && openCard(step.key)">
+        <div class="step-indicator">
+          <span v-if="step.ready" class="step-check">✓</span>
+          <span v-else class="step-num">{{ idx + 1 }}</span>
+        </div>
+        <div class="step-text">
+          <div class="step-title">{{ step.title }}</div>
+          <div class="step-hint">
+            <template v-if="step.ready">{{ step.doneLabel }}</template>
+            <template v-else-if="step.locked && !step.ready">🔒</template>
+            <template v-else>{{ step.pendingLabel }}</template>
+          </div>
+        </div>
+        <div v-if="idx < steps.length - 1" class="step-connector" :class="{ done: step.ready }"></div>
       </div>
     </div>
 
@@ -60,14 +53,16 @@
       <div class="section-header">
         <button class="btn-back" @click="activeCard = null">返回</button>
         <h3>{{ sectionTitle }}</h3>
-        <span v-if="selectedBatch" class="section-batch-label">当前批次：{{ selectedBatch.title }}</span>
+        <span v-if="currentBatch" class="section-batch-label">当前批次：{{ currentBatch.title }}</span>
       </div>
-      <SmartFillF1 v-if="activeCard === 'f1'" />
-      <SmartFillF2 v-if="activeCard === 'f2'" @saved="onF1F2Saved" />
-      <SmartFillRule v-if="activeCard === 'rule'" :ruleSources="ruleSources" :ruleSets="ruleSets" :batchId="selectedBatchId" @remove-source="removeRuleSource" @refresh="refreshRules" @parse-start="onParseStart" @parse-end="onParseEnd" />
-      <SmartFillMaterial v-if="activeCard === 'material'" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
-      <SmartFillScore v-if="activeCard === 'score'" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-      <SmartFillForm v-if="activeCard === 'form'" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
+      <Transition name="step" mode="out-in">
+        <SmartFillF1 v-if="activeCard === 'f1'" key="f1" @complete="onF1Complete" />
+        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" @saved="onF1F2Saved" @complete="onF2Complete" />
+        <SmartFillRule v-else-if="activeCard === 'rule'" key="rule" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
+        <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
+        <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
+        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
+      </Transition>
     </div>
   </div>
 </template>
@@ -82,14 +77,11 @@ import SmartFillScore from './SmartFillScore.vue'
 import SmartFillForm from './SmartFillForm.vue'
 import * as api from '../../api/zongce'
 
-// ========== 批次选择 ==========
-const batches = ref([])
-const selectedBatchId = ref('')
-const previousBatchId = ref('')
-const isParsing = ref(false)
-const selectedBatch = computed(() => batches.value.find(b => b.id === selectedBatchId.value) || null)
+// ========== 批次自动匹配 ==========
+const currentBatch = ref(null)
+const batchError = ref('')
 const batchStatusLabel = computed(() => {
-  const s = selectedBatch.value?.status
+  const s = currentBatch.value?.status
   if (s === 'draft') return '草稿'
   if (s === 'published') return '进行中'
   if (s === 'closed') return '已结束'
@@ -97,27 +89,19 @@ const batchStatusLabel = computed(() => {
   return s || ''
 })
 
-async function loadBatches() {
-  const r = await api.getBatches()
-  if (r.code === 200) batches.value = r.data || []
-}
-
-async function onBatchChange() {
-  if (!selectedBatchId.value) return
-  if (isParsing.value) {
-    alert('规则正在解析中，请等待解析完成后再切换批次')
-    selectedBatchId.value = previousBatchId.value;
-    return;
+async function loadStudentBatch() {
+  try {
+    const r = await api.getStudentBatch()
+    if (r.code === 200 && r.data) {
+      currentBatch.value = r.data
+      batchError.value = ''
+    } else {
+      batchError.value = r.msg || '未找到匹配的测评批次'
+    }
+  } catch (e) {
+    batchError.value = '获取批次信息失败: ' + (e.message || e)
   }
-  if (previousBatchId.value && previousBatchId.value !== selectedBatchId.value) {
-    try { const r = await api.moveRulesBatch(previousBatchId.value, selectedBatchId.value); if (r.code === 200) console.log('[SmartFill] 规则已从批次 ' + previousBatchId.value + ' 迁移至 ' + selectedBatchId.value); } catch (_) {}
-  }
-  previousBatchId.value = selectedBatchId.value;
-  await refreshAll();
 }
-
-function onParseStart() { isParsing.value = true }
-function onParseEnd() { isParsing.value = false }
 
 // ========== 导航 ==========
 const activeCard = ref(null)
@@ -127,9 +111,9 @@ const sectionTitle = computed(() => ({
 }[activeCard.value] || ''))
 
 function openCard(name) {
-  if (!selectedBatchId.value) { alert('请先选择测评批次'); return }
-  if (name === 'rule') { activeCard.value = 'rule'; return }
-  if (!ruleReady.value) { alert('请先发布规则集后再操作'); return }
+  if (!currentBatch.value) { alert(batchError.value || '未找到测评批次，请联系管理员'); return }
+  if (name === 'rule') { activeCard.value = 'rule'; loadPublishedRules(); return }
+  if (!ruleReady.value) { alert('该批次尚无已发布的规则集，请等待管理员上传'); return }
   if (name === 'f1' || name === 'f2') { if (!ruleReady.value) { alert('请先发布规则集'); return }; activeCard.value = name; return }
   if (name === 'form' && confirmedRecCount.value === 0) { alert('暂无已确认的识别结果'); return }
   activeCard.value = name
@@ -137,31 +121,47 @@ function openCard(name) {
 }
 
 // ========== 共享状态 ==========
-const ruleSources = ref([])
-const ruleSets = ref([])
+const publishedRules = ref([])
+const ruleSets = ref([])  // 保留给其他逻辑（如 smart_fill_data 中的 rule_set_id）
 const materials = ref([])
 const evaluation = ref(null)
 const scoreList = ref(null)
 const templates = ref([])
 const templatesLoaded = ref(false)
-const fillResults = ref([]); const uploadedTemplate = ref(null)
+const uploadedTemplate = ref(null)
 
 const publishedRuleSetCount = computed(() => ruleSets.value.filter(r => r.status === 'published').length)
 const publishedRuleSetId = computed(() => {
-  const pub = ruleSets.value.find(r => r.status === 'published' && (!selectedBatchId.value || r.batch_id === selectedBatchId.value))
+  const pub = ruleSets.value.find(r => r.status === 'published' && (!currentBatch.value?.id || r.batch_id === currentBatch.value?.id))
   return pub ? pub.id : 0
 })
-const ruleReady = computed(() => publishedRuleSetCount.value > 0)
+// ★ ruleReady 现在基于已发布规则（不再基于 ruleSets）
+const ruleReady = computed(() => publishedRules.value.length > 0)
 const materialCount = computed(() => materials.value.length)
 const confirmedRecCount = computed(() =>
   materials.value.reduce((sum, m) => sum + (m.facts || []).filter(f => f.match?.review_status === 'confirmed').length, 0)
 )
 const totalScore = computed(() => evaluation.value?.total_score ?? null)
 
+// ★ 步骤④⑤完成状态
+const f1Done = ref(false)
+const f2Done = ref(false)
+function onF1Complete() { f1Done.value = true }
+function onF2Complete() { f2Done.value = true }
+
+// ★ 步进条步骤配置
+const steps = computed(() => [
+  { key: 'rule', title: '规则管理', desc: '查看当前批次的计分规则明细', ready: ruleReady.value, doneLabel: '已发布', pendingLabel: '查看规则', locked: false, lockedLabel: '' },
+  { key: 'material', title: '材料上传与识别', desc: '上传证书证明，AI 自动识别并匹配加分', ready: materialCount.value > 0, doneLabel: materialCount.value + ' 份材料', pendingLabel: '上传材料', locked: !ruleReady.value, lockedLabel: '请先发布规则集' },
+  { key: 'score', title: 'F3 评分清单', desc: '查看 B1-B8 加分汇总明细', ready: confirmedRecCount.value > 0, doneLabel: confirmedRecCount.value + ' 条确认', pendingLabel: '查看清单', locked: !ruleReady.value, lockedLabel: '请先确认识别结果' },
+  { key: 'f1', title: 'F1 基本素质', desc: '思想政治、道德品质等评分', ready: f1Done.value, doneLabel: '已填写', pendingLabel: '填写评分', locked: !ruleReady.value, lockedLabel: '请先发布规则集' },
+  { key: 'f2', title: 'F2 课程成绩', desc: '录入学期课程学分和考试成绩', ready: f2Done.value, doneLabel: '已录入', pendingLabel: '录入成绩', locked: !ruleReady.value, lockedLabel: '请先发布规则集' },
+  { key: 'form', title: '自动填表', desc: '上传 Word 模板，一键填充并下载', ready: false, doneLabel: '已完成', pendingLabel: '开始填表', locked: confirmedRecCount.value === 0, lockedLabel: '暂无已确认的识别结果' },
+])
+
 // ========== 刷新 ==========
 async function refreshAll() {
-  await Promise.all([refreshRules(), refreshMaterials(), refreshEval(), refreshTemplates()])
-  // 从服务端恢复 F1/F2 数据到 Pinia Store，解决刷新后 Store 数据丢失问题
+  await Promise.all([loadPublishedRules(), loadRuleSets(), refreshMaterials(), refreshEval(), refreshTemplates()])
   await restoreStoreFromPreview()
   if (templates.value.length > 0) {
     const latest = templates.value[0]
@@ -170,10 +170,33 @@ async function refreshAll() {
   refreshScoreList()
 }
 
+async function loadPublishedRules() {
+  if (!currentBatch.value?.id) { publishedRules.value = []; return }
+  try {
+    const r = await api.getPublishedRules(currentBatch.value.id)
+    if (r.code === 200 && r.data) {
+      publishedRules.value = r.data.rules || []
+      // 同时更新 ruleSets（供其他逻辑使用 publishedRuleSetId）
+      if (r.data.rule_set) {
+        const existing = ruleSets.value.find(rs => rs.id === r.data.rule_set.id)
+        if (!existing) ruleSets.value = [r.data.rule_set]
+      }
+    }
+  } catch (e) { console.error('[SmartFill] loadPublishedRules error:', e.message) }
+}
+
+async function loadRuleSets() {
+  if (!currentBatch.value?.id) return
+  try {
+    const r = await api.getRuleSets(currentBatch.value.id)
+    if (r.code === 200) ruleSets.value = r.data || []
+  } catch (_) {}
+}
+
 // ★ 从服务端 fill-preview 数据恢复到 Pinia Store（仅在 Store 为默认值时覆盖）
 async function restoreStoreFromPreview() {
   try {
-    const r = await api.getFillPreview(selectedBatchId.value || undefined)
+    const r = await api.getFillPreview(currentBatch.value?.id)
     if (r.code !== 200 || !r.data) return
     const d = r.data
     // 恢复 F1
@@ -194,15 +217,6 @@ async function restoreStoreFromPreview() {
   } catch (_) {}
 }
 
-async function refreshRules() {
-  const [s, rs] = await Promise.all([
-    api.getRuleSources(selectedBatchId.value || undefined),
-    api.getRuleSets(selectedBatchId.value || undefined)
-  ])
-  if (s.code === 200) ruleSources.value = s.data || []
-  if (rs.code === 200) ruleSets.value = rs.data || []
-}
-
 async function refreshMaterials() {
   const r = await api.getMaterials()
   if (r.code === 200) materials.value = r.data || []
@@ -220,20 +234,11 @@ async function refreshTemplates() {
 }
 
 onMounted(async () => {
-  await loadBatches()
-  if (batches.value.length > 0) {
-    selectedBatchId.value = batches.value[0].id
-    previousBatchId.value = batches.value[0].id
+  await loadStudentBatch()
+  if (currentBatch.value) {
     await refreshAll()
   }
 })
-
-async function removeRuleSource(id) {
-  if (!confirm('确定删除该规则文件吗？\n\n相关的文档结构、解析记录、规则集和计分规则将一并删除，此操作不可恢复。')) return
-  const res = await api.deleteRuleSource(id)
-  if (res.code === 200) refreshRules()
-  else alert(res.msg)
-}
 
 async function createMaterial() {
   const res = await api.createMaterial('')
@@ -250,7 +255,7 @@ async function uploadFiles(materialId, files) {
 async function removeMaterial(id) {
   if (!confirm('删除该材料及其所有附件？')) return
   const res = await api.deleteMaterial(id)
-  if (res.code === 200) { materials.value = materials.value.filter(m => m.id !== id); refreshEval() }
+  if (res.code === 200) { materials.value = materials.value.filter(m => m.id !== id); refreshEval(); refreshScoreList() }
   else alert(res.msg)
 }
 async function onMaterialConfirmed() {
@@ -260,7 +265,7 @@ async function onCalculate(ruleSetId) {
   const mids = materials.value.filter(m =>
     (m.facts || []).some(f => f.match?.review_status === 'confirmed')
   ).map(m => m.id)
-  const res = await api.calculateScore(ruleSetId, mids, selectedBatchId.value || undefined)
+  const res = await api.calculateScore(ruleSetId, mids, currentBatch.value?.id)
   if (res.code === 200) alert(res.msg)
   else alert(res.msg)
   refreshEval()
@@ -270,10 +275,10 @@ async function onCalculate(ruleSetId) {
 async function refreshScoreList() {
   try {
     const publishedRs = ruleSets.value.find(r =>
-      r.status === 'published' && (!selectedBatchId.value || r.batch_id === selectedBatchId.value)
+      r.status === 'published' && (!currentBatch.value?.id || r.batch_id === currentBatch.value?.id)
     )
     if (!publishedRs) return
-    const sl = await api.getScoreList(publishedRs.id, selectedBatchId.value || undefined)
+    const sl = await api.getScoreList(publishedRs.id, currentBatch.value?.id)
     if (sl.code === 200) scoreList.value = sl.data
   } catch (e) { console.error('[SmartFill] refreshScoreList error:', e.message) }
 }
@@ -285,7 +290,7 @@ async function onUploadTemplate(file) {
   else alert(res.msg)
 }
 async function doFill(tplId) {
-  const res = await api.doFill(tplId, selectedBatchId.value || undefined)
+  const res = await api.doFill(tplId, currentBatch.value?.id)
   if (res.code === 200) alert(res.msg)
   else alert(res.msg)
 }
@@ -307,7 +312,12 @@ function downloadFill(id) {
     }
   })
 }
-function removeTemplate() { uploadedTemplate.value = null }
+async function removeTemplate() {
+  if (uploadedTemplate.value?.id) {
+    try { await api.deleteTemplate(uploadedTemplate.value.id) } catch (e) { console.warn('deleteTemplate:', e.message) }
+  }
+  uploadedTemplate.value = null
+}
 function onScoreChanged() { refreshEval(); refreshScoreList() }
 function onF1F2Saved() {
   const items = []
@@ -318,70 +328,148 @@ function onF1F2Saved() {
   if (f2Courses.length) {
     items.push({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: f2Courses, rule_set_id: 0 })
   }
-  if (items.length) api.saveFillData(items, selectedBatchId.value || undefined)
+  if (items.length) api.saveFillData(items, currentBatch.value?.id)
 }
 import { useSmartFillStore } from '@/stores/smartFill'
 const store = useSmartFillStore()
 </script>
 
 <style scoped>
-.dashboard { display: flex; flex-direction: column; gap: 24px; }
-.page-title { font-size: 24px; margin: 0; }
-.batch-selector-bar {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  padding: 16px 20px;
+/* ===== 共享配色变量（暖沙 + 鼠尾草绿） ===== */
+.dashboard {
+  --sf-sage: #7d9b76;
+  --sf-sage-soft: rgba(125,155,118,0.12);
+  --sf-sage-glow: rgba(125,155,118,0.18);
+  --sf-sand: #c4a882;
+  --sf-sand-soft: rgba(196,168,130,0.12);
+  --sf-sand-glow: rgba(196,168,130,0.18);
+  --sf-card-bg: rgba(255,255,255,0.48);
+  --sf-card-shadow: 0 1px 12px rgba(0,0,0,0.04);
+  --sf-radius: 16px;
+  --sf-gap: 28px;
+  display: flex; flex-direction: column; gap: 24px;
+  max-width: 100%; margin: 0 auto; padding: 4px 0 32px;
 }
-.batch-selector { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.batch-label { font-size: 14px; font-weight: 600; color: var(--color-text-secondary); white-space: nowrap; }
-.batch-select {
-  padding: 8px 14px; border: 1.5px solid var(--color-border);
-  border-radius: var(--radius-btn); font-size: 14px; font-family: inherit;
-  background: var(--color-bg); color: var(--color-text);
-  min-width: 240px; cursor: pointer;
+@media (prefers-color-scheme: dark) {
+  .dashboard {
+    --sf-card-bg: rgba(255,255,255,0.03);
+    --sf-card-shadow: 0 1px 12px rgba(0,0,0,0.18);
+  }
 }
-.batch-select:focus { outline: none; border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
-.batch-meta { font-size: 13px; color: var(--color-text-tertiary); }
-.batch-status-draft { color: #E37400; }
-.batch-status-published { color: #34A853; }
-.batch-status-closed { color: #D93025; }
-.batch-status-archived { color: #999; }
-.status-bar { display: flex; gap: 16px; }
-.status-item {
-  flex: 1; text-align: center; padding: 14px;
-  background: var(--color-surface); border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+
+/* ===== 批次信息条 ===== */
+.batch-info-bar {
+  background: var(--sf-card-bg); border-radius: 12px; padding: 8px 16px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px;
+  backdrop-filter: blur(10px); box-shadow: var(--sf-card-shadow);
 }
-.status-item.ready { border-color: var(--color-primary); }
-.status-num { display: block; font-size: 28px; font-weight: 700; color: var(--color-text-secondary); }
-.status-item.ready .status-num { color: var(--color-primary); }
-.status-label { font-size: 13px; color: var(--color-text-tertiary); margin-top: 4px; display: block; }
-.card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-@media (max-width: 768px) { .card-grid { grid-template-columns: 1fr; } }
-.func-card {
-  background: var(--color-surface); border: 2px solid var(--color-border);
-  border-radius: var(--radius-card); padding: 24px; display: flex; gap: 16px;
-  cursor: pointer; transition: all 0.2s;
+.batch-info-bar.batch-loading { color: var(--color-text-tertiary); }
+.batch-icon { font-size: 15px; opacity: 0.7; }
+.batch-title { font-weight: 600; color: var(--color-text); }
+.batch-meta { color: var(--color-text-tertiary); }
+.batch-status-tag { font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
+.batch-status-tag.status-draft { background: rgba(244,184,71,0.15); color: #c4952a; }
+.batch-status-tag.status-published { background: rgba(125,155,118,0.18); color: #5a8a54; }
+.batch-status-tag.status-closed { background: rgba(220,80,80,0.12); color: #c44; }
+.batch-status-tag.status-archived { background: rgba(150,150,150,0.10); color: #888; }
+.batch-error-bar {
+  background: rgba(244,184,71,0.10); border-radius: 12px; padding: 10px 16px;
+  display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c4952a;
 }
-.func-card:hover { border-color: var(--color-primary); transform: translateY(-2px); }
-.func-card.active { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
-.card-icon { font-size: 32px; flex-shrink: 0; }
-.card-content h3 { font-size: 16px; margin: 0 0 6px; }
-.card-content p { font-size: 13px; color: var(--color-text-secondary); margin: 0 0 10px; line-height: 1.5; }
-.card-status.done { color: #34A853; }
-.card-status.ready { color: var(--color-primary); }
-.card-status.locked { color: var(--color-text-tertiary); }
+
+/* ===== 页头 ===== */
+.page-top { display: flex; align-items: center; justify-content: space-between; }
+.page-title { font-size: 24px; font-weight: 700; margin: 0; letter-spacing: -0.02em; }
+.page-sub { font-size: 13px; color: var(--color-text-tertiary); margin: 2px 0 0; }
+.total-chip {
+  display: flex; align-items: center; gap: 8px; padding: 10px 20px;
+  border-radius: 16px; background: var(--sf-sage-soft); box-shadow: var(--sf-card-shadow);
+}
+.total-num { font-size: 26px; font-weight: 700; color: var(--sf-sage); }
+.total-label { font-size: 12px; color: var(--sf-sage); opacity: 0.7; }
+
+/* ===== 水平步进条 ===== */
+.stepper {
+  display: flex; align-items: flex-start; gap: 0;
+  padding: 20px 16px; border-radius: 18px;
+  background: var(--sf-card-bg); box-shadow: var(--sf-card-shadow);
+  backdrop-filter: blur(10px); overflow-x: auto;
+}
+.step-item {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  flex: 1; min-width: 0; position: relative; cursor: pointer;
+  padding: 4px 6px; border-radius: 12px; transition: background 0.2s;
+}
+.step-item:not(.locked):hover { background: var(--sf-sand-soft); }
+.step-item.locked { cursor: not-allowed; opacity: 0.45; }
+
+.step-indicator {
+  width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0;
+  background: var(--color-surface); border: 2px solid #d5d1ca;
+  color: var(--color-text-tertiary); transition: all 0.3s;
+}
+.step-item.done .step-indicator {
+  background: var(--sf-sage); border-color: var(--sf-sage); color: #fff;
+}
+.step-item.active .step-indicator {
+  border-color: var(--sf-sand); border-width: 3px; color: var(--sf-sand);
+  box-shadow: 0 0 0 6px rgba(196,168,130,0.12);
+}
+.step-check { font-size: 11px; }
+.step-num { font-size: 14px; }
+
+.step-text { text-align: center; min-width: 0; }
+.step-title { font-size: 13px; font-weight: 600; color: var(--color-text); white-space: nowrap; }
+.step-item.active .step-title { color: var(--sf-sand); }
+.step-item.done .step-title { color: var(--sf-sage); }
+.step-hint { font-size: 11px; color: var(--color-text-tertiary); margin-top: 2px; white-space: nowrap; }
+
+.step-connector {
+  position: absolute; top: 22px; left: calc(50% + 18px);
+  width: calc(100% - 36px); height: 2px; background: #e0ddd6;
+}
+.step-connector.done { background: var(--sf-sage); }
+
+@media (max-width: 768px) {
+  .stepper { flex-wrap: wrap; gap: 8px; justify-content: center; }
+  .step-item { flex: 0 0 auto; min-width: 80px; }
+  .step-connector { display: none; }
+}
+
+/* ===== 步骤切换动效 ===== */
+.step-enter-active {
+  transition: opacity 0.35s ease, transform 0.4s cubic-bezier(0.22,1,0.36,1);
+}
+.step-leave-active {
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.step-enter-from {
+  opacity: 0;
+  transform: translateY(24px) scale(0.98);
+}
+.step-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+/* ===== 子面板 ===== */
 .section-panel {
-  background: var(--color-surface); border: 1px solid var(--color-border);
-  border-radius: var(--radius-card); padding: 24px;
+  background: var(--sf-card-bg); border-radius: 18px; padding: 28px;
+  box-shadow: var(--sf-card-shadow); backdrop-filter: blur(10px);
 }
-.section-header { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; }
-.section-header h3 { font-size: 18px; margin: 0; }
-.section-batch-label { font-size: 12px; color: var(--color-text-tertiary); margin-left: auto; }
+.section-header { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.section-header h3 { font-size: 18px; margin: 0; font-weight: 700; }
+.section-batch-label {
+  font-size: 12px; color: var(--color-text-tertiary); margin-left: auto;
+  background: var(--sf-sand-soft); padding: 3px 12px; border-radius: 10px;
+}
 .btn-back {
-  padding: 6px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-btn);
-  background: var(--color-bg); cursor: pointer; font-size: 13px; font-family: inherit; color: var(--color-text);
+  padding: 5px 14px; border: none; border-radius: 10px;
+  background: var(--sf-sand-soft); cursor: pointer; font-size: 13px;
+  font-family: inherit; color: var(--sf-sand); font-weight: 500;
+  transition: all 0.2s;
 }
+.btn-back:hover { background: rgba(196,168,130,0.22); }
 </style>
 

@@ -5,10 +5,15 @@
   "main": "src/app.js",
   "scripts": {
     "start": "node src/app.js",
-    "dev": "nodemon src/app.js"
+    "dev": "nodemon src/app.js",
+    "test:module3": "node --test tests/module3-baseline.test.js",
+    "test:module3:audit": "node --test tests/module3-code-audit.test.js",
+    "test:module3:e2e": "node tests/module3-workflow.e2e.js",
+    "test:module3:fixes": "node --test tests/module3-critical-fixes.test.js"
   },
   "dependencies": {
     "adm-zip": "^0.5.18",
+    "ali-oss": "^6.23.0",
     "archiver": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",

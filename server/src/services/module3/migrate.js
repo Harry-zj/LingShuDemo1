@@ -299,6 +299,8 @@ async function migrateModule3(conn) {
   await tryQuery(conn, "ALTER TABLE assessment_batches ADD KEY idx_batch_scope (college, grade, school_year)");
 
   await createModule3Tables(conn);
+  await tryQuery(conn, "ALTER TABLE fill_results ADD COLUMN batch_id INT DEFAULT NULL AFTER user_id");
+  await tryQuery(conn, "ALTER TABLE fill_results ADD INDEX idx_fill_results_user_batch (user_id, batch_id, created_at)");
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN is_demo TINYINT(1) NOT NULL DEFAULT 0 AFTER from_smart_fill");
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN fill_result_id INT DEFAULT NULL AFTER is_demo");
   await tryQuery(conn, "ALTER TABLE assessment_forms ADD COLUMN smart_fill_rule_set_id INT DEFAULT NULL AFTER fill_result_id");
