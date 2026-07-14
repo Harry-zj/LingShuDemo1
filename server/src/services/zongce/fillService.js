@@ -132,12 +132,13 @@ async function getFillData(userId, batchId) {
     }
 
     // 4. 查询已确认的事实匹配（V3: 不再依赖 indicator_nodes）
+    // ★ 修复: JOIN 时限定 ef.status='active'，防止已废弃的事实参与 F3 计分
     const [rows] = await conn.execute(
       `SELECT m.id AS material_id, m.title AS material_title,
         ef.id AS fact_id, ef.fact_data, ef.fact_type,
         frm.preview_data, frm.review_status
        FROM fact_rule_matches frm
-       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id
+       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id AND ef.status = 'active'
        JOIN material_analysis_runs mar ON ef.analysis_run_id = mar.id
        JOIN materials m ON mar.material_id = m.id
        JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id

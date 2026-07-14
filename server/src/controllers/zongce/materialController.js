@@ -1,5 +1,7 @@
 ﻿const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
+const path = require("path");
+const { uploadBuffer, generateKey } = require("../../services/oss");
 const { calculateScorePreview, generateDescription } = require("../../services/zongce/ai/materialPipeline");
 // Legacy: ruleBlockMatcher used by previewScore/matchMaterial (V3 migration target)
 const { matchFactPipeline, validateAndPersistMatch } = require("../../services/zongce/ai/ruleBlockMatcher");
@@ -49,7 +51,7 @@ exports.getMaterials = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 上传证明文件
+// 上传证明文件（★ OSS: buffer → 上传云端 → 存完整 URL 到 file_path）
 exports.uploadAttachments = async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,11 +61,24 @@ exports.uploadAttachments = async (req, res) => {
     const inserted = [];
     for (const f of req.files) {
       const safeName = Buffer.from(f.originalname, 'latin1').toString('utf8');
+      // ★ 上传 buffer 到 OSS，获取完整公开 URL
+      const ossKey = generateKey(safeName);
+      let filePath;
+      try {
+        filePath = await uploadBuffer(f.buffer, ossKey, f.mimetype);
+      } catch (ossErr) {
+        console.error('[Upload] OSS 上传失败，回退到本地存储:', ossErr.message);
+        // 回退：OSS 不可用时写本地磁盘
+        const fs = require("fs");
+        const localPath = path.join(__dirname, "../../../uploads", ossKey);
+        fs.writeFileSync(localPath, f.buffer);
+        filePath = ossKey; // 裸文件名，兼容旧逻辑
+      }
       const [r] = await pool.execute(
         "INSERT INTO attachments (material_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)",
-        [id, safeName, f.filename, f.mimetype, f.size]
+        [id, safeName, filePath, f.mimetype, f.size]
       );
-      inserted.push({ id: r.insertId, file_name: safeName });
+      inserted.push({ id: r.insertId, file_name: safeName, url: filePath });
     }
     res.json(Res.success(inserted, `已上传 ${inserted.length} 个文件`));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -132,6 +147,33 @@ exports.extractMaterial = async (req, res) => {
                   }
                 } catch(e2){}
               }
+              // ★ 修复重复加分: 将同一材料下使用旧 rule_set 的 confirmed 匹配标记为 is_current=0
+              try {
+                const efIds = efs.map(ef => ef.id);
+                if (efIds.length) {
+                  const ph = efIds.map(() => '?').join(',');
+                  const [oldMatches] = await pool.execute(
+                    `SELECT frm.id FROM fact_rule_matches frm
+                     JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
+                     WHERE frm.extracted_fact_id IN (${ph})
+                       AND frm.is_current = 1
+                       AND rmr.rule_set_id != ?`,
+                    [...efIds, spRsCache[0].id]
+                  );
+                  if (oldMatches.length > 0) {
+                    await pool.execute(
+                      `UPDATE fact_rule_matches frm
+                       JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
+                       SET frm.is_current = 0
+                       WHERE frm.extracted_fact_id IN (${ph})
+                         AND frm.is_current = 1
+                         AND rmr.rule_set_id != ?`,
+                      [...efIds, spRsCache[0].id]
+                    );
+                    console.log(`[Extract] 规则集已变更，${oldMatches.length} 条旧匹配已置为 is_current=0`);
+                  }
+                }
+              } catch(e4) { console.warn('[Extract] invalidate old matches fail:', e4.message); }
             }
           } catch(e3){ console.warn('[Extract] cache match fail:', e3.message); }
           // Persist match results
@@ -149,8 +191,24 @@ exports.extractMaterial = async (req, res) => {
     const [attachments] = await pool.execute("SELECT * FROM attachments WHERE material_id = ?", [id]);
     if (!attachments.length) return res.json(Res.error("请先上传证明文件"));
 
-    // ★ 创建 analysis run（状态=processing）
+    // ★ 创建 analysis run 前，标记旧数据为过期
     const crypto = require('crypto');
+    // 1. 标记旧的 extracted_facts 为 superseded
+    await pool.execute(
+      `UPDATE extracted_facts SET status = 'superseded'
+       WHERE analysis_run_id IN (SELECT id FROM material_analysis_runs WHERE material_id = ? AND status IN ('completed','needs_review'))
+       AND status = 'active'`, [id]
+    );
+    // 2. 标记旧的 fact_rule_matches 为 is_current=0
+    await pool.execute(
+      `UPDATE fact_rule_matches SET is_current = 0
+       WHERE extracted_fact_id IN (
+         SELECT id FROM extracted_facts WHERE analysis_run_id IN (
+           SELECT id FROM material_analysis_runs WHERE material_id = ?
+         ) AND status = 'superseded'
+       ) AND is_current = 1`, [id]
+    );
+
     const inputHash = crypto.createHash('sha256')
       .update(attachments.map(a => `${a.id}:${a.file_size}`).join('|'))
       .digest('hex').slice(0, 64);
@@ -576,6 +634,11 @@ exports.confirmMatchV3 = async (req, res) => {
       });
 
       // 5. Upsert fact_rule_matches (so getScoreList can read it)
+      // ★ 修复重复加分: 先将同一 extracted_fact 的旧 is_current=1 记录全部置 0
+      await conn.execute(
+        "UPDATE fact_rule_matches SET is_current = 0 WHERE extracted_fact_id = ? AND is_current = 1",
+        [ef_id]
+      );
       const [existingFrm] = await conn.execute(
         "SELECT id FROM fact_rule_matches WHERE match_run_id = ? AND extracted_fact_id = ?",
         [matchRunId, ef_id]

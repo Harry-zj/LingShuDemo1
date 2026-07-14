@@ -4,6 +4,17 @@ const { validateFactExtraction } = require("./schemas");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { isOssUrl, downloadBuffer } = require("../../../services/oss");
+
+// ★ 统一获取附件 Buffer（OSS 下载 / 本地磁盘读取）
+async function getAttachmentBuffer(att) {
+  if (isOssUrl(att.file_path)) {
+    return await downloadBuffer(att.file_path);
+  }
+  // 向后兼容：裸文件名从本地磁盘读取
+  const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+  return fs.readFileSync(filePath);
+}
 
 // ============================================================
 //  从多个附件提取事实（★ 合并分析，不取最高置信度）
@@ -14,14 +25,14 @@ async function extractFacts(attachments) {
   const allMissing = new Set();
 
   for (const att of attachments) {
-    const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+    const buffer = await getAttachmentBuffer(att);
     const ext = path.extname(att.file_name).toLowerCase();
 
     let result;
     if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
-      result = await extractFromImage(filePath, ext, att.file_name);
+      result = await extractFromImage(buffer, ext, att.file_name);
     } else {
-      result = await extractFromDocument(filePath, ext);
+      result = await extractFromDocument(buffer, ext);
     }
 
     const valid = validateFactExtraction(result);
@@ -73,8 +84,7 @@ async function extractFacts(attachments) {
   };
 }
 
-async function extractFromImage(filePath, ext, fileName) {
-  const buffer = fs.readFileSync(filePath);
+async function extractFromImage(buffer, ext, fileName) {
   const base64 = buffer.toString("base64");
   const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
   const mime = mimeMap[ext] || "image/png";
@@ -94,16 +104,16 @@ async function extractFromImage(filePath, ext, fileName) {
   );
 }
 
-async function extractFromDocument(filePath, ext) {
+async function extractFromDocument(buffer, ext) {
   let text = "";
   if (ext === ".docx") {
     const mammoth = require("mammoth");
-    text = (await mammoth.extractRawText({ path: filePath })).value;
+    text = (await mammoth.extractRawText({ buffer })).value;
   } else if (ext === ".pdf") {
     const pdfParse = require("pdf-parse");
-    text = (await pdfParse(fs.readFileSync(filePath))).text;
+    text = (await pdfParse(buffer)).text;
   } else {
-    text = fs.readFileSync(filePath, "utf-8");
+    text = buffer.toString("utf-8");
   }
 
   if (!text.trim()) {
@@ -130,13 +140,12 @@ async function extractStructuredFacts(attachments) {
   let reviewReason = null;
 
   for (const att of attachments) {
-    const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+    const buffer = await getAttachmentBuffer(att);
     const ext = path.extname(att.file_name).toLowerCase();
 
     let result;
     if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
       // 图片 → Kimi OCR → 结构化提取
-      const buffer = fs.readFileSync(filePath);
       const base64 = buffer.toString("base64");
       const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
       const mime = mimeMap[ext] || "image/png";
@@ -153,14 +162,14 @@ async function extractStructuredFacts(attachments) {
       );
     } else if (ext === ".docx") {
       const mammoth = require("mammoth");
-      const text = (await mammoth.extractRawText({ path: filePath })).value;
+      const text = (await mammoth.extractRawText({ buffer })).value;
       if (!text.trim()) continue;
       result = await chatStreamJson(
         [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文档中提取结构化事实：\n\n${text}` }],
         { temperature: 0.1, maxTokens: 2048 }
       );
     } else {
-      const text = fs.readFileSync(filePath, "utf-8");
+      const text = buffer.toString("utf-8");
       if (!text.trim()) continue;
       result = await chatStreamJson(
         [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文本中提取结构化事实：\n\n${text}` }],

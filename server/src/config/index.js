@@ -13,4 +13,10 @@ module.exports = {
     baseUrl: process.env.KIMI_BASE_URL || 'https://api.siliconflow.cn',
     model: process.env.KIMI_MODEL || 'moonshotai/Kimi-K2.6',
   },
+  oss: {
+    region: process.env.OSS_REGION || 'oss-cn-hangzhou',
+    accessKeyId: process.env.OSS_ACCESS_KEY_ID || '',
+    accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET || '',
+    bucket: process.env.OSS_BUCKET || 'lingshu-uploads',
+  },
 };
