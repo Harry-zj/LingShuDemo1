@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role ENUM('student','class_leader','teacher','class_committee','counselor','student_affairs','admin') NOT NULL DEFAULT 'student',
   is_assessment_member TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  deleted_at DATETIME DEFAULT NULL,
   real_name VARCHAR(50) DEFAULT '',
   student_no VARCHAR(20) DEFAULT NULL,
   class_id INT DEFAULT NULL,

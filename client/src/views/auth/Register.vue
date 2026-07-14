@@ -135,7 +135,7 @@ async function handleRegister() {
       alert(res.msg);
     }
   } catch (e) {
-    alert('注册失败，请检查网络连接');
+    alert(e?.response?.data?.msg || e?.message || '注册失败，请检查网络连接');
   } finally {
     loading.value = false;
   }

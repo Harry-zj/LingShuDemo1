@@ -41,12 +41,22 @@
             <option v-for="major in scopeMajors" :key="major" :value="major">{{ major }}</option>
           </select>
         </label>
-        <label class="field-block">
+        <div class="field-block">
           <span>限定班级（可多选）</span>
-          <select v-model="draftScope.class_ids" multiple :disabled="!draftScope.college || !draftScope.grade">
-            <option v-for="cls in scopeClasses" :key="cls.id" :value="cls.id">{{ classDisplayName(cls) }}</option>
-          </select>
-        </label>
+          <div class="class-check-list" :class="{ disabled: !draftScope.college || !draftScope.grade }">
+            <label v-for="cls in scopeClasses" :key="cls.id" class="class-check-item">
+              <input
+                v-model="draftScope.class_ids"
+                type="checkbox"
+                :value="cls.id"
+                :disabled="!draftScope.college || !draftScope.grade"
+              />
+              <span>{{ classDisplayName(cls) }}</span>
+            </label>
+            <span v-if="draftScope.college && draftScope.grade && !scopeClasses.length" class="class-empty">当前范围暂无可选班级</span>
+            <span v-else-if="!draftScope.college || !draftScope.grade" class="class-empty">请先选择学院和年级</span>
+          </div>
+        </div>
       </div>
       <div class="scope-summary">
         <VIcon icon="mdi:information-outline" />
@@ -376,7 +386,12 @@ onMounted(load);
 .search-bar { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 13px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); }
 .search-bar input { flex: 1; border: none; background: transparent; padding: 0; min-height: auto; }
 input, select { min-height: 42px; border: 1px solid var(--color-border); border-radius: 8px !important; padding: 8px 12px; background: var(--color-bg); color: var(--color-text-primary); outline: none; }
-select[multiple] { min-height: 96px; }
+.class-check-list { min-height: 96px; max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); }
+.class-check-list.disabled { opacity: .62; }
+.class-check-item { display: flex; align-items: center; gap: 9px; min-height: 26px; cursor: pointer; color: var(--color-text-primary); font-size: 13px; }
+.class-check-item input[type="checkbox"] { width: 16px; height: 16px; min-height: 0; flex: 0 0 16px; margin: 0; padding: 0; border-radius: 3px !important; accent-color: var(--color-primary); cursor: pointer; }
+.class-check-item input[type="checkbox"]:disabled { cursor: not-allowed; }
+.class-empty { color: var(--color-text-tertiary); font-size: 12px; line-height: 1.6; }
 .btn-primary, .btn-outline, .danger { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 14px; border-radius: 8px !important; cursor: pointer; white-space: nowrap; }
 .btn-outline:disabled { opacity: .55; cursor: not-allowed; }
 .btn-primary { border: none; background: var(--gradient-primary); color: white; }

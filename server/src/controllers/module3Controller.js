@@ -292,6 +292,14 @@ exports.adminResetPassword = async (req, res) => {
   }
 };
 
+exports.adminDeleteUser = async (req, res) => {
+  try {
+    res.json(Res.success(await adminService.deleteUserAccount(await currentUser(req), req.params.id), "账号已删除"));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
+};
+
 exports.getOrganizations = async (req, res) => {
   try {
     res.json(Res.success(await adminService.listOrganizations(await currentUser(req))));

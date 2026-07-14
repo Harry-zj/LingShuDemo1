@@ -73,10 +73,17 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>账号/学号</th><th>角色</th><th>姓名</th><th>学院</th><th>年级</th><th>专业</th><th>班级</th></tr></thead>
+          <thead><tr><th>账号/学号</th><th>角色</th><th>姓名</th><th>学院</th><th>年级</th><th>专业</th><th>班级</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.account }}</td><td>{{ u.role_name }}</td><td>{{ u.real_name || '-' }}</td><td>{{ u.college || '-' }}</td><td>{{ u.grade || '-' }}</td><td>{{ u.major || '-' }}</td><td>{{ u.class_name || '-' }}</td>
+              <td>
+                <button
+                  class="link-danger"
+                  :disabled="deletingId === u.id || Number(userStore.user?.id) === Number(u.id)"
+                  @click="deleteAccount(u)"
+                >{{ deletingId === u.id ? '删除中...' : '删除账号' }}</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -103,10 +110,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
-import { adminCreateStudent, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword } from '../../api/module3';
+import { adminCreateStudent, adminDeleteUser, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword } from '../../api/module3';
+import { useUserStore } from '../../stores/user';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
 const view = computed(() => props.view || 'menu');
+const userStore = useUserStore();
 const menuCards = [
   { title: '手动创建学生', description: '逐个录入学号和可选个人信息，初始密码与学号相同', icon: 'mdi:account-plus-outline', to: '/module3/account-manage/manual' },
   { title: '文本导入学生', description: '上传或粘贴每行一个学号的纯文本，自动跳过重复账号', icon: 'mdi:file-upload-outline', to: '/module3/account-manage/import' },
@@ -132,6 +141,7 @@ const generate = ref({ role: 'counselor', count: 1 });
 const resetAccount = ref('');
 const users = ref([]);
 const query = ref({ role: '', keyword: '' });
+const deletingId = ref(0);
 
 async function loadUsers() {
   const res = await adminListUsers(query.value);
@@ -174,6 +184,21 @@ async function resetPwd() {
     alert('密码已重置为 000000');
   } else alert(res.msg || '重置失败');
 }
+async function deleteAccount(user) {
+  if (Number(userStore.user?.id) === Number(user.id)) return alert('不能删除当前登录的管理员账号');
+  const ok = window.confirm(`确认删除账号“${user.account}”吗？删除后该账号将立即无法登录，历史业务数据会保留。`);
+  if (!ok) return;
+  deletingId.value = user.id;
+  try {
+    const res = await adminDeleteUser(user.id);
+    if (res.code === 200) {
+      alert('账号已删除');
+      await loadUsers();
+    } else alert(res.msg || '删除失败');
+  } finally {
+    deletingId.value = 0;
+  }
+}
 
 watch(view, value => { if (value === 'list') loadUsers(); }, { immediate: true });
 </script>
@@ -203,6 +228,8 @@ textarea { margin-top:10px; resize:vertical; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
 th, td { padding:10px; border-bottom:1px solid var(--color-border); text-align:left; white-space:nowrap; }
 th { color:var(--color-text-secondary); font-weight:600; }
+.link-danger { border:0; background:transparent; color:#dc2626; cursor:pointer; padding:4px 0; }
+.link-danger:disabled { opacity:.45; cursor:not-allowed; }
 .back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
 @media (max-width:900px) { .form-grid, .result-list { grid-template-columns:1fr; } .panel-header, .filters, .inline-form { flex-direction:column; align-items:stretch; } }
 
