@@ -1,11 +1,11 @@
-﻿const { pool } = require("../../config/database");
+const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
 const { executeCalculation } = require("../../services/zongce/engine/scoringEngine");
 
 // 创建计算任务并执行
 exports.calculateScore = async (req, res) => {
   try {
-    const { rule_set_id, material_ids } = req.body;
+    const { rule_set_id, material_ids, batch_id } = req.body;
     if (!rule_set_id) return res.json(Res.error("请选择规则集"));
 
     // 验证规则集已发布
@@ -51,8 +51,8 @@ exports.calculateScore = async (req, res) => {
         let totalScore = 0; for (const m of metris) { if (m.final_score != null) totalScore += Number(m.final_score); }
         const grade = totalScore >= 90 ? '优秀' : totalScore >= 80 ? '良好' : totalScore >= 70 ? '中等' : totalScore >= 60 ? '合格' : '待提升';
         const dimScores = JSON.stringify({ aScores:{}, bScores:{}, scores:{F1:0,F2:0,F3:0}, classAvg:{F1:90,F2:80,F3:55}, rank:5, totalStudents:38, majorRank:12, majorTotal:118 });
-        await pool.execute('INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (?,101,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score), grade=VALUES(grade), dimension_scores=VALUES(dimension_scores)',
-          [req.user.id, totalScore, grade, 'F=F1*0.1+F2*0.65+F3*0.25', dimScores]);
+        await pool.execute('INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores) VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE total_score=VALUES(total_score), grade=VALUES(grade), dimension_scores=VALUES(dimension_scores)',
+          [req.user.id, batch_id || null, totalScore, grade, 'F=F1*0.1+F2*0.65+F3*0.25', dimScores]);
       } catch (e) { console.warn('[Eval] er fail:', e.message); }
     }
 
@@ -129,20 +129,22 @@ exports.getScoreList = async (req, res) => {
       [ruleSetId]
     );
 
-    // 2. 加载所有已确认的事实匹配
+    // 2. 加载所有已确认的事实匹配（★ 按 rule_set_id 过滤，与 getFillData 保持一致）
+    // ★ 修复: JOIN 时限定 ef.status='active'，防止已废弃(superseded)的事实因 is_current 标记遗漏而重复计分
     const [rows] = await pool.execute(
       `SELECT m.id AS material_id, m.title AS material_title,
          ef.id AS fact_id, ef.fact_type, ef.fact_data, frm.preview_data
        FROM fact_rule_matches frm
-       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id
+       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id AND ef.status = 'active'
        JOIN material_analysis_runs mar ON ef.analysis_run_id = mar.id
        JOIN materials m ON mar.material_id = m.id
        JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
        WHERE frm.review_status = 'confirmed'
          AND frm.is_current = 1 AND frm.is_selected = 1
          AND m.user_id = ?
+         AND rmr.rule_set_id = ?
        ORDER BY m.id, ef.id`,
-      [req.user.id]
+      [req.user.id, ruleSetId]
     );
 
     // 3. 构建指标映射 (item_key -> { code, name, max_score, score, facts })
@@ -187,5 +189,29 @@ exports.getScoreList = async (req, res) => {
   } catch (e) {
     console.error('[Evaluation] getScoreList Error:', e.message);
     res.json(Res.error("获取评分清单失败"));
+  }
+};
+
+// ★ 保存综合评定结果（供个性化分析端 module2 使用）
+exports.saveResult = async (req, res) => {
+  try {
+    const { total_score, grade, formula, dimension_scores, batch_id } = req.body;
+    if (total_score == null) return res.json(Res.error("缺少 total_score"));
+
+    await pool.execute(
+      `INSERT INTO evaluation_results (user_id, batch_id, total_score, grade, formula, dimension_scores)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         total_score = VALUES(total_score),
+         grade = VALUES(grade),
+         formula = VALUES(formula),
+         dimension_scores = VALUES(dimension_scores)`,
+      [req.user.id, batch_id || null, total_score, grade || '', formula || 'F=F1*0.1+F2*0.65+F3*0.25', JSON.stringify(dimension_scores || {})]
+    );
+
+    res.json(Res.success(null, "评定结果已保存"));
+  } catch (e) {
+    console.error('[Evaluation] saveResult Error:', e.message);
+    res.json(Res.error(e.message));
   }
 };

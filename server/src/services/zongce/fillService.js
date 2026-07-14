@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 综测自动填表引擎
  * - Word (.docx): docxtemplater + pizzip 占位符替换
  * - 从数据库读取当前用户的评分数据构建填充数据
@@ -66,7 +66,7 @@ function buildF3Defaults() {
  * @param {number} userId - 用户ID
  * @returns {object} 填充数据
  */
-async function getFillData(userId) {
+async function getFillData(userId, batchId) {
   const conn = await pool.getConnection();
   try {
     // 1. 查询用户信息
@@ -79,10 +79,23 @@ async function getFillData(userId) {
     }
     const user = users[0];
 
-    // 2. 查询已发布的规则集
-    const [ruleSets] = await conn.execute(
-      "SELECT id FROM rule_sets WHERE user_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1", [userId]
-    );
+    // 2. 查询已发布的规则集（★ 按批次查询，不限制 user_id，因为规则可能由管理员上传）
+    let effectiveBatchId = batchId || null;
+    if (!effectiveBatchId) {
+      const [btRows] = await conn.execute(
+        "SELECT id FROM assessment_batches WHERE college = ? AND grade = ? AND status <> 'deleted' ORDER BY school_year DESC LIMIT 1",
+        [user.college || '', user.grade || '']
+      );
+      effectiveBatchId = btRows.length > 0 ? btRows[0].id : null;
+    }
+    let ruleSetId = 0;
+    if (effectiveBatchId) {
+      const [rsRows] = await conn.execute(
+        "SELECT id FROM rule_sets WHERE batch_id = ? AND status = 'published' ORDER BY published_at DESC LIMIT 1",
+        [effectiveBatchId]
+      );
+      ruleSetId = rsRows.length > 0 ? rsRows[0].id : 0;
+    }
 
     // 3. 构建基础数据
     const fillData = {
@@ -113,27 +126,28 @@ async function getFillData(userId) {
       total_score: 0,
     };
 
-    if (!ruleSets.length) {
+    if (!ruleSetId) {
       console.log("[fillService] 无已发布规则集，返回基础用户数据");
       return fillData;
     }
-    const ruleSetId = ruleSets[0].id;
 
     // 4. 查询已确认的事实匹配（V3: 不再依赖 indicator_nodes）
+    // ★ 修复: JOIN 时限定 ef.status='active'，防止已废弃的事实参与 F3 计分
     const [rows] = await conn.execute(
       `SELECT m.id AS material_id, m.title AS material_title,
         ef.id AS fact_id, ef.fact_data, ef.fact_type,
         frm.preview_data, frm.review_status
        FROM fact_rule_matches frm
-       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id
+       JOIN extracted_facts ef ON frm.extracted_fact_id = ef.id AND ef.status = 'active'
        JOIN material_analysis_runs mar ON ef.analysis_run_id = mar.id
        JOIN materials m ON mar.material_id = m.id
        JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
        WHERE frm.review_status = 'confirmed'
          AND frm.is_current = 1 AND frm.is_selected = 1
          AND m.user_id = ?
+         AND rmr.rule_set_id = ?
        ORDER BY m.id, ef.id`,
-      [userId]
+      [userId, ruleSetId]
     );
 
     console.log(`[fillService] 查询到 ${rows.length} 条已确认事实匹配`);
@@ -142,6 +156,7 @@ async function getFillData(userId) {
     const groupMap = new Map();
 
     for (const row of rows) {
+      let preview = {};
       try {
         preview = typeof row.preview_data === 'string'
           ? JSON.parse(row.preview_data) : (row.preview_data || {});
@@ -178,8 +193,8 @@ async function getFillData(userId) {
         human_readable: preview.human_readable || '',
         fact_id: row.fact_id,
         fact_type: row.fact_type,
-        award_name: factData.award_name || '',
-        competition_name: factData.competition_name || '',
+        award_name: factData.value || factData.award_name || '',
+        competition_name: factData.value || factData.competition_name || '',
         inferred_level: factData.inferred_level || '',
         award_rank: factData.award_rank || '',
         score: score,
@@ -208,7 +223,7 @@ async function getFillData(userId) {
         if (B_TO_F3_MAP[bKey]) {
           const f3Key = B_TO_F3_MAP[bKey]; // F3_B1, ...
           fillData[f3Key + '_score'] = group.totalScore;
-          fillData[f3Key + '_detail'] = group.facts.map(f => f.human_readable || f.competition_name || f.award_name).filter(Boolean).join('；');
+          // _detail 在 step8c 中统一处理（优先 smart_fill_data，否则从 _items 自动生成）
           fillData[f3Key + '_items'] = group.facts.map(f => ({
             desc: f.human_readable || f.competition_name || f.award_name || '未知',
             score: String(f.score),
@@ -222,13 +237,27 @@ async function getFillData(userId) {
     fillData.F1_total = f1Total;
     fillData.F3_total = f3Total;
 
-    // ★ 8. 从 smart_fill_data 读取用户保存的分数和描述（兼容 rule_set_id=0 的情况）
+    // ★ 7b. 从 _items 自动生成 F3 描述（纯 fact_rule_matches 聚合，不叠加 smart_fill_data）
+    const B_KEYS = ['B1','B2','B3','B4','B5','B6','B7','B8'];
+    for (const bKey of B_KEYS) {
+      const f3Key = B_TO_F3_MAP[bKey];
+      if (!f3Key) continue;
+      const detailKey = f3Key + '_detail';
+      // 仅在没有描述时自动生成
+      if (!fillData[detailKey]) {
+        fillData[detailKey] = (fillData[f3Key + '_items'] || [])
+          .map(it => it.desc + '(+' + it.score + '分)')
+          .filter(Boolean).join('；') || '';
+      }
+    }
+
+    // ★ 8. 从 smart_fill_data 读取用户手动编辑的 F1/F2 数据
+    // 注意：F3 不再从 smart_fill_data 叠加，F3 数据纯由 fact_rule_matches 聚合
     const [savedRows] = await conn.execute(
       "SELECT * FROM smart_fill_data WHERE user_id = ? AND (rule_set_id = ? OR rule_set_id = 0)",
       [userId, ruleSetId || 0]
     );
 
-    // 构建 lookup: "section:item_key" → row
     const savedMap = new Map();
     for (const sr of savedRows) {
       savedMap.set(`${sr.section}:${sr.item_key}`, sr);
@@ -236,7 +265,6 @@ async function getFillData(userId) {
 
     // 8a. 合并 F1 数据：优先用户保存的，否则用默认满分
     const F1_KEYS = ['A1','A2','A3','A4','A5'];
-    const F1_NAMES = ['思想政治表现','道德品质修养','学习态度作风','组织纪律观念','身心健康素质'];
     for (let i = 0; i < F1_KEYS.length; i++) {
       const key = F1_KEYS[i];
       const saved = savedMap.get(`F1:${key}`);
@@ -246,7 +274,6 @@ async function getFillData(userId) {
         fillData[scoreKey] = Math.max(0, 20 - (Number(saved.score) || 0));
         fillData[detailKey] = saved.description || '';
       } else {
-        // 默认满分，描述为空（前端可 AI 生成）
         fillData[scoreKey] = 20;
         fillData[detailKey] = '';
       }
@@ -259,7 +286,6 @@ async function getFillData(userId) {
         const courses = typeof savedF2.extra_data === 'string'
           ? JSON.parse(savedF2.extra_data) : savedF2.extra_data;
         fillData.F2_courses = courses || [];
-        // 计算加权平均分
         let weightedSum = 0, totalCredits = 0;
         for (const c of fillData.F2_courses) {
           weightedSum += (c.score || 0) * (c.credit || 0);
@@ -268,32 +294,6 @@ async function getFillData(userId) {
         fillData.F2_weighted_avg = totalCredits > 0 ? Math.round(weightedSum / totalCredits * 100) / 100 : 0;
         f2Total = fillData.F2_weighted_avg;
       } catch (_) {}
-    }
-
-    // 8c. 合并 F3 数据：分数从材料识别来，描述优先用户保存的，否则自动生成
-    const B_KEYS = ['B1','B2','B3','B4','B5','B6','B7','B8'];
-    for (const bKey of B_KEYS) {
-      const saved = savedMap.get(`F3:${bKey}`);
-      const f3Key = B_TO_F3_MAP[bKey];
-      if (!f3Key) continue;
-
-      const scoreKey = f3Key + '_score';
-      const detailKey = f3Key + '_detail';
-
-      // 描述：优先用户保存的 > 材料自动生成的 > 空
-      if (saved && saved.description) {
-        fillData[detailKey] = saved.description;
-      } else if (!fillData[detailKey] && fillData[scoreKey] > 0) {
-        // 自动生成描述
-        fillData[detailKey] = fillData[f3Key + '_items']
-          ?.map(it => it.desc + '(+' + it.score + '分)')
-          .filter(Boolean).join('；') || '';
-      }
-
-      // 分数：用户可覆盖材料分数
-      if (saved && saved.score !== null && saved.score !== undefined) {
-        fillData[scoreKey] = Number(saved.score);
-      }
     }
 
     // 重新算 F3 总分
@@ -407,8 +407,8 @@ function fillDocx(templatePath, data) {
 /**
  * 获取填充数据预览（供前端）
  */
-async function getFillDataPreview(userId) {
-  return await getFillData(userId);
+async function getFillDataPreview(userId, batchId) {
+  return await getFillData(userId, batchId);
 }
 
 module.exports = { fillDocx, getFillData, getFillDataPreview };

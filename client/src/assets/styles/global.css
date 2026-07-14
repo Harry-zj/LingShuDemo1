@@ -704,7 +704,7 @@ body .top-bar-desc {
 }
 
 /* Module cards -> work-list poster cards */
-body .home .module-grid { gap: 18px !important; }
+body .home .module-grid { gap: 20px !important; }
 body .home .module-card {
   min-height: 260px !important;
   border-radius: 34px !important;
@@ -763,7 +763,7 @@ body .home .card-main h3 {
   letter-spacing: -0.035em !important;
   text-transform: uppercase !important;
 }
-body .home .module-card.large .card-main h3 { font-size: clamp(42px, 5vw, 86px) !important; }
+body .home .module-card.large .card-main h3 { font-size: clamp(26px, 3vw, 48px) !important; }
 body .home .card-main p { color: rgba(246,242,232,0.58) !important; }
 body .home .module-card.large .card-main p { color: rgba(246,242,232,0.64) !important; }
 body .home .card-bottom {
@@ -1100,8 +1100,8 @@ body .deadline-value { color: #f6f2e8 !important; font-family: var(--font-displa
   body .home .hero-stats { display: grid !important; grid-template-columns: 1fr !important; }
   body .home .module-card,
   body .home .module-card.large,
-  body .home .module-card.wide { grid-column: auto !important; min-height: 220px !important; }
-  body .home .module-card.large .card-main h3 { font-size: 42px !important; }
+  body .home .module-card.wide { grid-column: auto !important; min-height: 200px !important; }
+  body .home .module-card.large .card-main h3 { font-size: 28px !important; }
   body .login-card { padding: 32px 24px !important; }
   body .brand-title { font-size: 54px !important; }
   body .login-title { font-size: 36px !important; }
@@ -1999,7 +1999,7 @@ body .top-bar-desc {
 }
 
 /* Module cards -> work-list poster cards */
-body .home .module-grid { gap: 18px !important; }
+body .home .module-grid { gap: 20px !important; }
 body .home .module-card {
   min-height: 260px !important;
   border-radius: 34px !important;
@@ -2058,7 +2058,7 @@ body .home .card-main h3 {
   letter-spacing: -0.035em !important;
   text-transform: uppercase !important;
 }
-body .home .module-card.large .card-main h3 { font-size: clamp(42px, 5vw, 86px) !important; }
+body .home .module-card.large .card-main h3 { font-size: clamp(26px, 3vw, 48px) !important; }
 body .home .card-main p { color: rgba(246,242,232,0.58) !important; }
 body .home .module-card.large .card-main p { color: rgba(246,242,232,0.64) !important; }
 body .home .card-bottom {
@@ -2395,8 +2395,8 @@ body .deadline-value { color: #f6f2e8 !important; font-family: var(--font-displa
   body .home .hero-stats { display: grid !important; grid-template-columns: 1fr !important; }
   body .home .module-card,
   body .home .module-card.large,
-  body .home .module-card.wide { grid-column: auto !important; min-height: 220px !important; }
-  body .home .module-card.large .card-main h3 { font-size: 42px !important; }
+  body .home .module-card.wide { grid-column: auto !important; min-height: 200px !important; }
+  body .home .module-card.large .card-main h3 { font-size: 28px !important; }
   body .login-card { padding: 32px 24px !important; }
   body .brand-title { font-size: 54px !important; }
   body .login-title { font-size: 36px !important; }

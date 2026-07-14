@@ -4,6 +4,17 @@ const { validateFactExtraction } = require("./schemas");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { isOssUrl, downloadBuffer } = require("../../../services/oss");
+
+// ★ 统一获取附件 Buffer（OSS 下载 / 本地磁盘读取）
+async function getAttachmentBuffer(att) {
+  if (isOssUrl(att.file_path)) {
+    return await downloadBuffer(att.file_path);
+  }
+  // 向后兼容：裸文件名从本地磁盘读取
+  const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+  return fs.readFileSync(filePath);
+}
 
 // ============================================================
 //  从多个附件提取事实（★ 合并分析，不取最高置信度）
@@ -14,14 +25,14 @@ async function extractFacts(attachments) {
   const allMissing = new Set();
 
   for (const att of attachments) {
-    const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+    const buffer = await getAttachmentBuffer(att);
     const ext = path.extname(att.file_name).toLowerCase();
 
     let result;
     if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
-      result = await extractFromImage(filePath, ext, att.file_name);
+      result = await extractFromImage(buffer, ext, att.file_name);
     } else {
-      result = await extractFromDocument(filePath, ext);
+      result = await extractFromDocument(buffer, ext);
     }
 
     const valid = validateFactExtraction(result);
@@ -30,11 +41,18 @@ async function extractFacts(attachments) {
       continue;
     }
 
-    // ★ 合并事实，去重
+    // ★ 合并事实，去重，并修正 type=other
     for (const fact of result.facts) {
       if (!allFacts.some((f) => f.value === fact.value && f.type === fact.type)) {
+        // 如果 AI 返回 type=other，根据内容语义推断正确类型
+        let correctedType = fact.type;
+        if (fact.type === 'other') {
+          correctedType = inferFactType(fact);
+          console.log(`[FactExtract] 修正 type: other → ${correctedType} (${fact.value})`);
+        }
         allFacts.push({
           ...fact,
+          type: correctedType,
           fact_id: fact.fact_id || `f${allFacts.length + 1}`,
           source_file: att.file_name,
           attachment_id: att.id,
@@ -66,8 +84,7 @@ async function extractFacts(attachments) {
   };
 }
 
-async function extractFromImage(filePath, ext, fileName) {
-  const buffer = fs.readFileSync(filePath);
+async function extractFromImage(buffer, ext, fileName) {
   const base64 = buffer.toString("base64");
   const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
   const mime = mimeMap[ext] || "image/png";
@@ -87,16 +104,16 @@ async function extractFromImage(filePath, ext, fileName) {
   );
 }
 
-async function extractFromDocument(filePath, ext) {
+async function extractFromDocument(buffer, ext) {
   let text = "";
   if (ext === ".docx") {
     const mammoth = require("mammoth");
-    text = (await mammoth.extractRawText({ path: filePath })).value;
+    text = (await mammoth.extractRawText({ buffer })).value;
   } else if (ext === ".pdf") {
     const pdfParse = require("pdf-parse");
-    text = (await pdfParse(fs.readFileSync(filePath))).text;
+    text = (await pdfParse(buffer)).text;
   } else {
-    text = fs.readFileSync(filePath, "utf-8");
+    text = buffer.toString("utf-8");
   }
 
   if (!text.trim()) {
@@ -123,13 +140,12 @@ async function extractStructuredFacts(attachments) {
   let reviewReason = null;
 
   for (const att of attachments) {
-    const filePath = path.join(__dirname, "../../../../uploads", att.file_path);
+    const buffer = await getAttachmentBuffer(att);
     const ext = path.extname(att.file_name).toLowerCase();
 
     let result;
     if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
       // 图片 → Kimi OCR → 结构化提取
-      const buffer = fs.readFileSync(filePath);
       const base64 = buffer.toString("base64");
       const mimeMap = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".bmp": "image/bmp" };
       const mime = mimeMap[ext] || "image/png";
@@ -146,14 +162,14 @@ async function extractStructuredFacts(attachments) {
       );
     } else if (ext === ".docx") {
       const mammoth = require("mammoth");
-      const text = (await mammoth.extractRawText({ path: filePath })).value;
+      const text = (await mammoth.extractRawText({ buffer })).value;
       if (!text.trim()) continue;
       result = await chatStreamJson(
         [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文档中提取结构化事实：\n\n${text}` }],
         { temperature: 0.1, maxTokens: 2048 }
       );
     } else {
-      const text = fs.readFileSync(filePath, "utf-8");
+      const text = buffer.toString("utf-8");
       if (!text.trim()) continue;
       result = await chatStreamJson(
         [{ role: "system", content: MATERIAL_EXTRACT_SYSTEM }, { role: "user", content: `请从以下文本中提取结构化事实：\n\n${text}` }],
@@ -187,4 +203,32 @@ async function extractStructuredFacts(attachments) {
   };
 }
 
-module.exports = { extractFacts, extractStructuredFacts };
+// ★ 当 AI 返回 type=other 时，根据内容关键词推断正确类型
+function inferFactType(fact) {
+  const text = (fact.value || '') + ' ' + (fact.detail?.organizer || '') + ' ' + (fact.source_text || '');
+  const t = text.toLowerCase();
+
+  // 关键词 → 类型映射（按优先级）
+  const rules = [
+    ['竞赛', '比赛', '建模', '挑战杯', '创新创业', '英语口语', '演讲比赛', '辩论赛', '程序设计', '电子设计', '机械创新'],
+    ['干部', '学生会', '班长', '团支书', '委员', '部长', '社长', '负责人', '主席', '书记', '干事'],
+    ['志愿', '实践', '社会调查', '支教', '三下乡', '义工', '公益', '献血', '环保', '服务队', '社区'],
+    ['证书', '资格证', '等级考试', '四级', '六级', '计算机', '普通话', '教师资格', '会计', '驾照', ' CET'],
+    ['成绩', '绩点', 'GPA', '学分', '均分', '排名'],
+  ];
+  const types = ['award', 'position', 'activity', 'certificate', 'score'];
+
+  for (let i = 0; i < rules.length; i++) {
+    if (rules[i].some(kw => text.includes(kw))) {
+      return types[i];
+    }
+  }
+
+  // 默认：有 rank/level/award 字段大概率是获奖
+  const d = fact.detail || {};
+  if (d.rank || d.level || d.award_rank || d.award_name) return 'award';
+
+  return 'award'; // 最终兜底为 award
+}
+
+module.exports = { extractFacts, extractStructuredFacts, inferFactType };

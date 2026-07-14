@@ -101,10 +101,16 @@ onMounted(load);
 .page-desc { font-size:14px; color:var(--color-text-secondary); margin-top:2px; }
 .filter-bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
 .select-wrapper { position:relative; }.select-icon { position:absolute; left:14px; top:50%; transform:translateY(-50%); color:var(--color-text-tertiary); }
-select { height:40px; padding:0 16px 0 42px; border:1px solid var(--color-border); border-radius:var(--radius-full); background:var(--color-surface); color:var(--color-text-primary); }
-.btn-primary { display:inline-flex; align-items:center; gap:6px; height:40px; padding:0 16px; border:0; border-radius:var(--radius-full); background:var(--gradient-primary); color:#fff; cursor:pointer; }
-.progress-section,.data-table { padding:20px; border-radius:var(--radius-xl); }.panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }.panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }.panel-count { font-size:13px; color:var(--color-text-secondary); }
-.progress-list { display:flex; flex-direction:column; gap:14px; }.progress-row { display:grid; grid-template-columns:140px 1fr 50px; gap:12px; align-items:center; }.progress-bar { height:8px; background:var(--color-bg); border-radius:var(--radius-full); overflow:hidden; }.progress-fill { height:100%; background:var(--gradient-primary); border-radius:var(--radius-full); }.count { text-align:right; font-weight:600; }
+select { height:40px; padding:0 16px 0 42px; border:1px solid var(--color-border); border-radius: 8px !important; background:var(--color-surface); color:var(--color-text-primary); }
+.btn-primary { display:inline-flex; align-items:center; gap:6px; height:40px; padding:0 16px; border:0; border-radius: 8px !important; background:var(--gradient-primary); color:#fff; cursor:pointer; }
+.progress-section,.data-table { padding:20px; border-radius: 8px !important; }.panel-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }.panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }.panel-count { font-size:13px; color:var(--color-text-secondary); }
+.progress-list { display:flex; flex-direction:column; gap:14px; }.progress-row { display:grid; grid-template-columns:140px 1fr 50px; gap:12px; align-items:center; }.progress-bar { height:8px; background:var(--color-bg); border-radius: 8px !important; overflow:hidden; }.progress-fill { height:100%; background:var(--gradient-primary); border-radius: 8px !important; }.count { text-align:right; font-weight:600; }
 .table-wrap { overflow:auto; }table { width:100%; border-collapse:collapse; }th,td { text-align:left; padding:12px; border-bottom:1px solid var(--color-border); font-size:14px; white-space:nowrap; }th { color:var(--color-text-secondary); font-weight:500; }
 @media (max-width:768px) { .progress-row { grid-template-columns:1fr; } }
+
+/* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
+:deep(*) {
+  border-radius: 8px !important;
+}
+
 </style>

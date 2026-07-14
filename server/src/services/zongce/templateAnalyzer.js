@@ -27,27 +27,30 @@ function analyzeAndFill(tplBuf, data) {
     const tcEnd = xml.indexOf("</w:tc>", labelPos);
     let currentPos = tcEnd !== -1 ? tcEnd + 7 : labelPos;
     let filled = 0;
-    
+
     for (let i = 0; i < fields.length; i++) {
       const field = fields[i];
       let v = null;
       if (subField === "detail") v = data[field + "_detail"] != null ? data[field + "_detail"] : "";
       else v = data[field + "_score"] != null ? String(data[field + "_score"]) : "";
-      if (v === null || v === "") continue;
-      
-      // Find the next empty <w:p> after currentPos (empty = no <w:r> inside)
+
+      // ★ 找到下一个空 <w:p>（无论值是否为空都要定位，否则字段错位）
       const reEmptyP = /<w:p[\s>](?:(?!<w:r>).)*?<\/w:p>/g;
       reEmptyP.lastIndex = currentPos;
       const match = reEmptyP.exec(xml);
       if (!match) break;
-      
-      // Insert <w:r> before the </w:p>
+
       const insPos = match.index + match[0].length - 6; // before </w:p>
+      // ★ 先推进位置（跳过该单元格），再决定是否填入
+      currentPos = insPos;
+
+      if (v === null || v === "") continue;  // 空值跳过但位置已推进
+
       const insert = '<w:r><w:rPr><w:rFonts w:hint="eastAsia" w:eastAsia="楷体_GB2312"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">' + esc(String(v)) + '</w:t></w:r>';
       xml = xml.substring(0, insPos) + insert + xml.substring(insPos);
       count++;
       filled++;
-      currentPos = insPos + insert.length;
+      currentPos += insert.length;
     }
     return filled;
   }

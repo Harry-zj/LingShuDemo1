@@ -8,7 +8,6 @@ CREATE DATABASE IF NOT EXISTS lingshu_zongce CHARACTER SET utf8mb4 COLLATE utf8m
 USE lingshu_zongce;
 
 -- ============================================================
--- ============================================================
 -- 一、用户表（扩展版：支持多角色 + 学生信息字段）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS users (
@@ -46,7 +45,8 @@ CREATE TABLE IF NOT EXISTS rule_sources (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ===========================================================-- 简化的计分规则表（V3 替代 V1/V2 多表体系）
+-- ============================================================
+-- 三、简化的计分规则表（V3 替代 V1/V2 多表体系）
 -- ============================================================
 CREATE TABLE IF NOT EXISTS scoring_rules (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   INDEX idx_sr_level_rank (score_level, score_rank)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ============================================================
 -- 四、材料表
 -- ============================================================
 CREATE TABLE IF NOT EXISTS materials (
@@ -190,10 +191,12 @@ CREATE TABLE IF NOT EXISTS ai_tasks (
 CREATE TABLE IF NOT EXISTS fill_results (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   template_id INT NOT NULL,
   result_path VARCHAR(500) NOT NULL,
   original_name VARCHAR(300) DEFAULT '',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_fill_results_user_batch (user_id, batch_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 
@@ -414,8 +417,6 @@ CREATE TABLE IF NOT EXISTS assessment_review_tasks (
   KEY idx_task_batch_status_stage (batch_id, status, stage)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-
-
 CREATE TABLE IF NOT EXISTS assessment_item_reviews (
   id INT AUTO_INCREMENT PRIMARY KEY,
   form_id INT NOT NULL,
@@ -505,6 +506,7 @@ CREATE TABLE IF NOT EXISTS chat_fill_sessions (
 CREATE TABLE IF NOT EXISTS rule_sets (
   id INT AUTO_INCREMENT PRIMARY KEY,
   user_id INT NOT NULL,
+  batch_id INT DEFAULT NULL,
   version_label VARCHAR(100) DEFAULT '',
   cloned_from_id INT DEFAULT NULL,
   status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft',
@@ -752,13 +754,45 @@ CREATE TABLE IF NOT EXISTS zongce_config (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 默认奖项认定政策
-INSERT IGNORE INTO zongce_config (config_key, config_value, enabled, description) VALUES (
-  'college_default_award_policy',
-  '{"participation_tier_ranks":["优秀奖","参与奖","鼓励奖","纪念奖","入围奖"],"maps_to":"encouragement"}',
-  1,
-  '学院默认奖项认定: 优秀奖/参与奖/鼓励奖/纪念奖/入围奖 → participation_tier → encouragement'
-);
+-- -- 默认奖项认定政策
+-- INSERT IGNORE INTO zongce_config (config_key, config_value, enabled, description) VALUES (
+--   'college_default_award_policy',
+--   '{"participation_tier_ranks":["优秀奖","参与奖","鼓励奖","纪念奖","入围奖"],"maps_to":"encouragement"}',
+--   1,
+--   '学院默认奖项认定: 优秀奖/参与奖/鼓励奖/纪念奖/入围奖 → participation_tier → encouragement'
+-- );
+
+-- -- 插入一个示例批次
+-- INSERT INTO assessment_batches 
+--   (school_year, title, college, grade, description, start_time, end_time, status, created_by, creator_name)
+-- VALUES 
+--   ('2024-2025', '2024-2025学年综合测评', '计算机学院', '大三', 
+--    '2024-2025学年综合测评，包含F1基本素质、F2课程成绩、F3创新实践',
+--    '2025-03-01 00:00:00', '2025-07-31 23:59:59', 
+--    'published', 1, 'admin');
+
+-- -- 可以插入多个批次
+-- INSERT INTO assessment_batches 
+--   (school_year, title, college, grade, start_time, end_time, status, created_by, creator_name)
+-- VALUES 
+--   ('2023-2024', '2023-2024学年综合测评', '计算机学院', '大二', 
+--    '2024-03-01 00:00:00', '2024-07-31 23:59:59', 
+--    'published', 1, 'admin');
+
+
+-- -- 创建一个关联到上述批次的规则集
+-- INSERT INTO rule_sets 
+--   (user_id, batch_id, version_label, status, published_at)
+-- VALUES 
+--   (1, 1, '2024-2025学年综合测评规则', 'published', NOW());
+
+-- -- 再创建一个旧批次的规则集
+-- INSERT INTO rule_sets 
+--   (user_id, batch_id, version_label, status, published_at)
+-- VALUES 
+--   (1, 2, '2023-2024学年综合测评规则', 'published', NOW());
+
+
 
 -- ============================================================
 --  升级已有数据库的 ALTER TABLE 语句

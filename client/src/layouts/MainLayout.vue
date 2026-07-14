@@ -496,40 +496,101 @@ const managementHome = computed(() =>
   '/module3/student'
 )
 
-const navItems = computed(() => [
-  {
-    key: 'home',
-    label: '首页',
-    path: '/home',
-    section: '/home',
-    icon: 'mdi:home-outline',
-  },
-  {
-    key: 'smart-fill',
-    label: '智能填表',
-    path: '/zongce/smart-fill',
-    section: '/zongce',
-    icon: 'mdi:file-document-edit-outline',
-  },
-  {
-    key: 'evaluation',
-    label: '个性评定',
-    path: '/module2/evaluation',
-    section: '/module2',
-    icon: 'mdi:chart-pie-outline',
-  },
-  {
-    key: 'management',
-    label: '信息管理',
-    path: managementHome.value,
-    section: '/module3',
-    icon: 'mdi:account-group-outline',
-  },
-])
+const navItems = computed(() => {
+  const items = []
+
+  if (!userStore.isLoggedIn || userStore.userRole === 'student') {
+    items.push(
+      {
+        key: 'home',
+        label: '首页',
+        path: '/home',
+        section: '/home',
+        icon: 'mdi:home-outline',
+      },
+      {
+        key: 'smart-fill',
+        label: '智能填表',
+        path: '/zongce/smart-fill',
+        section: '/zongce',
+        icon: 'mdi:file-document-edit-outline',
+      },
+      {
+        key: 'evaluation',
+        label: '个性评定',
+        path: '/module2/evaluation',
+        section: '/module2',
+        icon: 'mdi:chart-pie-outline',
+      }
+    )
+  }
+
+  if (userStore.userRole === 'admin') {
+    items.push({
+      key: 'workbench',
+      label: '工作台',
+      path: '/module3/admin',
+      section: '/module3/admin',
+      icon: 'mdi:view-dashboard-outline',
+    })
+  }
+
+  if (userStore.userRole === 'counselor') {
+    items.push({
+      key: 'workbench',
+      label: '工作台',
+      path: '/module3/counselor',
+      section: '/module3/counselor',
+      icon: 'mdi:view-dashboard-outline',
+    })
+  }
+
+  if (userStore.userRole === 'student_affairs') {
+    items.push({
+      key: 'workbench',
+      label: '工作台',
+      path: '/module3/student-affairs',
+      section: '/module3/student-affairs',
+      icon: 'mdi:view-dashboard-outline',
+    })
+  }
+
+  if (userStore.userRole !== 'student_affairs' && userStore.userRole !== 'admin') {
+    items.push({
+      key: 'management',
+      label: userStore.userRole === 'counselor' ? '评价管理' : '信息管理',
+      path: managementHome.value,
+      section: '/module3',
+      icon: 'mdi:account-group-outline',
+    })
+  }
+
+  if (userStore.isLoggedIn) {
+    items.push({
+      key: 'profile',
+      label: '个人中心',
+      path: '/module3/profile',
+      section: '/module3/profile',
+      icon: 'mdi:account-circle-outline',
+    })
+  }
+
+  return items
+})
 
 function isNavActive(item) {
   if (item.key === 'home') {
     return route.path === '/home'
+  }
+
+  if (item.key === 'management') {
+    const isWorkbench =
+      (userStore.userRole === 'counselor' && route.path.startsWith('/module3/counselor')) ||
+      (userStore.userRole === 'student_affairs' && route.path.startsWith('/module3/student-affairs'))
+
+    return route.path.startsWith('/module3') &&
+      !route.path.startsWith('/module3/profile') &&
+      !isWorkbench
   }
 
   return route.path.startsWith(item.section)
@@ -566,7 +627,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .main-layout {
   --nav-height: 76px;
-  --side-width: 250px;
+  --side-width: 220px;
 
   min-height: 100vh;
   position: relative;
@@ -1056,10 +1117,10 @@ onBeforeUnmount(() => {
 
 .content {
   width: 100%;
-  max-width: 1500px;
+  max-width: 1140px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 34px 40px 70px;
+  padding: 52px 48px 70px;
 }
 
 /* ==================================================
@@ -1254,7 +1315,7 @@ onBeforeUnmount(() => {
   }
 
   .content {
-    padding: 22px 16px 55px;
+    padding: 36px 16px 55px;
   }
 }
 

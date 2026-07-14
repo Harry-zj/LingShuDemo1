@@ -239,224 +239,10 @@ function dedupPerTask(result) {
   return { ...result, indicators: cleanIndicators, packages: cleanPackages };
 }
 
-/** 递归合并两个 indicator 节点（修改 base）；同时规范化子节点的 parent_code */
-function mergeIndicatorNode(base, other) {
-  if (!other.children || !other.children.length) return base;
-  if (!base.children) base.children = [];
-  const map = new Map();
-  for (const c of base.children) map.set(buildIndicatorKey(c), c);
-  for (const oc of other.children) {
-    const key = buildIndicatorKey(oc);
-    if (!key) continue;
-    // 规范化 parent_code：子节点迁移到新父节点 base，code 可能变了
-    const ocNorm = { ...oc, parent_code: base.code || oc.parent_code };
-    if (map.has(key)) { mergeIndicatorNode(map.get(key), ocNorm); }
-    else { base.children.push(ocNorm); map.set(key, base.children[base.children.length - 1]); }
-  }
-  return base;
-}
-
-/**
- * 跨 task 合并去重
- * 返回 { merged, sourceRefs, duplicates }
- */
-function mergeAndDedupResults(allResults, allTasks) {
-  const sourceRefs = [];
-  const duplicates = [];
-  const merged = { indicators: [], packages: [], lookup_tables: [], uncertainties: [] };
-
-  // ---- indicators（递归树合并）----
-  const indicatorMap = new Map();
-  for (let ti = 0; ti < allResults.length; ti++) {
-    const r = allResults[ti]; if (!r) continue;
-    const task = allTasks[ti];
-    const label = task ? (task.business_block_title || task.section_title || task.chapter_title || `T${ti + 1}`) : `T${ti + 1}`;
-    for (const ind of (r.indicators || [])) {
-      const key = buildIndicatorKey(ind); if (!key) continue;
-      sourceRefs.push({ entityType: 'indicator', canonicalKey: key, taskIndex: ti, taskLabel: label });
-      if (indicatorMap.has(key)) {
-        indicatorMap.get(key).taskIndices.push(ti);
-        mergeIndicatorNode(indicatorMap.get(key).node, ind);
-      } else {
-        indicatorMap.set(key, { node: { ...ind }, taskIndices: [ti] });
-      }
-    }
-  }
-  for (const [key, v] of indicatorMap) { if (v.taskIndices.length > 1) duplicates.push({ entityType: 'indicator', canonicalKey: key, taskIndices: v.taskIndices }); }
-  // 只保留非子节点的顶级 indicator；被过滤节点的子树合并到父节点对应子节点中
-  for (const [, v] of indicatorMap) {
-    let parentChild = null;
-    for (const [, p] of indicatorMap) {
-      if (p.node.children) {
-        const match = p.node.children.find(c => buildIndicatorKey(c) === buildIndicatorKey(v.node));
-        if (match) { parentChild = match; break; }
-      }
-    }
-    if (!parentChild) {
-      merged.indicators.push(v.node);
-    } else {
-      if (v.node.children && v.node.children.length) mergeIndicatorNode(parentChild, v.node);
-    }
-  }
-
-  // ---- packages ----
-  const pkgMap = new Map();
-  for (let ti = 0; ti < allResults.length; ti++) {
-    const r = allResults[ti]; if (!r) continue;
-    const task = allTasks[ti];
-    const label = task ? (task.business_block_title || task.section_title || task.chapter_title || `T${ti + 1}`) : `T${ti + 1}`;
-    for (const pkg of (r.packages || [])) {
-      const key = buildPackageKey(pkg); if (!key) continue;
-      sourceRefs.push({ entityType: 'package', canonicalKey: key, taskIndex: ti, taskLabel: label });
-      if (pkgMap.has(key)) {
-        pkgMap.get(key).taskIndices.push(ti);
-        const existMap = new Map();
-        for (const rl of (pkgMap.get(key).pkg.rules || [])) existMap.set(buildRuleKey(rl, key), rl);
-        for (const rl of (pkg.rules || [])) {
-          const rk = buildRuleKey(rl, key);
-          if (!existMap.has(rk)) { pkgMap.get(key).pkg.rules.push(rl); existMap.set(rk, rl); }
-          else if (Object.keys(rl.config || {}).length > Object.keys(existMap.get(rk).config || {}).length) { Object.assign(existMap.get(rk), rl); }
-        }
-      } else {
-        pkgMap.set(key, { pkg: { ...pkg, rules: [...(pkg.rules || [])] }, taskIndices: [ti] });
-      }
-    }
-  }
-  for (const [key, v] of pkgMap) { if (v.taskIndices.length > 1) duplicates.push({ entityType: 'package', canonicalKey: key, taskIndices: v.taskIndices }); }
-  merged.packages = Array.from(pkgMap.values()).map(v => v.pkg);
-
-  // ---- lookup_tables & uncertainties ----
-  const seenLT = new Set();
-  for (const r of allResults) {
-    if (!r) continue;
-    for (const lt of (r.lookup_tables || [])) { const k = normKey(lt.canonical_key || lt.name || ""); if (k && !seenLT.has(k)) { seenLT.add(k); merged.lookup_tables.push(lt); } }
-    if (r.uncertainties) merged.uncertainties.push(...r.uncertainties);
-  }
-
-  return { merged, sourceRefs, duplicates };
-}
-
-// ============================================================
-//  Indicator 别名解析器
-//  ============================================================
-
-/**
- * 建立 indicator 的多路别名映射：
- *   code          → { canonical_key }
- *   canonical_key → { code, name }
- *   norm(name)    → { canonical_key, code }
- * 解决 AI 在不同 task 中用了 code 引用、canonical_key 引用、或名称引用不一致的问题。
- */
-function buildIndicatorAliasMap(indicators) {
-  const byCode = new Map();       // code → { ckey, name }
-  const byCKey = new Map();       // canonical_key → { code, name }
-  const byName = new Map();       // norm(name) → { ckey, code }
-
-  function walk(nodes) {
-    for (const n of nodes) {
-      const ck = normKey(n.canonical_key);
-      if (ck) byCKey.set(ck, { code: n.code || '', name: n.name || '', node: n });
-      if (n.code) byCode.set(n.code, { ckey: ck || n.canonical_key || '', name: n.name || '', node: n });
-      const nm = normKey(n.name);
-      if (nm) byName.set(nm, { ckey: ck || n.canonical_key || '', code: n.code || '', node: n });
-      if (n.children) walk(n.children);
-    }
-  }
-  walk(indicators);
-  return { byCode, byCKey, byName };
-}
-
-/** 用别名映射解析 indicator_code 引用 → 返回匹配的 canonical_key，或 null */
-function resolveIndicator(aliasMap, ref) {
-  if (!ref) return null;
-  // 1. 精确 code 匹配
-  if (aliasMap.byCode.has(ref)) return aliasMap.byCode.get(ref).ckey;
-  // 2. canonical_key 直接匹配
-  const nk = normKey(ref);
-  if (aliasMap.byCKey.has(nk)) return nk;
-  // 3. 规范化名称匹配
-  if (aliasMap.byName.has(nk)) return aliasMap.byName.get(nk).ckey;
-  // 4. 宽松匹配：遍历 code map，忽略大小写
-  for (const [code, v] of aliasMap.byCode) {
-    if (code.toLowerCase() === ref.toLowerCase()) return v.ckey;
-  }
-  return null;
-}
-
-// ============================================================
-//  合并后二次硬校验（含别名解析）
-// ============================================================
-function validateMergedResult(merged) {
-  const errors = [];
-  const warnings = [];
-  const allIndKeys = new Set();
-  const allIndCodes = new Set();
-
-  // 构建别名映射
-  const aliasMap = buildIndicatorAliasMap(merged.indicators);
-
-  function collect(nodes, path) {
-    for (const n of nodes) {
-      const k = normKey(n.canonical_key);
-      if (!k) { errors.push(`indicator 缺 canonical_key @ ${path}`); continue; }
-      if (allIndKeys.has(k)) errors.push(`合并后重复 indicator canonical_key: "${k}"`);
-      allIndKeys.add(k);
-      if (n.code) allIndCodes.add(n.code);
-      if (n.children) collect(n.children, `${path}/${k}`);
-    }
-  }
-  collect(merged.indicators, 'root');
-
-  // parent 引用校验（用别名解析）
-  function checkParents(nodes) {
-    for (const n of nodes) {
-      if (n.parent_code) {
-        const resolved = resolveIndicator(aliasMap, n.parent_code);
-        if (!resolved)
-          errors.push(`indicator "${n.canonical_key}" parent "${n.parent_code}" 引用不存在（已尝试 code/ckey/name 解析）`);
-      }
-      if (n.children) checkParents(n.children);
-    }
-  }
-  checkParents(merged.indicators);
-
-  // package / rule 校验
-  const allPkgKeys = new Set();
-  for (const pkg of (merged.packages || [])) {
-    const k = normKey(pkg.canonical_key);
-    if (!k) { errors.push('package 缺 canonical_key'); continue; }
-    if (allPkgKeys.has(k)) errors.push(`合并后重复 package canonical_key: "${k}"`);
-    allPkgKeys.add(k);
-
-    // indicator_code 引用校验（用别名解析）
-    if (pkg.indicator_code) {
-      const resolved = resolveIndicator(aliasMap, pkg.indicator_code);
-      if (!resolved) {
-        // 打印别名映射辅助排查
-        console.warn(`[V2Parse] 别名映射 code 列表: ${[...aliasMap.byCode.keys()].join(', ')}`);
-        console.warn(`[V2Parse] 别名映射 ckey 列表: ${[...aliasMap.byCKey.keys()].slice(0, 20).join(', ')}...`);
-        errors.push(`package "${k}" indicator_code "${pkg.indicator_code}" 不存在（code/ckey/name 均未匹配）`);
-      }
-    }
-
-    const ruleKeys = new Set();
-    for (const r of (pkg.rules || [])) {
-      const rk = normKey(r.canonical_key);
-      if (!rk) errors.push(`rule in "${k}" 缺 canonical_key`);
-      else if (ruleKeys.has(rk)) errors.push(`package "${k}" 内重复 rule "${rk}"`);
-      if (rk) ruleKeys.add(rk);
-    }
-  }
-
-  if (warnings.length > 0) console.warn(`[V2Parse] 硬校验警告:\n  ${warnings.join('\n  ')}`);
-
-  return { ok: errors.length === 0, errors, warnings, aliasMap };
-}
-
 // ============================================================
 //  V2 规则解析
 // ============================================================
-async function parseRuleSourceV2(sourceId, userId, onProgress) {
+async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelToken, forceNew) {
   const [sources] = await pool.execute("SELECT * FROM rule_sources WHERE id = ?", [sourceId]);
   if (!sources.length) throw new Error("规则来源不存在");
   const source = sources[0];
@@ -476,12 +262,33 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
   }
   if (!blocks.length) throw new Error("文档无内容");
 
-  if (onProgress) await onProgress('extracting', { blocks: blocks.length, headings: blocks.filter(b=>b.block_type==='heading').length });
-
-  // ===== 2. 创建 rule_set + 写 doc_blocks =====
-  const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, version_label, status) VALUES (?, ?, 'draft')", [userId, source.file_name || '规则集']);
-  const ruleSetId = rs.insertId;
-  await pool.execute("INSERT INTO rule_set_documents (rule_set_id, rule_source_id, document_role) VALUES (?, ?, 'primary')", [ruleSetId, sourceId]);
+  // ===== 2. 查找或创建 rule_set =====
+  let ruleSetId;
+  let isReuse = false;
+  const [existing] = await pool.execute(
+    `SELECT rs.id FROM rule_sets rs
+     INNER JOIN rule_set_documents rsd ON rs.id = rsd.rule_set_id
+     WHERE rsd.rule_source_id = ? AND (rs.batch_id = ? OR (? IS NULL AND rs.batch_id IS NULL))
+     LIMIT 1`,
+    [sourceId, batchId || null, batchId || null]
+  );
+  if (existing.length && !forceNew) {
+    isReuse = true;
+    ruleSetId = existing[0].id;
+    // 不在此处删除旧规则——等新规则写入事务中再做，防止取消解析后规则丢失
+    await pool.execute("DELETE FROM doc_blocks WHERE rule_source_id = ?", [sourceId]);
+    await pool.execute("DELETE FROM document_parse_runs WHERE rule_source_id = ?", [sourceId]);
+    await pool.execute("UPDATE rule_sets SET status = 'draft', version_label = ?, batch_id = COALESCE(?, batch_id) WHERE id = ?",
+      [source.file_name || '规则集', batchId || null, ruleSetId]);
+  } else {
+    const [rs] = await pool.execute("INSERT INTO rule_sets (user_id, batch_id, version_label, status) VALUES (?, ?, ?, 'draft')",
+      [userId, batchId || null, source.file_name || '规则集']);
+    ruleSetId = rs.insertId;
+  }
+  await pool.execute(
+    "INSERT INTO rule_set_documents (rule_set_id, rule_source_id, document_role) VALUES (?, ?, 'primary') ON DUPLICATE KEY UPDATE document_role = 'primary'",
+    [ruleSetId, sourceId]
+  );
   const [parseRun] = await pool.execute(
     "INSERT INTO document_parse_runs (rule_source_id, parser_version, model_name, prompt_version, input_hash, status) VALUES (?, 'v2', 'mammoth', 'v1', ?, 'running')",
     [sourceId, inputHash || '']
@@ -599,21 +406,25 @@ async function parseRuleSourceV2(sourceId, userId, onProgress) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    // 复用规则集时，在事务中先删后写，防止取消解析丢失旧规则
+    if (isReuse) {
+      await conn.execute("DELETE FROM scoring_rules WHERE rule_set_id = ?", [ruleSetId]);
+    }
     const f3Rules = allResult.f3_rules || allResult.rule_items || [];
     let ruleCount = 0;
     for (const r of f3Rules) {
       const itemKey = r.item_key || r.category || 'B2';
       const itemName = r.item_name || r.description || '';
-      const scoreLevel = r.score_level || r.level || null;
-      const scoreRank = r.score_rank || null;
+      const scoreLevel = (r.score_level || r.level || "").slice(0, 100);
+      const scoreRank = (r.score_rank || "").slice(0, 50);
       const score = parseInt(r.score) || 0;
       const keywords = r.keywords || '';
       const description = r.description || '';
       const maxScore = r.max_score || null;
       const dedupGroup = r.dedup_group || null;
       await conn.execute(
-        "INSERT INTO scoring_rules (rule_set_id, user_id, section, item_key, item_name, score_level, score_rank, score, keywords, description, max_score, dedup_group, status) VALUES (?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
-        [ruleSetId, userId, itemKey, itemName, scoreLevel, scoreRank, score, keywords, description, maxScore, dedupGroup]
+        "INSERT INTO scoring_rules (rule_set_id, batch_id, user_id, section, item_key, item_name, score_level, score_rank, score, keywords, description, max_score, dedup_group, status) VALUES (?, ?, ?, 'F3', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')",
+        [ruleSetId, batchId || null, userId, itemKey, itemName, scoreLevel, scoreRank, score, keywords, description, maxScore, dedupGroup]
       );
       ruleCount++;
     }

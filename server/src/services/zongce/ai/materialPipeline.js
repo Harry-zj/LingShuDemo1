@@ -6,7 +6,6 @@
 
 const { pool } = require("../../../config/database");
 const { extractFacts } = require("./factExtractor");
-const { matchSummaryToRules } = require("./textSimilarityMatcher");
 const { chatStream, chatStreamJson } = require("./deepseek");
 
 function log(step, detail) {
@@ -79,28 +78,59 @@ async function calculateScorePreview(facts, ruleSetId, userId) {
   const fact = factsArr[0];
   if (!fact) return { score_preview: null, explanation: 'empty fact', needs_review: true };
 
+  // ★ 关键字段校验：如果事实数据缺失严重，直接返回
   const factDesc = buildFactDescription(fact);
-  const [scoringRules] = await pool.execute(
+  if (!factDesc || factDesc.split('\n').length < 2) {
+    log('Phase2:skip', `事实信息不完整，跳过AI匹配: ${factDesc}`);
+    return { score_preview: null, explanation: '事实信息不完整，请重新提取材料', needs_review: true };
+  }
+
+  log('Phase2:fact', `desc=${factDesc.replace(/\n/g,' | ').slice(0,200)}`);
+
+  // ★ 查询当前规则集的活跃规则
+  let [scoringRules] = await pool.execute(
     `SELECT id, item_key, item_name, score_level, score_rank, score, keywords, description
-     FROM scoring_rules WHERE status = 'active' AND (user_id = ? OR rule_set_id = ?)
+     FROM scoring_rules WHERE status = 'active' AND rule_set_id = ?
      ORDER BY item_key, score_level, score_rank`,
-    [userId, ruleSetId || 0]
+    [ruleSetId || 0]
   );
-  if (!scoringRules.length) return { score_preview: null, explanation: 'no rules', needs_review: true };
+  log('Phase2:rules', `查询到 ${scoringRules.length} 条规则(ruleSetId=${ruleSetId})`);
+  if (!scoringRules.length) {
+    log('Phase2:none', '规则集无活跃计分规则');
+    return { score_preview: null, explanation: '规则集无活跃计分规则', needs_review: true };
+  }
 
+  // ★ 如果规则太多，按事实级别预筛选（减少 AI 上下文窗口压力）
+  if (scoringRules.length > 100) {
+    const rawLevel = extractLevel(fact);
+    const factLevel = normalizeLevel(rawLevel);
+    log('Phase2:filter', `rawLevel="${rawLevel}" factLevel="${factLevel}" fact.type="${fact.type}"`);
+    if (factLevel) {
+      const relevantLevels = getRelevantLevels(factLevel);
+      const filtered = scoringRules.filter(r => {
+        const ruleLevel = normalizeLevel(r.score_level || '');
+        return !ruleLevel || relevantLevels.includes(ruleLevel);
+      });
+      if (filtered.length > 0 && filtered.length < scoringRules.length) {
+        log('Phase2:filter', `按级别"${factLevel}"预筛选: ${scoringRules.length} → ${filtered.length} 条`);
+        scoringRules = filtered;
+      }
+    }
+  }
+
+  // ★ 纯 AI 匹配，最多重试 2 次
   let matchResult = null;
-  try { matchResult = await aiMatchRule(factDesc, scoringRules); }
-  catch (e) { log('Phase2:AI-fail', e.message); }
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      matchResult = await aiMatchRule(factDesc, scoringRules, attempt);
+      if (matchResult && typeof matchResult.matched_rule_id === 'number') break;
+      log('Phase2:AI-retry', `attempt=${attempt} result=${JSON.stringify(matchResult)}`);
+    } catch (e) { log('Phase2:AI-fail', `attempt=${attempt} ${e.message}`); }
+  }
 
-  if (!matchResult || !matchResult.matched_rule_id) {
-    log('Phase2:fallback', 'using TF-IDF');
-    const summaryText = buildSummaryText(factsArr);
-    const tfidf = await matchSummaryToRules(summaryText, factsArr[0], ruleSetId, userId);
-    matchResult = {
-      matched_rule_id: tfidf.best_match?.rule_id || null,
-      confidence: tfidf.best_match?.similarity || 0,
-      reason: tfidf.best_match?.rule_name || 'TF-IDF',
-    };
+  if (!matchResult || typeof matchResult.matched_rule_id !== 'number') {
+    log('Phase2:none', 'AI 未能匹配到规则');
+    return { score_preview: null, explanation: 'AI 未能匹配到计分规则，请检查规则集配置', needs_review: true };
   }
 
   const matchedRule = scoringRules.find(r => r.id === matchResult.matched_rule_id);
@@ -126,10 +156,10 @@ async function calculateScorePreview(facts, ruleSetId, userId) {
 // ============================================================
 //  AI Rule Matching
 // ============================================================
-async function aiMatchRule(factDesc, rules) {
+async function aiMatchRule(factDesc, rules, attempt = 1) {
   const rulesReadable = rules.map(r => {
     const p = [];
-    p.push(`[${r.id}] ${r.item_name||''}`);
+    p.push(`[${r.id}] ${r.item_name||''}(${r.item_key||''})`);
     if (r.score_level) p.push(`级别:${r.score_level}`);
     if (r.score_rank) p.push(`奖项:${r.score_rank}`);
     p.push(`加分:${r.score}分`);
@@ -137,7 +167,8 @@ async function aiMatchRule(factDesc, rules) {
     return p.join(' ');
   }).join('\n');
 
-  const prompt = `请根据以下事实，从规则列表中选出最匹配的一条。
+  const temp = attempt === 1 ? 0.1 : 0.3;
+  const prompt = `请根据以下事实，匹配到最合适的一条计分规则。即使事实类型标注为"other"，也要根据活动名称和详情判断其类别。
 
 === 事实 ===
 ${factDesc}
@@ -145,19 +176,21 @@ ${factDesc}
 === 计分规则（${rules.length}条） ===
 ${rulesReadable}
 
-=== 要求 ===
-1. 类别语义匹配（如"数学建模"属于"学科竞赛"）
-2. 级别匹配（provincial=省级=省部级, national=国家级, school=校级, college=院级）
-3. 奖项等次匹配（三等奖=三（铜奖）=三等奖/铜奖）
+=== 匹配要点 ===
+1. 类别语义：根据活动名称判断类别（如"数学建模"→B2学科竞赛，"志愿服务"→B6社会实践，"学生会"→B5社会工作）
+2. 级别匹配：international→国家级, provincial→省级, school→校级, college→院级
+3. 奖项等次：一等奖=金奖, 二等奖=银奖, 三等奖=铜奖=Honorable Mention
+4. 如果事实类型为"other"，忽略类型字段，只根据活动名称、级别、奖项来匹配
 
-直接输出JSON: {"matched_rule_id":数字,"confidence":0.0-1.0,"reason":"理由"}`;
+直接输出JSON，不要解释：
+{"matched_rule_id":数字,"confidence":0.0-1.0,"reason":"一句话理由"}`;
 
   const messages = [
-    { role: "system", content: "你是综测规则匹配专家。只输出JSON。" },
+    { role: "system", content: "你是高校综测计分规则匹配专家。根据事实的语义和级别匹配最合适的规则。必须输出有效JSON。" },
     { role: "user", content: prompt }
   ];
 
-  const result = await chatStreamJson(messages, { temperature: 0.1, maxTokens: 300 });
+  const result = await chatStreamJson(messages, { temperature: temp, maxTokens: 1024 });
   if (!result || typeof result.matched_rule_id !== 'number') {
     throw new Error('AI invalid: ' + JSON.stringify(result));
   }
@@ -168,16 +201,31 @@ ${rulesReadable}
 //  Helpers
 // ============================================================
 function buildFactDescription(fact) {
-  const d = fact.detail || {};
+  // AI 返回的 fact_data 结构: {type, value, detail:{level, rank, organizer, ...}, source_text, ...}
+  // 旧格式可能: {type, value, award_name, award_rank, inferred_level, organizer, ...}
+  const raw = fact.detail || {};
+  const d = (raw.detail && typeof raw.detail === 'object') ? raw.detail : raw;
+  log('Phase2:desc', `rawKeys=${Object.keys(raw).slice(0,8).join(',')} dKeys=${Object.keys(d).slice(0,5).join(',')} type=${fact.type} value=${fact.value}`);
   const p = [];
   if (fact.type) p.push(`类型: ${fact.type}`);
-  if (fact.value) p.push(`活动: ${fact.value}`);
-  if (d.level) p.push(`级别: ${d.level}`);
-  else if (fact.inferred_level) p.push(`级别: ${fact.inferred_level}`);
-  if (d.rank) p.push(`奖项: ${d.rank}`);
-  else if (fact.award_rank) p.push(`奖项: ${fact.award_rank}`);
-  if (d.organizer) p.push(`主办方: ${d.organizer}`);
-  if (fact.source_text) p.push(`原文: ${fact.source_text.slice(0,200)}`);
+  if (fact.value) p.push(`名称: ${fact.value}`);
+  else if (raw.award_name) p.push(`名称: ${raw.award_name}`);
+  else if (raw.competition_name) p.push(`名称: ${raw.competition_name}`);
+  // 级别（从多个可能位置读取）
+  const level = d.level || raw.level || raw.inferred_level || fact.inferred_level || d.inferred_level || '';
+  if (level) p.push(`级别: ${level}`);
+  // 奖项等次
+  const rank = d.rank || raw.rank || raw.award_rank || fact.award_rank || d.award_rank || '';
+  if (rank) p.push(`奖项: ${rank}`);
+  // 主办方
+  const org = d.organizer || raw.organizer || raw.organizer_name || '';
+  if (org) p.push(`主办方: ${org}`);
+  // 日期
+  const date = d.date || raw.date || '';
+  if (date) p.push(`日期: ${date}`);
+  // 原文
+  if (fact.source_text) p.push(`原文: ${fact.source_text.slice(0, 200)}`);
+  else if (raw.source_text) p.push(`原文: ${raw.source_text.slice(0, 200)}`);
   return p.join('\n');
 }
 
@@ -214,6 +262,39 @@ async function generateDescription(fact, matchedRule, score) {
   } catch (_) {
     return `在${name}中获得${rank}，加${score || 0}分`;
   }
+}
+
+// ★ 从事実中提取级别信息
+function extractLevel(fact) {
+  const raw = fact.detail || {};
+  const d = (raw.detail && typeof raw.detail === 'object') ? raw.detail : raw;
+  return d.level || raw.level || raw.inferred_level || fact.inferred_level || '';
+}
+
+// ★ 标准化级别名称
+function normalizeLevel(level) {
+  const m = {
+    'international': 'international', '国际': 'international', '国家级': 'national',
+    'national': 'national', '国家': 'national', '全国': 'national',
+    'provincial': 'provincial', '省级': 'provincial', '省部': 'provincial',
+    'municipal': 'municipal', '市级': 'municipal',
+    'school': 'school', '校级': 'school', '院级': 'college',
+    'college': 'college', '院系': 'college',
+  };
+  const key = (level || '').toLowerCase();
+  return m[key] || key;
+}
+
+// ★ 获取相关级别列表（包含相邻级别用于模糊匹配）
+function getRelevantLevels(factLevel) {
+  const order = ['international', 'national', 'provincial', 'municipal', 'school', 'college'];
+  const idx = order.indexOf(factLevel);
+  if (idx < 0) return [factLevel]; // 未知级别，不过滤
+  // 包含当前级别和相邻级别（上下各1级）
+  const result = [factLevel];
+  if (idx > 0) result.push(order[idx - 1]);
+  if (idx < order.length - 1) result.push(order[idx + 1]);
+  return result;
 }
 
 module.exports = { extractMaterialFacts, calculateScorePreview, generateDescription };

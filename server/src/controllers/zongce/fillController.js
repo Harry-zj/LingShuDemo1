@@ -45,6 +45,32 @@ exports.getTemplates = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
+// ★ 删除模板（同时删除关联的填充结果）
+exports.deleteTemplate = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [tpls] = await pool.execute(
+      "SELECT * FROM fill_templates WHERE id = ? AND user_id = ?", [id, req.user.id]
+    );
+    if (!tpls.length) return res.json(Res.error("模板不存在"));
+    // 删除模板文件
+    const tpl = tpls[0];
+    const tplPath = path.join(__dirname, "../../../uploads", tpl.file_path);
+    try { fs.unlinkSync(tplPath); } catch (_) {}
+    // 删除关联的填充结果
+    const [results] = await pool.execute(
+      "SELECT result_path FROM fill_results WHERE template_id = ?", [id]
+    );
+    for (const r of results) {
+      const rpath = path.join(__dirname, "../../../uploads", r.result_path);
+      try { fs.unlinkSync(rpath); } catch (_) {}
+    }
+    await pool.execute("DELETE FROM fill_results WHERE template_id = ?", [id]);
+    await pool.execute("DELETE FROM fill_templates WHERE id = ?", [id]);
+    res.json(Res.success(null, "模板已删除"));
+  } catch (e) { res.json(Res.error(e.message)); }
+};
+
 exports.doFill = async (req, res) => {
   try {
     const { templateId } = req.params;
@@ -58,7 +84,8 @@ exports.doFill = async (req, res) => {
     if (!fs.existsSync(templatePath)) return res.json(Res.error("模板文件丢失，请重新上传"));
 
     // ★ 从数据库获取当前用户的真实填表数据
-    const fillData = await getFillData(req.user.id);
+    const batchId = Number(req.query.batch_id || 0) || null;
+    const fillData = await getFillData(req.user.id, batchId);
 
     const templateBuffer = fs.readFileSync(templatePath);
     const outputBuffer = smartFill(templateBuffer, fillData);
@@ -69,8 +96,8 @@ exports.doFill = async (req, res) => {
     try {
       const namePart = tpl.name.replace(/.docx$/i, "");
       const [fr] = await pool.execute(
-        "INSERT INTO fill_results (user_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?)",
-        [req.user.id, templateId, outputFileName,
+        "INSERT INTO fill_results (user_id, batch_id, template_id, result_path, original_name) VALUES (?, ?, ?, ?, ?)",
+        [req.user.id, batchId, templateId, outputFileName,
           namePart + "_已填写_" + fillData.real_name + "_" + fillData.student_id + ".docx"]
       );
       fillResultId = fr.insertId;
@@ -121,7 +148,8 @@ exports.downloadFill = async (req, res) => {
 // ★ 获取当前用户的填表预览数据（替代原来的 mock-data）
 exports.getFillPreview = async (req, res) => {
   try {
-    const preview = await getFillDataPreview(req.user.id);
+    const { batch_id } = req.query;
+    const preview = await getFillDataPreview(req.user.id, batch_id);
     res.json(Res.success(preview));
   } catch (e) {
     console.error("[预览] 失败:", e.message);
