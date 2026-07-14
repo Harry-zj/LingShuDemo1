@@ -160,13 +160,14 @@ async function getLatestSmartFillSource(studentId, batchId, db = pool) {
   const normalizedBatchId = Number(batchId || 0);
   if (!normalizedBatchId) return null;
 
+  // ★ 规则集由管理员创建，不应按 studentId 过滤 user_id
   const [ruleSets] = await db.execute(
     `SELECT id
      FROM rule_sets
-     WHERE user_id=? AND batch_id=? AND status='published'
+     WHERE batch_id=? AND status='published'
      ORDER BY published_at DESC, id DESC
      LIMIT 1`,
-    [studentId, normalizedBatchId]
+    [normalizedBatchId]
   );
   if (!ruleSets.length) return null;
 
@@ -1564,6 +1565,8 @@ async function updateSmartResult(studentId, payload) {
   if (!payload?.batch_id) throw new Error("请先选择综测批次");
   const student = await getUser(studentId);
   assertProfileComplete(student, "填写综测");
+  // ★ 在事务外获取智能填表 Word 文档记录（read-only，使用 pool）
+  const smartFillSource = await getLatestSmartFillSource(student.id, Number(payload.batch_id));
   return withTransaction(async conn => {
     const batch = await getBatchById(Number(payload.batch_id), conn);
     if (!batch) throw new Error("批次不存在或已删除");
@@ -1579,13 +1582,16 @@ async function updateSmartResult(studentId, payload) {
       const [result] = await conn.execute(
         `INSERT INTO assessment_forms
           (batch_id, batch_title, student_id, student_name, student_no, college, major, grade,
-           class_id, class_name, from_smart_fill, is_demo, status, level, scores, personal_summary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'smart_ready', ?, ?, ?)`,
+           class_id, class_name, from_smart_fill, is_demo, fill_result_id, smart_fill_rule_set_id,
+           status, level, scores, personal_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, 'smart_ready', ?, ?, ?)`,
         [
           batch.id, batch.title || "",
           student.id, student.real_name || "", student.student_no || student.username || "",
           student.college || "", student.major || "", student.grade || "",
           student.class_id || null, student.class_name || "",
+          smartFillSource?.fillResult?.id || null,
+          smartFillSource?.ruleSetId || null,
           calculateLevel(0, DEFAULT_SETTINGS.gradeRules), JSON.stringify(scores), ""
         ]
       );
@@ -1628,8 +1634,8 @@ async function updateSmartResult(studentId, payload) {
     }
     const level = calculateLevel(scores.total, settings.gradeRules);
     await conn.execute(
-      "UPDATE assessment_forms SET personal_summary=?, scores=?, level=?, manual_level='', updated_at=NOW() WHERE id=?",
-      [payload.personal_summary ?? form.personal_summary ?? "", JSON.stringify(scores), level, form.id]
+      "UPDATE assessment_forms SET personal_summary=?, scores=?, level=?, manual_level='', fill_result_id=COALESCE(?, fill_result_id), smart_fill_rule_set_id=COALESCE(?, smart_fill_rule_set_id), updated_at=NOW() WHERE id=?",
+      [payload.personal_summary ?? form.personal_summary ?? "", JSON.stringify(scores), level, smartFillSource?.fillResult?.id || null, smartFillSource?.ruleSetId || null, form.id]
     );
     await addLog(conn, student, "保存综测信息", form.student_name, "学生在信息管理页保存当前批次综测表");
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
@@ -1756,6 +1762,8 @@ async function submitSmartResult(studentId, payload = {}) {
   if (!payload.batch_id) throw new Error("请先选择综测批次");
   const student = await getUser(studentId);
   assertProfileComplete(student, "提交综测");
+  // ★ 在事务外获取智能填表 Word 文档记录（read-only，使用 pool）
+  const smartFillSource = await getLatestSmartFillSource(student.id, Number(payload.batch_id));
   return withTransaction(async conn => {
     const [forms] = await conn.execute(
       "SELECT * FROM assessment_forms WHERE student_id=? AND batch_id=? ORDER BY updated_at DESC, id DESC LIMIT 1 FOR UPDATE",
@@ -1776,7 +1784,10 @@ async function submitSmartResult(studentId, payload = {}) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'assessment_member')`,
       [form.batch_id, form.id, reviewer.id, reviewer.real_name || reviewer.username || "", reviewer.student_no || "", reviewer.class_id, reviewer.class_name || assignment.reviewer_class_name, form.class_name || assignment.target_class_name]
     );
-    await conn.execute("UPDATE assessment_forms SET status='pending_class_committee', result_released_at=NULL, pre_objection_status='', updated_at=NOW() WHERE id=?", [form.id]);
+    await conn.execute(
+      "UPDATE assessment_forms SET status='pending_class_committee', result_released_at=NULL, pre_objection_status='', fill_result_id=COALESCE(?, fill_result_id), smart_fill_rule_set_id=COALESCE(?, smart_fill_rule_set_id), updated_at=NOW() WHERE id=?",
+      [smartFillSource?.fillResult?.id || null, smartFillSource?.ruleSetId || null, form.id]
+    );
     await addLog(conn, student, "提交综测表", batch.title, `系统已按工作量均分给 ${reviewer.real_name || reviewer.id}`);
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], student, conn);
