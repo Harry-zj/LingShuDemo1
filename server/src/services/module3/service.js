@@ -469,6 +469,9 @@ async function enrichBatch(row, db = pool) {
      FROM assessment_forms f WHERE f.batch_id = ?`,
     [row.college || "", row.grade || "", row.id]
   );
+  const [ruleCount] = await db.execute(
+    "SELECT COUNT(*) AS cnt FROM rule_sets WHERE batch_id = ? AND status = 'published'", [row.id]
+  );
   const count = counts[0] || {};
   return {
     ...row,
@@ -485,6 +488,7 @@ async function enrichBatch(row, db = pool) {
     submitted_count: Number(count.submitted_count || 0),
     approved_count: Number(count.approved_count || 0),
     pending_count: Number(count.pending_count || 0),
+    published_rule_count: Number(ruleCount[0]?.cnt || 0),
   };
 }
 

@@ -154,11 +154,18 @@ exports.deleteRuleSet = async (req, res) => {
 
     const conn = await pool.getConnection();
     try {
+      const [docs] = await conn.execute("SELECT rule_source_id FROM rule_set_documents WHERE rule_set_id = ?", [id]);
+      const sourceIds = docs.map(d => d.rule_source_id);
+
       await conn.beginTransaction();
-      // 级联删除 V2 子表
       await conn.execute("DELETE FROM scoring_rules WHERE rule_set_id = ?", [id]);
       await conn.execute("DELETE FROM rule_set_documents WHERE rule_set_id = ?", [id]);
       await conn.execute("DELETE FROM rule_sets WHERE id = ?", [id]);
+
+      for (const sid of sourceIds) {
+        const [rem] = await conn.execute("SELECT COUNT(*) AS n FROM rule_set_documents WHERE rule_source_id = ?", [sid]);
+        if (rem[0].n === 0) await conn.execute("UPDATE rule_sources SET status = 'pending' WHERE id = ?", [sid]);
+      }
       await conn.commit();
       res.json(Res.success(null, "已删除"));
     } catch (e) {

@@ -99,19 +99,15 @@ exports.resumeCalculation = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 获取评估结果（V1 兼容）
+// 获取评估结果
 exports.getEvaluation = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT * FROM calculation_tasks WHERE student_id = ? ORDER BY created_at DESC LIMIT 1",
+      "SELECT * FROM evaluation_results WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
       [req.user.id]
     );
     if (!rows.length) return res.json(Res.success(null));
-    const task = rows[0];
-    const [metrics] = await pool.execute(
-      "SELECT * FROM calculation_metric_results WHERE task_id = ?", [task.id]
-    );
-    res.json(Res.success({ task, metrics }));
+    res.json(Res.success(rows[0]));
   } catch (e) { res.json(Res.error(e.message)); }
 };
 

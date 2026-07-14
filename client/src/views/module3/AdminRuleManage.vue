@@ -1,26 +1,40 @@
 <template>
-  <div class="admin-rule-page">
-    <div class="page-header">
-      <h2>批次规则管理</h2>
-      <p>选择批次后上传规则文件，AI 解析后发布供学生使用</p>
-    </div>
+  <Module3FeatureMenu
+    v-if="view === 'menu'"
+    title="批次规则管理"
+    description="选择批次后上传规则文件，AI 解析后发布供学生使用"
+    back-path="/module3/admin"
+    back-label="返回管理员工作台"
+    :cards="menuCards"
+  />
+
+  <div v-else class="admin-rule-page">
+    <button class="back-link" @click="$router.push('/module3/admin/rules')"><VIcon icon="mdi:arrow-left" />返回批次规则管理</button>
 
     <!-- 批次选择器 -->
+    <section class="panel glass-card">
+    <div class="panel-header"><h3><VIcon icon="mdi:calendar-search" />选择测评批次</h3></div>
     <div class="batch-select-bar">
-      <label>选择测评批次</label>
-      <select v-model="selectedBatchId" @change="onBatchChange" class="batch-select">
-        <option value="">-- 请选择批次 --</option>
-        <option v-for="b in batches" :key="b.id" :value="b.id">{{ b.title }} ({{ b.school_year }} · {{ b.college }} · {{ b.grade }})</option>
+      <select v-model="selectedYear" class="batch-select" @change="selectedBatchId = ''; ruleSources = []; ruleSets = []">
+        <option value="">选择学年</option>
+        <option v-for="y in schoolYears" :key="y" :value="y">{{ y }}</option>
+      </select>
+      <select v-model="selectedBatchId" @change="onBatchChange" class="batch-select" :disabled="!selectedYear">
+        <option value="">选择批次</option>
+        <option v-for="b in filteredBatches" :key="b.id" :value="b.id">{{ b.college }} · {{ b.grade }}级</option>
       </select>
       <span v-if="selectedBatch" class="batch-status-tag" :class="'status-' + selectedBatch.status">
-        {{ selectedBatch.status === 'published' ? '进行中' : selectedBatch.status === 'draft' ? '草稿' : selectedBatch.status }}
+        {{ selectedBatch.status === 'published' ? '进行中' : selectedBatch.status === 'draft' ? '草稿' : selectedBatch.status === 'closed' ? '已关闭' : selectedBatch.status }}
       </span>
     </div>
+    </section>
 
     <div v-if="!selectedBatchId" class="empty-hint">请先选择一个批次，再进行规则操作</div>
 
     <template v-else>
       <!-- 上传区 -->
+      <section class="panel glass-card">
+      <div class="panel-header"><h3><VIcon icon="mdi:file-upload-outline" />上传规则文件</h3></div>
       <div class="upload-row">
         <div class="upload-left">
           <div class="upload-zone" @click="$refs.fileInput.click()" @dragover.prevent @drop.prevent="onDrop">
@@ -69,11 +83,13 @@
           </div>
         </div>
       </div>
+      </section>
 
       <!-- 已解析的规则集 -->
-      <div v-if="ruleSets.length" class="rule-sets-list">
+      <section class="panel glass-card" v-if="ruleSets.length">
+      <div class="panel-header"><h3><VIcon icon="mdi:format-list-checks" />已解析的规则集 ({{ ruleSets.length }})</h3></div>
+      <div class="rule-sets-list">
         <div class="section-header-row">
-          <h4>已解析的规则集 ({{ ruleSets.length }})</h4>
           <button class="btn-text" @click="showAddForm = !showAddForm">
             {{ showAddForm ? '收起' : '+ 手动添加规则' }}
           </button>
@@ -121,20 +137,20 @@
             <button v-if="rs.status === 'draft'" class="btn primary sm" @click.stop="publishSet(rs)">✅ 确认发布</button>
             <button v-if="rs.status === 'archived'" class="btn sm" style="background:#f0ad4e;color:#fff" @click.stop="publishSet(rs)">🔄 重新发布</button>
             <button class="btn-text sm" @click.stop="toggleDetail(rs)">🔍 {{ rs._open && rs._detail ? '收起' : '查看详情' }}</button>
-            <button v-if="rs.status === 'draft'" class="btn-text danger sm" @click.stop="deleteSet(rs)">🗑</button>
+            <button v-if="rs.status === 'draft'" class="btn-text danger sm" style="font-size:16px" @click.stop="deleteSet(rs)">🗑</button>
           </div>
 
           <div v-if="rs._open && rs._detail" class="ruleset-body">
-            <h5>F3 评分规则 ({{ (rs._detail.f3_rules || []).length }} 条)</h5>
             <div class="rule-table-wrap" v-if="rs._detail.f3_rules?.length">
               <table class="rule-table">
-                <thead><tr><th>编号</th><th>名称</th><th>等级</th><th>分值</th></tr></thead>
+                <thead><tr><th>编号</th><th>名称</th><th>等级</th><th>分值</th><th>说明</th></tr></thead>
                 <tbody>
                   <tr v-for="r in rs._detail.f3_rules" :key="r.id">
                     <td class="code-cell">{{ r.item_key }}</td>
                     <td class="name-cell">{{ r.item_name }}</td>
                     <td>{{ r.score_level || '-' }}</td>
-                    <td class="score-cell">{{ r.score }}</td>
+                    <td class="score-cell">{{ parseFloat(r.score) }}</td>
+                    <td class="desc-cell">{{ r.description || '-' }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -143,6 +159,7 @@
           </div>
         </div>
       </div>
+      </section>
     </template>
   </div>
 </template>
@@ -151,20 +168,38 @@
 import { ref, computed, onMounted } from 'vue'
 import { useUserStore } from '../../stores/user'
 import * as api from '../../api/zongce'
+import Module3FeatureMenu from './Module3FeatureMenu.vue'
+
+const props = defineProps({ view: { type: String, default: 'menu' } })
+const view = computed(() => props.view || 'menu')
+const menuCards = [{ title: '进入批次规则管理', description: '选择批次，上传评分规则文件，AI 解析后发布供学生使用', icon: 'mdi:file-document-edit-outline', to: '/module3/admin/rules/manage' }]
 
 // ===== 批次选择 =====
 const batches = ref([])
 const selectedBatchId = ref('')
+const selectedYear = ref('')
 const selectedBatch = computed(() => batches.value.find(b => b.id === selectedBatchId.value) || null)
+const schoolYears = computed(() => [...new Set(batches.value.map(b => b.school_year).filter(Boolean))].sort().reverse())
+const filteredBatches = computed(() => selectedYear.value ? batches.value.filter(b => b.school_year === selectedYear.value) : [])
 
 async function loadBatches() {
   const r = await api.getBatches()
-  if (r.code === 200) batches.value = r.data || []
+  if (r.code === 200) {
+    batches.value = r.data || []
+    if (!selectedYear.value && batches.value.length) {
+      const now = new Date(); const y = now.getFullYear()
+      const cur = now.getMonth() >= 8 ? `${y}-${y+1}` : `${y-1}-${y}`
+      if (schoolYears.value.includes(cur)) selectedYear.value = cur
+    }
+  }
 }
 
 async function onBatchChange() {
   ruleSources.value = []
   ruleSets.value = []
+  if (activeSSE) { activeSSE.close(); activeSSE = null }
+  parsingId.value = null
+  parsingTaskId.value = null
   if (selectedBatchId.value) await refreshData()
 }
 
@@ -174,8 +209,26 @@ async function refreshData() {
     api.getRuleSources(selectedBatchId.value),
     api.getRuleSets(selectedBatchId.value),
   ])
-  if (s.code === 200) ruleSources.value = s.data || []
-  if (rs.code === 200) ruleSets.value = rs.data || []
+  if (s.code === 200) {
+    ruleSources.value = s.data || []
+    // 发现有正在解析的文件，标记状态，不重复调用解析接口
+    const active = ruleSources.value.find(src => src.active_task_id)
+    if (active && !parsingId.value) {
+      parsingId.value = active.id
+      parsingTaskId.value = active.active_task_id
+      resumeSSE(active.active_task_id)
+    }
+  }
+  if (rs.code === 200) ruleSets.value = (rs.data || []).filter(r => r.f3_rule_count > 0)
+}
+
+function resumeSSE(taskId) {
+  if (activeSSE) activeSSE.close()
+  const token = useUserStore().token
+  activeSSE = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`)
+  activeSSE.addEventListener('progress', e => { try { parseProgress.value = JSON.parse(e.data) } catch (_) {} })
+  activeSSE.addEventListener('done', async () => { activeSSE.close(); activeSSE = null; parsingId.value = null; parsingTaskId.value = null; await refreshData() })
+  activeSSE.addEventListener('error', () => { activeSSE.close(); activeSSE = null })
 }
 
 // ===== 规则管理（复用原 SmartFillRule 逻辑） =====
@@ -189,6 +242,7 @@ const uploading = ref(false)
 const uploadingFiles = ref([])
 const parsingId = ref(null)
 const parsingTaskId = ref(null)
+let activeSSE = null
 const parseProgress = ref({ completed: 0, total: 0 })
 
 // ★ 手动添加规则
@@ -227,6 +281,7 @@ async function submitAddRule() {
 function statusText(s) {
   if (s === 'published') return '已发布'
   if (s === 'draft') return '草稿'
+  if (s === 'closed') return '已关闭'
   if (s === 'archived') return '已归档'
   return s || ''
 }
@@ -252,17 +307,6 @@ const progressLabel = computed(() => {
   return count ? `${phase} (${count})` : phase
 })
 
-async function toggleDetail(rs) {
-  if (rs._open) { rs._open = false; return }
-  if (!rs._detail) {
-    try {
-      const res = await api.getRuleSet(rs.id)
-      if (res.code === 200) rs._detail = res.data
-      else { alert(res.msg); return }
-    } catch (e) { alert('加载失败: ' + (e.response?.data?.msg || e.message)); return }
-  }
-  rs._open = true
-}
 
 async function deleteSet(rs) {
   if (!confirm('确定删除该规则集？')) return
@@ -303,6 +347,14 @@ async function sendText() {
 }
 
 const reparseDialog = ref({ show: false, sourceId: null })
+
+async function toggleDetail(rs) {
+  if (rs._open) { rs._open = false; return }
+  if (!rs._detail) {
+    try { const r = await api.getRuleSet(rs.id); if (r.code === 200) rs._detail = r.data; else { alert(r.msg); return } } catch (_) { alert('加载失败'); return }
+  }
+  rs._open = true
+}
 async function doParse(sourceId) {
   const src = ruleSources.value.find(s => s.id === sourceId)
   if (src && src.status === 'parsed') { reparseDialog.value = { show: true, sourceId }; return }
@@ -323,16 +375,17 @@ async function startParse(sourceId, forceNew) {
     if (startRes.code !== 200) { alert(startRes.msg); parsingId.value = null; return }
     const taskId = startRes.data.taskId; parsingTaskId.value = taskId
     const token = useUserStore().token
-    const es = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`)
-    es.addEventListener('progress', (e) => {
+    if (activeSSE) activeSSE.close()
+    activeSSE = new EventSource(`/api/zongce/rules/tasks/${taskId}/stream?token=${encodeURIComponent(token)}`)
+    activeSSE.addEventListener('progress', (e) => {
       try { const p = JSON.parse(e.data); parseProgress.value = p } catch (_) {}
     })
-    es.addEventListener('done', async (e) => {
-      es.close()
+    activeSSE.addEventListener('done', async (e) => {
+      activeSSE.close(); activeSSE = null
       try { const p = JSON.parse(e.data); parseProgress.value = { ...p, completed: p.total || p.task_count || 1 } } catch (_) {}
       refreshData(); parsingId.value = null
     })
-    es.addEventListener('error', () => { es.close(); alert('解析失败'); parsingId.value = null })
+    activeSSE.addEventListener('error', () => { activeSSE.close(); activeSSE = null; parsingId.value = null })
   } catch (e) {
     alert('启动解析失败: ' + (e.response?.data?.msg || e.message))
     parsingId.value = null
@@ -361,17 +414,20 @@ onMounted(() => { loadBatches() })
 </script>
 
 <style scoped>
-.admin-rule-page { display: flex; flex-direction: column; gap: 20px; padding: 20px; }
-.page-header h2 { font-size: 20px; margin: 0; }
-.page-header p { font-size: 14px; color: var(--color-text-tertiary); margin: 4px 0 0; }
+.admin-rule-page { display:flex; flex-direction:column; gap:22px; animation:fadeIn .35s var(--easing-decelerate); }
+.page-header h2 { font-size:22px; font-weight:var(--font-weight-semibold); }
+.page-desc, .hint { color:var(--color-text-secondary); font-size:13px; margin-top:4px; }
+.panel { padding:22px; border-radius: 8px !important; }
+.panel-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
+.panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }
 
-.batch-select-bar { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 10px; }
-.batch-select-bar label { font-size: 14px; font-weight: 600; white-space: nowrap; }
-.batch-select { padding: 8px 14px; border: 1.5px solid var(--color-border); border-radius: 6px; font-size: 14px; font-family: inherit; min-width: 300px; }
+.batch-select-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.batch-select { padding: 8px 14px; border: 1px solid var(--color-border); border-radius: 6px; font-size: 14px; font-family: inherit; min-width: 150px; background: var(--color-surface); color: var(--color-text-primary); }
 .batch-select:focus { outline: none; border-color: var(--color-primary); }
+.batch-select:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .batch-status-tag { font-size: 12px; padding: 2px 10px; border-radius: 12px; font-weight: 500; }
-.status-published { background: #e6f4ea; color: #34A853; }
+.status-published, .status-closed { background: #e6f4ea; color: #34A853; }
 .status-draft { background: #fef7e0; color: #E37400; }
 
 .empty-hint { text-align: center; padding: 40px; color: var(--color-text-tertiary); font-size: 15px; }
@@ -405,11 +461,12 @@ onMounted(() => { loadBatches() })
 .ruleset-body { padding: 12px 16px; }
 
 .rule-table-wrap { overflow-x: auto; }
-.rule-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.rule-table th { text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--color-border); color: var(--color-text-secondary); font-weight: 500; }
-.rule-table td { padding: 7px 6px; border-bottom: 1px solid var(--color-border); }
+.rule-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+.rule-table th { text-align: center; padding: 8px 6px; border-bottom: 2px solid var(--color-border); color: var(--color-text-secondary); font-weight: 600; }
+.rule-table td { text-align: center; padding: 7px 6px; border-bottom: 1px solid var(--color-border); }
 .code-cell { font-weight: 600; }
-.score-cell { font-weight: 700; color: #34A853; }
+.desc-cell { color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; max-width: 300px; word-break: break-word; }
+.score-cell { font-weight: 700; color: #34A853; text-align: center; }
 
 .btn { padding: 8px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-family: inherit; }
 .btn.primary { background: var(--color-primary); color: #fff; }
@@ -419,7 +476,7 @@ onMounted(() => { loadBatches() })
 .btn-text.danger { color: #D93025; border-color: transparent; }
 .badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #FEF7E0; color: #E37400; }
 .badge.parsed { background: #E6F4EA; color: #34A853; }
-.badge.published { background: #E6F4EA; color: #34A853; }
+.badge.published, .badge.closed { background: #E6F4EA; color: #34A853; }
 .text-muted { color: var(--color-text-tertiary); font-size: 13px; }
 
 .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.4); display:flex; align-items:center; justify-content:center; z-index:100; }
@@ -455,4 +512,6 @@ onMounted(() => { loadBatches() })
 .add-msg.error { color: #D93025; }
 
 .ruleset-time { font-size: 12px; color: var(--color-text-tertiary); min-width: 100px; }
+.back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
+:deep(*) { border-radius: 8px !important; }
 </style>

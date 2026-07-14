@@ -20,9 +20,20 @@ async function serializeFact(efRow) {
     [efRow.id]
   );
 
+  // ★ 优先从 fact_data 读取匹配预览（提取后未确认时用）
+  let preview = {};
+  if (factData.match_score != null) {
+    const ruleObj = factData.match_rule_obj || (typeof factData.match_rule === 'object' ? factData.match_rule : null);
+    const ruleName = ruleObj?.name || (typeof factData.match_rule === 'string' ? factData.match_rule : '');
+    preview.score_preview = factData.match_score;
+    preview.rule = ruleObj || { name: ruleName };
+    preview.confidence = factData.match_sim || 0;
+    preview.human_readable = factData.match_desc || ruleName;
+    preview.indicator = { code: factData.match_item_key || ruleObj?.category || '', name: ruleObj?.indicator_name || ruleName };
+  }
+
   if (frmRows.length) {
     const frm = frmRows[0];
-    // ★ 优先从 preview_data 读取（正式表），回退到 material_recognitions
     let extra = {};
     if (frm.preview_data) {
       try { extra = typeof frm.preview_data === 'string' ? JSON.parse(frm.preview_data) : frm.preview_data; } catch (_) {}
@@ -62,6 +73,27 @@ async function serializeFact(efRow) {
       error_type: extra.error_type || null,
       reason: extra.human_readable || (frm.reason && !frm.reason.startsWith("验证") ? frm.reason : null),
       confidence: frm.confidence,
+    };
+  } else if (preview.score_preview != null) {
+    match = {
+      fact_rule_match_id: null,
+      rule_match_run_id: null,
+      is_current: false,
+      is_selected: false,
+      indicator: preview.indicator || null,
+      rule: preview.rule || null,
+      lookup_table: null,
+      lookup_cell: null,
+      raw_dimensions: {},
+      normalized_dimensions: {},
+      score_preview: preview.score_preview,
+      score_status: null,
+      match_condition: 'pending',
+      review_status: 'pending',
+      needs_review: true,
+      error_type: null,
+      reason: preview.human_readable || null,
+      confidence: preview.confidence || 0,
     };
   }
 
@@ -153,6 +185,11 @@ async function serializeMaterial(mat) {
     });
   }
   result.score_previews = score_previews;
+
+  if (!result.title && result.facts.length) {
+    const fv = result.facts[0]?.fact_data?.value;
+    if (fv) result.title = fv;
+  }
 
   return result;
 }
