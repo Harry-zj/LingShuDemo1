@@ -327,6 +327,7 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
   let completedCount = 0, failedCount = 0;
 
   for (let i = 0; i < parseTasks.length; i += parallelLimit) {
+    if (cancelToken?.cancelled) throw new Error("CANCELLED");
     const batch = parseTasks.slice(i, i + parallelLimit);
     const batchResults = await Promise.all(batch.map(async (task, j) => {
       const globalIdx = i + j;
@@ -342,14 +343,15 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
         try {
           const result = await chatStreamJson(
             [{ role: "system", content: V3_RULE_PARSE_SYSTEM }, { role: "user", content: `=== ${label} ===\n${taskText}` }],
-            { temperature: 0.1, maxTokens: 16384 }
+            { temperature: 0.1, maxTokens: 16384, signal: cancelToken?.controller?.signal }
           );
           if (attempt > 0) console.log(`[V2Parse] 任务${globalIdx + 1} 重试成功`);
           completedCount++;
+          if (onProgress) await onProgress('executing', { completed: completedCount + failedCount, total: parseTasks.length, success: completedCount, failed: failedCount });
           return { taskIndex: globalIdx, label, result: dedupPerTask(result), ok: true };
         } catch (e) {
           lastError = e;
-          if (attempt < 2 && (e.message.includes('terminated') || e.message.includes('ETIMEDOUT') || e.message.includes('ECONNRESET') || e.message.includes('格式异常') || e.message.includes('JSON解析'))) {
+          if (attempt < 2 && !cancelToken?.cancelled && (e.message.includes('terminated') || e.message.includes('ETIMEDOUT') || e.message.includes('ECONNRESET') || e.message.includes('格式异常') || e.message.includes('JSON解析'))) {
             console.warn(`[V2Parse] 任务${globalIdx + 1} "${label}" ${e.message.slice(0,60)}，1秒后重试...`);
             await new Promise(r => setTimeout(r, 2000));
             continue;
@@ -360,19 +362,10 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
       failedCount++;
       taskFailures.push({ taskIndex: globalIdx, label, error: lastError.message, charCount: taskText.length, isTruncation: lastError.message.includes('JSON解析失败') || lastError.message.includes('格式异常') });
       console.warn(`[V2Parse] 任务${globalIdx + 1} "${label}" 失败: ${lastError.message.slice(0, 120)}`);
+      if (onProgress) await onProgress('executing', { completed: completedCount + failedCount, total: parseTasks.length, success: completedCount, failed: failedCount });
       return { taskIndex: globalIdx, label, result: null, ok: false, error: lastError.message };
     }));
     for (const r of batchResults) allResults[r.taskIndex] = r.result;
-
-    // 每批完成后上报进度
-    if (onProgress) {
-      await onProgress('executing', {
-        completed: completedCount + failedCount,
-        total: parseTasks.length,
-        success: completedCount,
-        failed: failedCount,
-      });
-    }
   }
 
   console.log(`[V2Parse] 执行完成: ${completedCount}/${parseTasks.length} 成功, ${failedCount} 失败`);
@@ -388,6 +381,8 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
     await pool.execute("UPDATE rule_sets SET status = 'draft' WHERE id = ?", [ruleSetId]);
     throw new Error(errMsg);
   }
+
+  if (cancelToken?.cancelled) throw new Error("CANCELLED");
 
   // ===== 5. V3 merge f3_rules =====
   if (onProgress) await onProgress('merging', { results: allResults.filter(r => r !== null).length, total: parseTasks.length });
@@ -417,7 +412,7 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
       const itemName = r.item_name || r.description || '';
       const scoreLevel = (r.score_level || r.level || "").slice(0, 100);
       const scoreRank = (r.score_rank || "").slice(0, 50);
-      const score = parseInt(r.score) || 0;
+      const score = parseFloat(r.score) || 0;
       const keywords = r.keywords || '';
       const description = r.description || '';
       const maxScore = r.max_score || null;

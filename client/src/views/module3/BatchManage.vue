@@ -77,8 +77,9 @@
         <div class="batch-row" v-for="batch in activeBatches" :key="batch.id">
           <div class="batch-main">
             <strong>{{ batch.title }}</strong>
-            <p>{{ batch.college }} · {{ batch.grade }} · {{ batch.start_time }} 至 {{ batch.end_time }}</p>
+            <p>{{ batch.college }} · {{ batch.grade }}级 · {{ batch.start_time }} 至 {{ batch.end_time }}</p>
             <small>目标学生 {{ batch.target_student_count }} 人，已提交 {{ batch.submitted_count }} 份，待处理 {{ batch.pending_count }} 份</small>
+            <small v-if="!batch.published_rule_count" style="color:#d97706;">⚠ 还没发布规则，请尽快发布哦</small>
           </div>
           <div class="actions">
             <button @click="openEdit(batch)"><span class="btn-label">查看/修改</span></button>
@@ -99,7 +100,7 @@
         <div class="batch-row" v-for="batch in historyBatches" :key="batch.id">
           <div class="batch-main">
             <strong>{{ batch.title }}</strong>
-            <p>{{ batch.college }} · {{ batch.grade }} · {{ batch.start_time }} 至 {{ batch.end_time }}</p>
+            <p>{{ batch.college }} · {{ batch.grade }}级 · {{ batch.start_time }} 至 {{ batch.end_time }}</p>
             <small>历史批次仅允许修改说明、状态和跨班互评配置</small>
           </div>
           <div class="actions">
@@ -175,10 +176,12 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
 import { createBatch, deleteBatch, getBatches, getScopeOptions, getSettings, updateBatch, updateBatchStatus, updateSettings } from '../../api/module3';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
+const router = useRouter();
 const view = computed(() => props.view || 'menu');
 const menuCards = computed(() => [
   { title: '创建并发布批次', description: '设置学院、年级、评价链、材料锁定和异议期限', icon: 'mdi:calendar-plus-outline', to: '/module3/batch-manage/create' },
@@ -274,7 +277,7 @@ async function handleCreate() {
   const res = await createBatch({ ...form.value, status: 'published' });
   if (res.code === 200) {
     alert('批次已发布');
-    await load();
+    router.push('/module3/batch-manage')
   } else alert(res.msg);
 }
 

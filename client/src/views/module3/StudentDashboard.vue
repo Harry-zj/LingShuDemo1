@@ -29,7 +29,7 @@
             <span class="status-chip muted" v-else-if="selectedBatch">{{ statusText(selectedBatch.status) }}</span>
             <span class="status-chip readonly" v-if="viewMode === 'form' && form && !canEdit">只读</span>
           </div>
-          <p class="overview-meta" v-if="selectedBatch">{{ selectedBatch.college }} · {{ selectedBatch.grade }}</p>
+          <p class="overview-meta" v-if="selectedBatch">{{ selectedBatch.college }} · {{ selectedBatch.grade }}级</p>
           <p class="overview-note" v-if="viewMode === 'form' && form">
             {{ canEdit ? '可逐项修改内容；保存仅更新草稿，确认提交后进入评价流程。' : (form.readonly_reason || '当前流程状态暂不允许学生端修改。') }}
           </p>

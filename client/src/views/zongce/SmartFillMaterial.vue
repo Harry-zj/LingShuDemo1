@@ -36,7 +36,7 @@
         <!-- 信息区 -->
         <div class="card-info">
           <div class="card-title-row">
-            <span class="card-title">{{ mat.title || '未命名材料' }}</span>
+            <span class="card-title">{{ matName(mat) }}</span>
             <span class="card-file-count" v-if="mat.attachments?.length">{{ mat.attachments.length }} 个文件</span>
           </div>
           <div class="card-tags" v-if="mat.attachments?.length">
@@ -51,8 +51,8 @@
               上传
             </button>
             <input :ref="el => fileInputs[mat.id] = el" type="file" hidden multiple accept=".png,.jpg,.jpeg,.pdf,.docx" @change="e => onFiles(mat.id, e)" />
-            <button v-if="!extractingIds.has(mat.id)" class="act-extract" :disabled="!mat.attachments?.length" @click="doExtract(mat)">AI 识别</button>
-            <button v-else class="act-extract loading" disabled>识别中…</button>
+            <button v-if="!extractingIds.has(mat.id) && !mat._extracting" class="act-extract" :disabled="!mat.attachments?.length" @click="doExtract(mat)">AI 识别</button>
+            <button v-else class="act-extract loading" disabled>{{ mat._extracting ? '后台识别中…' : '识别中…' }}</button>
             <button class="act-delete" @click="$emit('remove', mat.id)">删除</button>
           </div>
 
@@ -91,6 +91,12 @@
         </div>
       </div>
     </div>
+
+    <teleport to="body">
+      <Transition name="toast">
+        <div v-if="toast.show" class="toast">{{ toast.msg }}</div>
+      </Transition>
+    </teleport>
   </div>
 </template>
 
@@ -102,6 +108,20 @@ const props = defineProps({ materials: Array })
 const emit = defineEmits(['create', 'upload', 'remove', 'score-recalc'])
 const fileInputs = {}
 const extractingIds = ref(new Set())
+const toast = ref({ show: false, msg: '' })
+let toastTimer = null
+function showToast(msg) {
+  clearTimeout(toastTimer)
+  toast.value = { show: true, msg }
+  toastTimer = setTimeout(() => { toast.value.show = false }, 3000)
+}
+
+function matName(mat) {
+  if (mat.title) return mat.title
+  const fv = mat.facts?.[0]?.fact_data?.value
+  if (fv) return fv
+  return mat.score_previews?.[0]?.matched_rule?.name || '未命名材料'
+}
 
 function getImages(mat) {
   const imgs = []
@@ -138,10 +158,11 @@ async function deleteAttach(matId, attId) {
 
 async function doExtract(mat) {
   extractingIds.value.add(mat.id)
+  showToast('识别可能需要一些时间，请耐心等待哦~')
   try {
     const res = await api.extractMaterial(mat.id)
     if (res.code === 200) {
-      mat.facts = (res.data.facts || []).map(f => ({ fact_id: f.fact_id || null, fact_data: f.fact_data || f }))
+      mat.facts = (res.data.facts || [])
       mat.score_previews = (res.data.score_previews || []).map(sp => ({ ...sp, _confirmed: false, _confirming: false, _genDescLoading: false, ai_description: sp.ai_description || '' }))
     } else alert(res.msg)
   } catch (e) { alert('识别失败: ' + e.message) }
@@ -250,4 +271,9 @@ watch(() => props.materials, (mats) => {
 .btn-confirm { padding: 6px 16px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; background: rgba(125,155,118,0.20); color: #7d9b76; transition: all 0.2s; }
 .btn-confirm:hover:not(:disabled) { background: rgba(125,155,118,0.35); }
 .btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+.toast { position:fixed; bottom:40px; left:50%; transform:translateX(-50%); padding:12px 28px; border-radius:8px; background:var(--color-surface); color:var(--color-text-primary); box-shadow:var(--shadow-level-3); font-size:14px; z-index:1000; }
+.toast-enter-active { animation: toastIn .3s ease; }
+.toast-leave-active { animation: toastOut .3s ease; }
+@keyframes toastIn { from { opacity:0; transform:translateX(-50%) translateY(12px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+@keyframes toastOut { from { opacity:1; transform:translateX(-50%) translateY(0); } to { opacity:0; transform:translateX(-50%) translateY(-12px); } }
 </style>

@@ -38,7 +38,7 @@
             <VIcon icon="mdi:arrow-right" />
           </div>
           <strong>{{ batch.title }}</strong>
-          <p>{{ batch.college }} · {{ batch.grade }}</p>
+          <p>{{ batch.college }} · {{ batch.grade }}级</p>
           <small>{{ batch.start_time || '-' }} 至 {{ batch.end_time || '-' }}</small>
           <em>{{ view === 'result' ? '进入结果详情' : '进入综测填写详情' }}</em>
         </button>

@@ -40,11 +40,18 @@ exports.getMaterials = async (req, res) => {
     );
     const attMap = {}; for (const a of atts) { (attMap[a.material_id] ||= []).push(a); }
 
+    // 查正在识别中的材料
+    const [running] = await pool.execute(
+      `SELECT DISTINCT material_id FROM material_analysis_runs WHERE material_id IN (${placeholders}) AND status = 'running'`, ids
+    );
+    const runningIds = new Set(running.map(r => r.material_id));
+
     // ★ 统一序列化（不再依赖 material_recognitions）
     const result = [];
     for (const m of materials) {
       m.attachments = attMap[m.id] || [];
       const serialized = await serializeMaterial(m);
+      serialized._extracting = runningIds.has(m.id);
       result.push(serialized);
     }
     res.json(Res.success(result));
@@ -276,7 +283,7 @@ exports.extractMaterial = async (req, res) => {
     }
 
     // 更新 title
-    const label = result.facts.map(f => f.award_name || f.competition_name || '').filter(Boolean).join(', ').slice(0, 200) || '未识别';
+    const label = result.facts.map(f => f.value || f.award_name || f.competition_name || '').filter(Boolean).join(', ').slice(0, 200) || '未命名材料';
     await pool.execute("UPDATE materials SET title = ? WHERE id = ?", [label, id]);
 
     // ★ 回读序列化格式（fact_id=DB id, fact_data 嵌套, match 对象等）
@@ -328,7 +335,7 @@ exports.extractMaterial = async (req, res) => {
     // Persist match to extracted_facts
     for (const sp of scorePreviews) {
       try {
-        if (sp._ef_id) await pool.execute("UPDATE extracted_facts SET fact_data = JSON_SET(COALESCE(fact_data,'{}'), '$.match_score', ?, '$.match_rule', ?, '$.match_sim', ?) WHERE id = ?", [sp.score_preview, sp.matched_rule?.name || '', sp.similarity_score || 0, sp._ef_id]);
+        if (sp._ef_id) await pool.execute("UPDATE extracted_facts SET fact_data = JSON_SET(COALESCE(fact_data,'{}'), '$.match_score', ?, '$.match_rule', ?, '$.match_sim', ?, '$.match_item_key', ?, '$.match_desc', ?, '$.match_rule_obj', CAST(? AS JSON)) WHERE id = ?", [sp.score_preview, sp.matched_rule?.name || '', sp.similarity_score || 0, sp.indicator_code || '', sp.ai_description || '', JSON.stringify(sp.matched_rule || {}), sp._ef_id]);
       } catch(_) {}
     }
     res.json(Res.success({ facts, analysis_run_id: runId, needs_review: result.needs_review, score_previews: scorePreviews }, `识别到 ${facts.length} 条事实，匹配到 ${scorePreviews.length} 条计分规则`));

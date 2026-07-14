@@ -132,7 +132,13 @@ async function initDatabase() {
     try { await conn.execute("ALTER TABLE scoring_rules MODIFY item_name VARCHAR(100)"); }
     catch (e) { console.warn("[DB] V7迁移 item_name:", e.message); }
 
+    try { await conn.execute("ALTER TABLE scoring_rules MODIFY score DECIMAL(5,2) NOT NULL DEFAULT 0"); }
+    catch (e) { console.warn("[DB] V8迁移 score:", e.message); }
+    try { await conn.execute("ALTER TABLE scoring_rules MODIFY max_score DECIMAL(5,2) DEFAULT NULL"); }
+    catch (e) { console.warn("[DB] V8迁移 max_score:", e.message); }
 
+    try { await conn.execute("ALTER TABLE ai_tasks MODIFY status ENUM('pending','processing','completed','failed','cancelled') DEFAULT 'pending'"); }
+    catch (e) { console.warn("[DB] V9迁移 ai_tasks:", e.message); }
 
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);

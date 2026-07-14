@@ -4,7 +4,7 @@
     title="个人中心"
     description="个人资料和密码安全分开设置，进入详情页后只显示当前要处理的内容。"
     :back-path="workbenchPath"
-    back-label="返回模块三工作台"
+    back-label="返回管理员工作台"
     :cards="menuCards"
   />
 

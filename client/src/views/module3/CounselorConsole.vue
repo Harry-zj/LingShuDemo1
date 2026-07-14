@@ -92,7 +92,7 @@
           <span>目标批次</span>
           <select v-model.number="selectedBatchId">
             <option :value="0">选择需要赋权的已发布批次</option>
-            <option v-for="batch in publishedBatches" :key="batch.id" :value="batch.id">{{ batch.title }}（{{ batch.college }} · {{ batch.grade }}）</option>
+            <option v-for="batch in publishedBatches" :key="batch.id" :value="batch.id">{{ batch.title }}（{{ batch.college }} · {{ batch.grade }}级）</option>
           </select>
         </label>
         <span v-if="!publishedBatches.length" class="scope-tip">当前还没有可以评价的批次。</span>
@@ -142,7 +142,7 @@
         <div class="batch-title">
           <div>
             <strong>{{ batch.title }}</strong>
-            <span>{{ batch.college }} · {{ batch.grade }} · {{ statusText(batch.status) }}</span>
+            <span>{{ batch.college }} · {{ batch.grade }}级 · {{ statusText(batch.status) }}</span>
           </div>
           <span class="relation-count">{{ batch.review_assignments?.length || 0 }} 条互评关系</span>
         </div>

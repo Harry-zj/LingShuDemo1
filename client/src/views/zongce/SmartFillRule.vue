@@ -15,7 +15,7 @@
         <span>·</span>
         <span>{{ currentBatch.college }}</span>
         <span>·</span>
-        <span>{{ currentBatch.grade }}</span>
+        <span>{{ currentBatch.grade }}级</span>
       </div>
     </div>
 
@@ -25,7 +25,7 @@
       <div class="overview-bar">
         <div class="ov-left">
           <span class="ov-title">{{ currentBatch.title }}</span>
-          <span class="ov-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
+          <span class="ov-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}级</span>
         </div>
         <div class="ov-right">
           <div class="ov-stat">
@@ -179,7 +179,7 @@ const groupedRules = computed(() => {
 
 /* ===== 表格 ===== */
 .group-body { padding:0 18px 16px; }
-.rule-table { width:100%;border-collapse:collapse;font-size:13px; }
+.rule-table { width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed; }
 .rule-table th {
   text-align:left;padding:10px 8px 8px;
   border-bottom:1.5px solid rgba(255,255,255,0.08);
@@ -200,7 +200,7 @@ const groupedRules = computed(() => {
   font-size:11px;padding:3px 9px;border-radius:6px;font-weight:600;white-space:nowrap;
   background:rgba(255,255,255,0.05);color:var(--color-text-secondary);
 }
-.lvl-national { background:rgba(196,168,130,0.15);color:#c4a882; }
+.lvl-national { background:rgba(100,150,180,0.15);color:#7ba0b8; }
 .lvl-province { background:rgba(125,155,118,0.13);color:#7d9b76; }
 .lvl-school { background:rgba(163,181,199,0.15);color:#a3b5c7; }
 .lvl-college { background:rgba(180,180,180,0.12);color:#999; }

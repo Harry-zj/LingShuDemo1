@@ -4,7 +4,7 @@
     title="评价统计"
     description="评价进度和评价明细分开查看，避免图表、表格和导出操作集中在同一页面。"
     :back-path="workbenchPath"
-    back-label="返回模块三工作台"
+    back-label="返回管理员工作台"
     :cards="menuCards"
   />
 

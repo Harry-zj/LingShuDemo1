@@ -38,7 +38,9 @@ exports.addRuleText = async (req, res) => {
 exports.getRuleSources = async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      "SELECT id, source_type, file_name, status, created_at FROM rule_sources WHERE user_id = ?" + (req.query.batch_id ? " AND batch_id = ?" : "") + " ORDER BY created_at DESC",
+      `SELECT rs.id, rs.source_type, rs.file_name, rs.status, rs.created_at,
+        (SELECT at2.id FROM ai_tasks at2 WHERE at2.target_type='rule_parse' AND at2.target_id=rs.id AND at2.status='processing' LIMIT 1) AS active_task_id
+       FROM rule_sources rs WHERE rs.user_id = ?` + (req.query.batch_id ? " AND rs.batch_id = ?" : "") + " ORDER BY rs.created_at DESC",
       req.query.batch_id ? [req.user.id, req.query.batch_id] : [req.user.id]
     );
     res.json(Res.success(rows));
@@ -55,8 +57,12 @@ exports.deleteRuleSource = async (req, res) => {
     if (!sources.length) return res.json(Res.error("规则来源不存在"));
     const source = sources[0];
 
-    // 2. 找关联的 rule_set
-    const [docs] = await conn.execute("SELECT rule_set_id FROM rule_set_documents WHERE rule_source_id = ?", [id]);
+    // 2. 找关联的 rule_set，已发布的不让删
+    const [docs] = await conn.execute(
+      "SELECT rsd.rule_set_id, rs.status FROM rule_set_documents rsd JOIN rule_sets rs ON rs.id = rsd.rule_set_id WHERE rsd.rule_source_id = ?", [id]
+    );
+    const published = docs.find(d => d.status === 'published');
+    if (published) { conn.release(); return res.json(Res.error("该文件关联的规则集已发布，不能删除。如需删除请先归档或联系管理员处理。")); }
     const ruleSetIds = docs.map(d => d.rule_set_id);
 
     await conn.beginTransaction();
@@ -110,7 +116,7 @@ exports.parseRuleSource = async (req, res) => {
     );
     const taskId = r.insertId;
 
-    const cancelToken = { cancelled: false };
+    const cancelToken = { cancelled: false, controller: new AbortController() };
     activeParses.set(taskId, cancelToken);
 
     runParseV2InBackground(taskId, req.params.id, req.user.id, req.query.batch_id, cancelToken, req.query.force_new === '1');
@@ -136,6 +142,7 @@ exports.cancelParse = async (req, res) => {
     const token = activeParses.get(taskId);
     if (!token) return res.json(Res.error('任务不存在或已完成'));
     token.cancelled = true;
+    token.controller.abort();
     await pool.execute('UPDATE ai_tasks SET status = "cancelled", error_msg = "用户取消" WHERE id = ?', [taskId]);
     res.json(Res.success(null, '已取消'));
   } catch (e) { res.json(Res.error(e.message)); }
@@ -205,7 +212,7 @@ async function runParseV2InBackground(taskId, sourceId, userId, batchId, cancelT
     const result = await parseRuleSourceV2(sourceId, userId, reportProgress, batchId, cancelToken, forceNew);
     console.log(`[V2Parse] 解析成功: ${JSON.stringify(result)}`);
     await pool.execute(
-      "UPDATE ai_tasks SET status = 'completed', result = ? WHERE id = ?",
+      "UPDATE ai_tasks SET status = 'completed', result = ? WHERE id = ? AND status <> 'cancelled'",
       [JSON.stringify({ ...result, done: true }), taskId]
     );
   } catch (e) {

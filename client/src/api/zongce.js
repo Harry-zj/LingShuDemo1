@@ -46,7 +46,7 @@ export const analyzeMaterial = (materialId) =>
   request.post(`/zongce/materials/${materialId}/analyze`, null, { timeout: 120000 });
 
 export const extractMaterial = (materialId) =>
-  request.post(`/zongce/materials/${materialId}/extract`, null, { timeout: 120000 });
+  request.post(`/zongce/materials/${materialId}/extract`, null, { timeout: 300000 });
 
 export const previewScore = (materialId, data) =>
   request.post(`/zongce/materials/${materialId}/preview`, data, { timeout: 30000 });
@@ -163,8 +163,11 @@ export const getPublishedRules = (batchId) => request.get("/zongce/rules/publish
 export const addRuleToSet = (ruleSetId, data) => request.post(`/zongce/rule-sets/${ruleSetId}/rules`, data);
 
 // ===== V2 规则解析 =====
-export const parseRuleSource = (id, batchId) =>
-  request.post(`/zongce/rules/sources/${id}/parse`, null, { params: { batch_id: batchId }, timeout: 30000 });
+export const parseRuleSource = (id, batchId, forceNew) => {
+  const p = { batch_id: batchId };
+  if (forceNew) p.force_new = '1';
+  return request.post(`/zongce/rules/sources/${id}/parse`, null, { params: p, timeout: 30000 });
+};
 
 // ===== V2 评分 =====
 export const calculateScoreV2 = (rule_set_id, material_ids, batch_id) =>
