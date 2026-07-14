@@ -1,6 +1,6 @@
 const { pool } = require("../config/database");
 const Res = require("../utils/response");
-const { generateReport: aiGenerate, generateDimensionProfile: aiDimProfile } = require("../services/aiService");
+const { generateReport: aiGenerate, generateDimensionProfile: aiDimProfile, generateTrendSummary: aiTrendSummary } = require("../services/aiService");
 
 const DIM_CONFIG = [
   { key: "de",  name: "德", desc: "思想政治 · 道德品质 · 纪律观念" },
@@ -431,3 +431,13 @@ function generateFallbackSummary(d, score, student) {
   const map = { de:'思想政治表现和道德品质', zhi:'课程学习与学术能力', ti:'身体素质和文体活动', mei:'文艺创作与宣传报道', lao:'社会实践与劳动参与' };
   return `你在${map[d.key] || d.desc}方面获得${Math.round(score)}分，等级为${lv}。继续加油！`;
 }
+
+exports.generateTrendSummary = async (req, res) => {
+  try {
+    const { semesters } = req.body || {};
+    if (!semesters || semesters.length < 2) return res.json(Res.success({ cards: [] }));
+    const aiResult = await aiTrendSummary({ semesters });
+    if (aiResult?.cards?.length) return res.json(Res.success(aiResult, "AI趋势总结生成成功"));
+    res.json(Res.success({ cards: [] }));
+  } catch (e) { res.json(Res.error(e.message)); }
+};

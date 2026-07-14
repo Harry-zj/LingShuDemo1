@@ -1907,7 +1907,7 @@ async function setFormLevel(formId, level, operator) {
 
 async function recalculateClassAvgForBatch(conn, batchId) {
   const [forms] = await conn.execute(
-    "SELECT id, student_id, scores, class_name FROM assessment_forms WHERE batch_id=?",
+    "SELECT id, student_id, scores, class_id, class_name FROM assessment_forms WHERE batch_id=?",
     [Number(batchId)]
   );
   if (!forms.length) return;
@@ -1915,7 +1915,7 @@ async function recalculateClassAvgForBatch(conn, batchId) {
   // 按班级分组
   const classGroups = new Map();
   for (const f of forms) {
-    const key = f.class_name || 'default';
+    const key = f.class_id ? 'class_' + f.class_id : (f.class_name || 'default');
     if (!classGroups.has(key)) classGroups.set(key, []);
     classGroups.get(key).push(f);
   }
@@ -1979,6 +1979,54 @@ async function recalculateClassAvgForBatch(conn, batchId) {
       }
     }
   }
+
+  // 计算班级排名和专业排名
+  const [allEvals] = await conn.execute(
+    `SELECT er.id, er.user_id, er.total_score, u.class_id, u.college, u.major, u.grade
+     FROM evaluation_results er
+     JOIN users u ON u.id = er.user_id
+     WHERE er.batch_id = ?`,
+    [Number(batchId)]
+  );
+
+  // 班级排名：按 class_id 分组
+  const rankGroups = new Map();
+  for (const ev of allEvals) {
+    const key = ev.class_id ? 'class_' + ev.class_id : 'no_class';
+    if (!rankGroups.has(key)) rankGroups.set(key, []);
+    rankGroups.get(key).push(ev);
+  }
+  for (const group of rankGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { rank: i + 1, totalStudents: total });
+    }
+  }
+
+  // 专业排名：按 college+major+grade 分组
+  const majorGroups = new Map();
+  for (const ev of allEvals) {
+    const key = (ev.college || '') + '|' + (ev.major || '') + '|' + (ev.grade || '');
+    if (!majorGroups.has(key)) majorGroups.set(key, []);
+    majorGroups.get(key).push(ev);
+  }
+  for (const group of majorGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { majorRank: i + 1, majorTotal: total });
+    }
+  }
+}
+
+async function updateRank(conn, evalId, updates) {
+  const [rows] = await conn.execute('SELECT dimension_scores FROM evaluation_results WHERE id=?', [evalId]);
+  if (!rows.length) return;
+  const dim = typeof rows[0].dimension_scores === 'string'
+    ? JSON.parse(rows[0].dimension_scores) : (rows[0].dimension_scores || {});
+  Object.assign(dim, updates);
+  await conn.execute('UPDATE evaluation_results SET dimension_scores=? WHERE id=?', [JSON.stringify(dim), evalId]);
 }
 
 async function reviewForm(formId, reviewer, data = {}) {

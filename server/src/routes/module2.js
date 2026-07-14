@@ -9,5 +9,6 @@ router.get("/history", auth, ctrl.getHistory);
 router.get("/dimension-profiles", auth, ctrl.getDimensionProfiles);
 router.get("/report-cache", auth, ctrl.getReportCache);
 router.post("/report-cache", auth, ctrl.saveReportCache);
+router.post("/trend-summary", auth, ctrl.generateTrendSummary);
 router.post("/generate-summary", auth, ctrl.generateSummary);
 module.exports = router;
