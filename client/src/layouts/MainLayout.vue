@@ -95,7 +95,7 @@
           class="login-entry top-login-entry"
         >
           <VIcon icon="mdi:login" />
-          <span>登录</span>
+          <span >登录</span>
         </router-link>
       </div>
     </header>
@@ -1510,6 +1510,11 @@ onBeforeUnmount(() => {
   color: #202420;
   background: rgba(102, 123, 109, 0.13);
   border-color: rgba(102, 123, 109, 0.34);
+}
+:global(html[data-theme='light'])
+  .main-layout.nav-top
+  .top-login-entry {
+  color: #30352f;
 }
 
 .mobile-login-entry {
