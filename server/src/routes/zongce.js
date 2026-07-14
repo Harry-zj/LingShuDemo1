@@ -16,7 +16,7 @@ const chatFillCtrl = require("../controllers/zongce/chatFillController");
 const uploadOss = require("../middleware/uploadOss");
 
 // ===== 规则 =====
-router.post("/rules/upload",   auth, upload.array("files", 10), ruleCtrl.uploadRuleFiles);
+router.post("/rules/upload",   auth, uploadOss.array("files", 10), ruleCtrl.uploadRuleFiles);
 router.post("/rules/text",     auth, ruleCtrl.addRuleText);
 router.get("/rules/sources",   auth, ruleCtrl.getRuleSources);
 router.get("/rules/published", auth, ruleSetCtrl.getPublishedRules);

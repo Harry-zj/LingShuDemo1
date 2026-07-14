@@ -3,8 +3,18 @@ const { chatStreamJson, ocrImage } = require("./aiService");
 const { RULE_PARSE_SYSTEM, VERSION } = require("./promptTemplates");
 const { validateRuleParse } = require("./schemas");
 const { parseInChunks } = require("./ruleParserChunked");
+const { isOssUrl, downloadBuffer } = require("../../../services/oss");
 const fs = require("fs");
 const path = require("path");
+
+// ★ 统一获取规则源文件 Buffer（OSS 下载 / 本地磁盘读取）
+async function getSourceBuffer(source) {
+  if (isOssUrl(source.file_path)) {
+    return await downloadBuffer(source.file_path);
+  }
+  const filePath = path.join(__dirname, "../../../../uploads", source.file_path);
+  return fs.readFileSync(filePath);
+}
 
 // ============================================================
 //  解析规则来源 → rule_items（完整事务：DELETE+INSERT+UPDATE）
@@ -16,8 +26,8 @@ async function parseRuleSource(sourceId, onProgress) {
 
   let text = source.original_text || "";
   if (source.source_type === "file" && source.file_path) {
-    const filePath = path.join(__dirname, "../../../../uploads", source.file_path);
-    text = await extractText(filePath, source.file_name);
+    const buffer = await getSourceBuffer(source);
+    text = await extractText(buffer, source.file_name);
     if (!text) throw new Error("无法从文件中提取文本");
     await pool.execute("UPDATE rule_sources SET original_text = ? WHERE id = ?", [text, sourceId]);
   }
@@ -104,11 +114,10 @@ async function parseRuleSource(sourceId, onProgress) {
   }
 }
 
-async function extractText(filePath, fileName) {
+async function extractText(buffer, fileName) {
   const ext = path.extname(fileName).toLowerCase();
 
   if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
-    const buffer = fs.readFileSync(filePath);
     const base64 = buffer.toString("base64");
     let mime = "image/png";
     if (ext === ".jpg" || ext === ".jpeg") mime = "image/jpeg";
@@ -119,22 +128,22 @@ async function extractText(filePath, fileName) {
 
   if (ext === ".docx") {
     const mammoth = require("mammoth");
-    return (await mammoth.extractRawText({ path: filePath })).value;
+    return (await mammoth.extractRawText({ buffer })).value;
   }
   if (ext === ".pdf") {
     const pdfParse = require("pdf-parse");
-    return (await pdfParse(fs.readFileSync(filePath))).text;
+    return (await pdfParse(buffer)).text;
   }
   if ([".xlsx", ".xls"].includes(ext)) {
     const XLSX = require("xlsx");
-    const workbook = XLSX.readFile(filePath);
+    const workbook = XLSX.read(buffer, { type: "buffer" });
     let text = "";
     for (const name of workbook.SheetNames) {
       text += `[Sheet: ${name}]\n${XLSX.utils.sheet_to_csv(workbook.Sheets[name])}\n\n`;
     }
     return text;
   }
-  return fs.readFileSync(filePath, "utf-8");
+  return buffer.toString("utf-8");
 }
 
 module.exports = { parseRuleSource };
