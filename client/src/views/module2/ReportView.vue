@@ -534,7 +534,7 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.report-page { display:flex; flex-direction:column; gap:24px; animation:fadeIn 0.4s ease; position:relative; padding-bottom:40px; }
+.report-page { display:flex; flex-direction:column; gap:24px; animation:fadeIn 0.4s ease; position:relative; padding:0 20px 40px; }
 .bg-atmosphere { position:fixed; top:0;left:0;right:0;bottom:0; pointer-events:none; z-index:0; overflow:hidden; }
 .orb { position:absolute; border-radius:50%; opacity:0.04; filter:blur(80px); }
 .orb-1 { width:380px;height:380px; background:var(--color-primary); top:-80px;right:-80px; }

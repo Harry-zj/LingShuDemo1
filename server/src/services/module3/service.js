@@ -1664,6 +1664,7 @@ async function updateSmartResult(studentId, payload) {
       "UPDATE assessment_forms SET personal_summary=?, scores=?, level=?, manual_level='', fill_result_id=COALESCE(?, fill_result_id), smart_fill_rule_set_id=COALESCE(?, smart_fill_rule_set_id), updated_at=NOW() WHERE id=?",
       [payload.personal_summary ?? form.personal_summary ?? "", JSON.stringify(scores), level, smartFillSource?.fillResult?.id || null, smartFillSource?.ruleSetId || null, form.id]
     );
+    await recalculateClassAvgForBatch(conn, form.batch_id);
     await addLog(conn, student, "保存综测信息", form.student_name, "学生在信息管理页保存当前批次综测表");
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], student, conn);
@@ -1947,6 +1948,130 @@ async function setFormLevel(formId, level, operator) {
   });
 }
 
+async function recalculateClassAvgForBatch(conn, batchId) {
+  const [forms] = await conn.execute(
+    "SELECT id, student_id, scores, class_id, class_name FROM assessment_forms WHERE batch_id=?",
+    [Number(batchId)]
+  );
+  if (!forms.length) return;
+
+  // 按班级分组
+  const classGroups = new Map();
+  for (const f of forms) {
+    const key = f.class_id ? 'class_' + f.class_id : (f.class_name || 'default');
+    if (!classGroups.has(key)) classGroups.set(key, []);
+    classGroups.get(key).push(f);
+  }
+
+  for (const [className, formList] of classGroups) {
+    const n = formList.length;
+    const aKeys = ['A1','A2','A3','A4','A5'];
+    const bKeys = ['B1','B2','B3','B4','B5','B6','B7','B8'];
+    const aSum = {}, bSum = {};
+    for (const k of aKeys) aSum[k] = 0;
+    for (const k of bKeys) bSum[k] = 0;
+    let f1Sum = 0, f2Sum = 0, f3Sum = 0;
+
+    // F1/F2/F3 从 scores JSON 取
+    for (const f of formList) {
+      const scores = typeof f.scores === 'string' ? JSON.parse(f.scores) : (f.scores || {});
+      f1Sum += Number(scores.f1_basic_quality || 0);
+      f2Sum += Number(scores.f2_course_learning || 0);
+      f3Sum += Number(scores.f3_innovation_practice || 0);
+    }
+
+    // A1-A5 / B1-B8 从 assessment_form_items 取
+    const formIds = formList.map(f => f.id);
+    const placeholders = formIds.map(() => '?').join(',');
+    if (formIds.length) {
+      const [items] = await conn.execute(
+        `SELECT form_id, section, sub_key, score FROM assessment_form_items WHERE form_id IN (${placeholders})`,
+        formIds
+      );
+      for (const it of items) {
+        if (it.section === 'F1' && aKeys.includes(it.sub_key)) aSum[it.sub_key] += Number(it.score || 0);
+        if (it.section === 'F3' && bKeys.includes(it.sub_key)) bSum[it.sub_key] += Number(it.score || 0);
+      }
+    }
+
+    const classAvg = {};
+    for (const k of aKeys) classAvg[k] = parseFloat((aSum[k] / n).toFixed(1));
+    for (const k of bKeys) classAvg[k] = parseFloat((bSum[k] / n).toFixed(1));
+    classAvg['F1'] = parseFloat((f1Sum / n).toFixed(1));
+    classAvg['F2'] = parseFloat((f2Sum / n).toFixed(1));
+    classAvg['F3'] = parseFloat((f3Sum / n).toFixed(1));
+
+    // 创建/更新 evaluation_results
+    for (const f of formList) {
+      const [existing] = await conn.execute(
+        "SELECT id, dimension_scores FROM evaluation_results WHERE user_id=? AND batch_id=?",
+        [f.student_id, Number(batchId)]
+      );
+      if (existing.length > 0) {
+        const dim = typeof existing[0].dimension_scores === 'string'
+          ? JSON.parse(existing[0].dimension_scores) : (existing[0].dimension_scores || {});
+        dim.classAvg = classAvg;
+        await conn.execute('UPDATE evaluation_results SET dimension_scores=? WHERE id=?',
+          [JSON.stringify(dim), existing[0].id]);
+      } else {
+        const total = parseFloat((f1Sum/n*0.1 + f2Sum/n*0.65 + f3Sum/n*0.25).toFixed(2));
+        await conn.execute(
+          'INSERT INTO evaluation_results (user_id, batch_id, total_score, dimension_scores) VALUES (?,?,?,?)',
+          [f.student_id, Number(batchId), total, JSON.stringify({ classAvg, aScores:{}, bScores:{}, scores:{F1:classAvg.F1,F2:classAvg.F2,F3:classAvg.F3} })]
+        );
+      }
+    }
+  }
+
+  // 计算班级排名和专业排名
+  const [allEvals] = await conn.execute(
+    `SELECT er.id, er.user_id, er.total_score, u.class_id, u.college, u.major, u.grade
+     FROM evaluation_results er
+     JOIN users u ON u.id = er.user_id
+     WHERE er.batch_id = ?`,
+    [Number(batchId)]
+  );
+
+  // 班级排名：按 class_id 分组
+  const rankGroups = new Map();
+  for (const ev of allEvals) {
+    const key = ev.class_id ? 'class_' + ev.class_id : 'no_class';
+    if (!rankGroups.has(key)) rankGroups.set(key, []);
+    rankGroups.get(key).push(ev);
+  }
+  for (const group of rankGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { rank: i + 1, totalStudents: total });
+    }
+  }
+
+  // 专业排名：按 college+major+grade 分组
+  const majorGroups = new Map();
+  for (const ev of allEvals) {
+    const key = (ev.college || '') + '|' + (ev.major || '') + '|' + (ev.grade || '');
+    if (!majorGroups.has(key)) majorGroups.set(key, []);
+    majorGroups.get(key).push(ev);
+  }
+  for (const group of majorGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { majorRank: i + 1, majorTotal: total });
+    }
+  }
+}
+
+async function updateRank(conn, evalId, updates) {
+  const [rows] = await conn.execute('SELECT dimension_scores FROM evaluation_results WHERE id=?', [evalId]);
+  if (!rows.length) return;
+  const dim = typeof rows[0].dimension_scores === 'string'
+    ? JSON.parse(rows[0].dimension_scores) : (rows[0].dimension_scores || {});
+  Object.assign(dim, updates);
+  await conn.execute('UPDATE evaluation_results SET dimension_scores=? WHERE id=?', [JSON.stringify(dim), evalId]);
+}
+
 async function reviewForm(formId, reviewer, data = {}) {
   const action = data.action;
   const comment = String(data.comment || "");
@@ -2092,6 +2217,7 @@ async function reviewForm(formId, reviewer, data = {}) {
     const assignmentNote = nextTask ? `；下一环节已分配给 ${nextTask.reviewer_name}` : "";
     await addLog(conn, reviewer, `${actorLabel}评价`, form.student_name, `${actionLabel}：${comment || "无意见"}${assignmentNote}`);
     await expireBatchMembershipsIfComplete(conn, form.batch_id);
+    if (isFinalStatus(nextStatus)) await recalculateClassAvgForBatch(conn, form.batch_id);
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], reviewer, conn);
   });
@@ -2234,6 +2360,7 @@ module.exports = {
   setFormLevel,
   reviewForm,
   submitObjection,
+  recalculateClassAvgForBatch,
   getStatistics,
   exportCsv,
   getLogs,

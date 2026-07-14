@@ -36,8 +36,7 @@
 
       <div class="de-acts">
         <div class="de-act-card" v-for="(act, i) in displayActs" :key="i"
-          :style="{ animationDelay: (0.08 * i) + 's' }"
-          @click="openDetail(act)">
+          :style="{ animationDelay: (0.08 * i) + 's' }">
           <div class="de-act-bar" :style="{background: 'linear-gradient(90deg,' + dim.color + ',' + dim.color + '44)'}"></div>
           <div class="de-act-content">
             <div class="de-act-head">
@@ -58,32 +57,11 @@
       </div>
     </div>
 
-    <!-- 详情弹窗 -->
-    <teleport to="body">
-      <div class="modal-overlay" v-if="detailAct" @click.self="detailAct = null">
-        <div class="modal-card" @click.stop>
-          <div class="modal-accent" :style="{background:dim.color}"></div>
-          <div class="modal-header">
-            <h3>{{ detailAct.title }}</h3>
-            <button class="modal-close" @click="detailAct = null"><VIcon icon="mdi:close" /></button>
-          </div>
-          <span class="modal-cat" v-if="detailAct.cat" :style="{color:dim.color, background:dim.color+'10'}">{{ detailAct.cat }}</span>
-          <p class="modal-desc">{{ detailAct.fullDesc || detailAct.desc }}</p>
-          <div class="modal-info" v-if="detailAct.url">
-            <VIcon icon="mdi:web" /> 官方网址：
-            <a :href="detailAct.url" target="_blank" class="modal-link">{{ detailAct.url }}</a>
-          </div>
-          <div class="modal-info" v-if="detailAct.score">
-            <VIcon icon="mdi:star-outline" /> 预计加分：<strong>{{ detailAct.score }}</strong>
-          </div>
-        </div>
-      </div>
-    </teleport>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from "vue"
+import { computed, ref, onMounted, onUnmounted } from "vue"
 import { useRoute } from "vue-router"
 import { useUserStore } from "../../stores/user"
 import { DIMENSION_CONFIG } from "../../utils/scoreHelper"
@@ -93,15 +71,16 @@ const userStore = useUserStore()
 const dimKey = computed(() => route.params.key || 'de')
 const dim = computed(() => DIMENSION_CONFIG.find(d => d.key === dimKey.value) || DIMENSION_CONFIG[0])
 const displayActs = ref([])
-const detailAct = ref(null)
 const addedSet = ref(new Set())
 const currentSlide = ref(0)
+let slideTimer = null
 
 const carouselImages = computed(() => displayActs.value.filter(a => a.image).map(a => a.image))
-function prevSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value - 1 + carouselImages.value.length) % carouselImages.value.length }
-function nextSlide() { if (carouselImages.value.length) currentSlide.value = (currentSlide.value + 1) % carouselImages.value.length }
-
-function openDetail(act) { detailAct.value = act }
+function prevSlide() { resetTimer(); if (carouselImages.value.length) currentSlide.value = (currentSlide.value - 1 + carouselImages.value.length) % carouselImages.value.length }
+function nextSlide() { resetTimer(); if (carouselImages.value.length) currentSlide.value = (currentSlide.value + 1) % carouselImages.value.length }
+function startTimer() { stopTimer(); if (carouselImages.value.length > 1) slideTimer = setInterval(nextSlide, 3500) }
+function stopTimer() { if (slideTimer) { clearInterval(slideTimer); slideTimer = null } }
+function resetTimer() { stopTimer(); startTimer() }
 
 function seededRandom(seed) {
   let h = 0; for (let i = 0; i < seed.length; i++) { h = ((h << 5) - h) + seed.charCodeAt(i); h |= 0 }
@@ -127,14 +106,14 @@ function addToGoals(act) {
 // ===== 活动池 =====
 const allPools = {
   de: [
-    { title:'主题团课理论学习', cat:'A1 思想政治', desc:'常态化参与班级、学院组织的思政专题学习与青年大学习，积累思想表现佐证材料。' },
-    { title:'红色教育基地研学', cat:'A1 思想政治', desc:'参观党史馆、烈士陵园等红色阵地，撰写学习感悟，提升政治素养。' },
+    { title:'主题团课理论学习', cat:'A1 思想政治', desc:'常态化参与班级、学院组织的思政专题学习与青年大学习，积累思想表现佐证材料。', image:'/images/de/德育1.jpg' },
+    { title:'红色教育基地研学', cat:'A1 思想政治', desc:'参观党史馆、烈士陵园等红色阵地，撰写学习感悟，提升政治素养。', image:'/images/de/红色基地.png' },
     { title:'入党积极分子党校培训', cat:'A1 思想政治', desc:'完成学校党课系列学习与结业考核，系统提升政治理论水平。' },
     { title:'爱国主题征文与宣讲', cat:'A1 思想政治', desc:'围绕党史、新时代青年、爱国主义主题开展分享与征文，弘扬正向思想。' },
-    { title:'校园公共劳动值守', cat:'A2 道德品质', desc:'负责教学楼、走廊、校园绿化带日常保洁养护，践行劳动精神。' },
+    { title:'校园公共劳动值守', cat:'A2 道德品质', desc:'负责教学楼、走廊、校园绿化带日常保洁养护，践行劳动精神。', image:'/images/de/德育2.jpg' },
     { title:'文明宿舍创建评比', cat:'A2 道德品质', desc:'整理宿舍内务、参与宿舍美化，获评文明宿舍称号，体现日常品德习惯。' },
-    { title:'校园美育文艺展演', cat:'A2 道德品质', desc:'参与书画展、国风文艺汇演、红色舞台剧等校内美育活动。' },
-    { title:'诚信主题教育班会', cat:'A2 道德品质', desc:'参加诚信宣誓、考风考纪主题学习，恪守诚实守信准则。' },
+    { title:'校园美育文艺展演', cat:'A2 道德品质', desc:'参与书画展、国风文艺汇演、红色舞台剧等校内美育活动。', image:'/images/de/红色演出.png' },
+    { title:'诚信主题教育班会', cat:'A2 道德品质', desc:'参加诚信宣誓、考风考纪主题学习，恪守诚实守信准则。', image:'/images/de/德育班会.jpg' },
     { title:'班级同学互助帮扶', cat:'A2 道德品质', desc:'日常主动帮扶生活、学习有困难的同学，践行友善公德。' },
     { title:'经典读物读书分享会', cat:'A3 学习作风', desc:'参与校内红色书目、思想类书籍沙龙，坚持课外自主理论阅读。' },
     { title:'课堂纪律示范学习', cat:'A3 学习作风', desc:'全学期无迟到、旷课、早退，自觉遵守课堂规章制度。' },
@@ -179,33 +158,33 @@ const allPools = {
   ],
   ti: [
     // A5 身心健康
-    { title:'阳光长跑学期打卡', cat:'A5 日常锻炼', desc:'每学期完成60km长跑打卡，日常自主慢跑锻炼，截图即可作为佐证。' },
-    { title:'班级趣味体育活动', cat:'A5 日常锻炼', desc:'参与班级羽毛球、乒乓球、拔河、趣味接力等简易集体体育活动。' },
-    { title:'校院日常体操体能训练', cat:'A5 日常锻炼', desc:'运动会团体操日常体能排练，仅健身锻炼方向，不含文艺舞台展演。' },
+    { title:'阳光长跑学期打卡', cat:'A5 日常锻炼', desc:'每学期完成60km长跑打卡，日常自主慢跑锻炼，截图即可作为佐证。', image:'/images/ti/赛跑.jpg' },
+    { title:'班级趣味体育活动', cat:'A5 日常锻炼', desc:'参与班级羽毛球、乒乓球、拔河、趣味接力等简易集体体育活动。', image:'/images/ti/袋鼠跳.png' },
+    { title:'校院日常体操体能训练', cat:'A5 日常锻炼', desc:'运动会团体操日常体能排练，仅健身锻炼方向，不含文艺舞台展演。', image:'/images/ti/女排.jpg' },
     { title:'年度体质健康测试', cat:'A5 日常锻炼', desc:'按时完成学校统一体测各项项目，无缺考，体测表作为佐证材料。' },
     { title:'球类社团基础训练', cat:'A5 日常锻炼', desc:'加入校田径、羽毛球、乒乓球社团，参与课后基础体能训练。' },
     { title:'心理健康主题班会学习', cat:'A5 心理健康', desc:'参与情绪管理、挫折教育、人际相处心理专题课堂，各班统一开展。' },
     { title:'心理团体成长辅导小组', cat:'A5 心理健康', desc:'班级组织心理团辅，疏导压力、调节心态，活动签到表即为佐证。' },
     // B7 纯体育赛事
-    { title:'全国大学生运动会', cat:'B7 体育赛事', desc:'国家级田径、球类等体育竞技项目参赛，最高级别大学生体育赛事。', url:'https://www.sportedu.org.cn/', score:'B7 +5~20' },
+    { title:'全国大学生运动会', cat:'B7 体育赛事', desc:'国家级田径、球类等体育竞技项目参赛，最高级别大学生体育赛事。', url:'https://www.sportedu.org.cn/', score:'B7 +5~20', image:'/images/ti/游泳.jpg' },
     { title:'湖南省大学生运动会', cat:'B7 体育赛事', desc:'省级高校各类体育项目比拼，省内最高水平大学生体育竞技。', url:'http://www.hunanjiaoyu.com/', score:'B7 +3~10' },
     { title:'校春季/秋季田径运动会', cat:'B7 体育赛事', desc:'校内短跑、长跑、跳远、接力等基础田径项目，报名即可参与。', score:'B7 +2~8' },
-    { title:'校园篮球/足球/排球联赛', cat:'B7 体育赛事', desc:'院级、校级常规球类集体赛事，各学院均会组织选拔参赛。', score:'B7 +2~8' },
+    { title:'校园篮球/足球/排球联赛', cat:'B7 体育赛事', desc:'院级、校级常规球类集体赛事，各学院均会组织选拔参赛。', score:'B7 +2~8', image:'/images/ti/篮球赛.jpg' },
     { title:'校园乒乓球/羽毛球单项赛', cat:'B7 体育赛事', desc:'小球类简易对抗赛事，报名门槛低，适合大多数学生参与。', score:'B7 +1~5' },
     { title:'校园趣味体能挑战赛', cat:'B7 体育赛事', desc:'拔河、接力、障碍跑等大众集体体育竞赛，班级为单位参与。', score:'B7 +1~3' },
-    { title:'高校太极拳/武术体育锦标赛', cat:'B7 体育赛事', desc:'传统武术体能竞技，侧重健身方向而非文艺演出。', score:'B7 +2~8' },
+    { title:'高校太极拳/武术体育锦标赛', cat:'B7 体育赛事', desc:'传统武术体能竞技，侧重健身方向而非文艺演出。', score:'B7 +2~8', image:'/images/ti/太极拳比赛.png' },
     { title:'高校定向越野挑战赛', cat:'B7 体育赛事', desc:'户外徒步体能类体育活动，考验体能和团队协作能力。', score:'B7 +2~6' },
   ],
   mei: [
     // 文学创作
-    { title:'校园主题征文投稿', cat:'B4 文学创作', desc:'参与学院、学校举办的青春、红色、美育主题征文，撰写原创散文、记叙文。' },
+    { title:'校园主题征文投稿', cat:'B4 文学创作', desc:'参与学院、学校举办的青春、红色、美育主题征文，撰写原创散文、记叙文。', image:'/images/mei/征文比赛.jpg' },
     { title:'青评网评论稿件撰写', cat:'B4 文学创作', desc:'撰写校园热点、青年思想类短评，完成基础稿量外可累计加分。' },
     { title:'读书分享赏析文稿撰写', cat:'B4 文学创作', desc:'阅读文学、美育类书籍，撰写赏析文稿并参与班级分享活动。' },
     { title:'演讲/朗诵原创文稿撰写', cat:'B4 文学创作', desc:'为校园朗诵、主题演讲活动自主撰写文字稿件。' },
     // 视觉美术
     { title:'校园活动海报制作', cat:'B4 视觉美术', desc:'协助学生会、学院制作活动宣传海报，手绘或电子均可。' },
-    { title:'书法/国画/素描作品参展', cat:'B4 视觉美术', desc:'创作简易书画作品，参与校级、学院美育书画展览评比。' },
-    { title:'校园纪实摄影拍摄投稿', cat:'B4 视觉美术', desc:'拍摄校园活动、校园风光照片，投递学院新媒体平台。' },
+    { title:'书法/国画/素描作品参展', cat:'B4 视觉美术', desc:'创作简易书画作品，参与校级、学院美育书画展览评比。', image:'/images/mei/书法比赛.jpg' },
+    { title:'校园纪实摄影拍摄投稿', cat:'B4 视觉美术', desc:'拍摄校园活动、校园风光照片，投递学院新媒体平台。', image:'/images/mei/十佳歌手.jpeg' },
     { title:'简易手工美育作品创作', cat:'B4 视觉美术', desc:'剪纸、手绘贺卡、简易手作参与宿舍文化节或美育展示。' },
     // 新媒体影音
     { title:'院级/校级公众号图文推送编辑', cat:'B4 新媒体', desc:'撰写活动文案、排版公众号推送，新媒体部成员超额完成可加分。' },
@@ -216,17 +195,17 @@ const allPools = {
     { title:'校内官方平台文艺作品刊发', cat:'B4 媒体发表', desc:'文学、摄影、短评作品在校官网、星网、青评网等平台发布。', score:'B4 +2~5' },
     { title:'省级/国家级教育媒体文艺投稿', cat:'B4 媒体发表', desc:'向中国大学生在线等官方平台投递美育、校园主题文稿。', score:'B4 +3~8' },
     // 文艺赛事
-    { title:'全国大学生艺术展演', cat:'B4 文艺赛事', desc:'参与书画、散文、朗诵类文艺比拼，无复杂文创设计要求。', url:'https://www.moe.gov.cn/s78/A17/', score:'B4 +3~10' },
+    { title:'全国大学生艺术展演', cat:'B4 文艺赛事', desc:'参与书画、散文、朗诵类文艺比拼，无复杂文创设计要求。', url:'https://www.moe.gov.cn/s78/A17/', score:'B4 +3~10', image:'/images/mei/舞蹈比赛.jpg' },
     { title:'全国大学生广告艺术大赛（大广赛）', cat:'B4 文艺赛事', desc:'以海报、短视频创意为主，基础设计工具即可完成参赛作品。', url:'https://www.sun-ada.net/', score:'B4 +2~8' },
     { title:'中国好创意数字艺术设计大赛', cat:'B4 文艺赛事', desc:'插画、短片、简易数字绘画创作赛道，适合普通学生参与。', url:'https://www.cdec.org.cn/', score:'B4 +2~8' },
     { title:'全国大学生网络文化节', cat:'B4 文艺赛事', desc:'日常拍摄的照片、自制短文、短视频均可参赛，门槛低。', url:'https://www.gxhl.com/', score:'B4 +2~8' },
     { title:'"普译奖"文学翻译竞赛', cat:'B4 文艺赛事', desc:'文学短文翻译，文字美育类竞赛，适合有外语基础的学生。', url:'https://www.puyiprize.com/', score:'B4 +1~4' },
   ],
   lao: [
-    { title:'暑期社会实践项目', cat:'B6 社会实践', desc:'参加三下乡或组队开展社会调研、企业实习、公益服务。' },
-    { title:'校园公益与劳动实践', cat:'B8 劳动教育', desc:'参与环境维护、图书馆整理、文明寝室创建等活动。' },
-    { title:'学生工作与社会任职', cat:'B5 社会工作', desc:'担任班委、社团干部或勤工助学岗位，积累管理经验。' },
-    { title:'社区志愿服务与义工', cat:'B6/B8 实践劳动', desc:'参加社区义工、支教、赛事志愿者等校外服务活动。' },
+    { title:'暑期社会实践项目', cat:'B6 社会实践', desc:'参加三下乡或组队开展社会调研、企业实习、公益服务。', image:'/images/lao/三下乡.png' },
+    { title:'校园公益与劳动实践', cat:'B8 劳动教育', desc:'参与环境维护、图书馆整理、文明寝室创建等活动。', image:'/images/lao/清理道路志愿活动.png' },
+    { title:'学生工作与社会任职', cat:'B5 社会工作', desc:'担任班委、社团干部或勤工助学岗位，积累管理经验。', image:'/images/lao/竞选班委.jpg' },
+    { title:'社区志愿服务与义工', cat:'B6/B8 实践劳动', desc:'参加社区义工、支教、赛事志愿者等校外服务活动。', image:'/images/lao/陪伴儿童志愿活动.jpg' },
     { title:'实践报告与成果整理', cat:'综合', desc:'每次活动后及时撰写图文并茂的实践报告，作为加分认定依据。' },
   ],
 }
@@ -237,12 +216,12 @@ onMounted(() => {
   const pool = allPools[dimKey.value] || allPools.de
   const count = PICK_COUNT[dimKey.value] || 5
   const uid = userStore.user?.id || userStore.user?.username || 'default'
-  const seed = `dim_v7_${dimKey.value}_${uid}`
-  const cacheKey = `lingshu_dim_acts_v7_${dimKey.value}_${uid}`
+  const seed = `dim_v10_${dimKey.value}_${uid}`
+  const cacheKey = `lingshu_dim_acts_v10_${dimKey.value}_${uid}`
 
   const cached = localStorage.getItem(cacheKey)
   if (cached) {
-    try { const parsed = JSON.parse(cached); if (parsed.length > 0) { displayActs.value = parsed; return } } catch {}
+    try { const parsed = JSON.parse(cached); if (parsed.length > 0) { displayActs.value = parsed; startTimer(); return } } catch {}
   }
 
   // 根据专业优先推荐相关活动
@@ -255,10 +234,19 @@ onMounted(() => {
       return bMatch - aMatch  // 匹配的排前面
     })
   }
-  const picked = pickSeeded(sorted.slice(0, 12), Math.min(count, pool.length), seed)
+  // 有图片的活动优先入选
+  const withImage = sorted.filter(a => a.image)
+  const withoutImage = sorted.filter(a => !a.image)
+  const imgPicked = pickSeeded(withImage, Math.min(withImage.length, count), seed + '_img')
+  const remaining = count - imgPicked.length
+  const restPicked = remaining > 0 ? pickSeeded(withoutImage, Math.min(remaining, withoutImage.length), seed + '_rest') : []
+  const picked = [...imgPicked, ...restPicked]
   displayActs.value = picked
   localStorage.setItem(cacheKey, JSON.stringify(picked))
+  startTimer()
 })
+
+onUnmounted(() => stopTimer())
 </script>
 
 <style scoped>
@@ -292,7 +280,7 @@ onMounted(() => {
 .de-hero-count { text-align:center; margin-top:8px; font-size:13px; color:var(--color-text-tertiary); }
 
 .de-acts { flex:1; display:flex; flex-direction:column; gap:16px; min-width:0; }
-.de-act-card { position:relative; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; box-shadow:0 1px 8px rgba(0,0,0,0.02); transition:all 0.25s ease; opacity:0; animation:cardIn 0.5s ease forwards; cursor:pointer; }
+.de-act-card { position:relative; background:var(--glass-bg); border:1px solid var(--glass-border); border-radius:16px; overflow:hidden; box-shadow:0 1px 8px rgba(0,0,0,0.02); transition:all 0.25s ease; opacity:0; animation:cardIn 0.5s ease forwards; }
 .de-act-card:hover { box-shadow:0 4px 20px rgba(0,0,0,0.06); transform:translateY(-2px); }
 @keyframes cardIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
 .de-act-bar { height:3px; }
@@ -307,20 +295,6 @@ onMounted(() => {
 .de-act-desc { font-size:15px; color:var(--color-text-secondary); line-height:1.7; padding-left:42px; }
 .de-act-url { display:flex; align-items:center; gap:4px; margin-top:8px; padding-left:42px; font-size:12px; color:var(--color-primary); text-decoration:none; opacity:0.7; transition:opacity 0.15s; }
 .de-act-url:hover { opacity:1; text-decoration:underline; }
-
-/* 弹窗 */
-.modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.15); backdrop-filter:blur(4px); z-index:1000; display:flex; align-items:center; justify-content:center; animation:fadeIn 0.2s ease; }
-.modal-card { background:#fff; border-radius:20px; padding:0; max-width:520px; width:90%; max-height:80vh; overflow-y:auto; box-shadow:0 12px 48px rgba(0,0,0,0.1); position:relative; }
-.modal-accent { height:4px; opacity:0.5; border-radius:4px 4px 0 0; }
-.modal-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px 8px; }
-.modal-header h3 { font-size:18px; font-weight:700; margin:0; color:var(--color-text); }
-.modal-close { width:32px;height:32px; border-radius:50%; border:1px solid var(--color-border); background:transparent; cursor:pointer; display:flex; align-items:center; justify-content:center; color:var(--color-text-secondary); }
-.modal-close:hover { border-color:var(--color-primary); color:var(--color-primary); }
-.modal-cat { display:inline-block; margin:0 24px 12px; padding:2px 10px; border-radius:4px; font-size:12px; font-weight:500; }
-.modal-desc { padding:0 24px; font-size:15px; color:var(--color-text-secondary); line-height:1.8; }
-.modal-info { display:flex; align-items:center; gap:6px; padding:10px 24px; font-size:13px; color:var(--color-text-secondary); }
-.modal-info strong { color:#059669; }
-.modal-link { color:var(--color-primary); word-break:break-all; }
 
 @media (max-width:768px) {
   .de-layout { flex-direction:column; }

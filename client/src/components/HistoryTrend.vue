@@ -99,11 +99,24 @@
             </div>
           </div>
 
-          <!-- 模块5：趋势总结 -->
+          <!-- 模块5：AI趋势总结 -->
           <div class="card glass-card reveal trend-summary" style="animation-delay: 0.3s;">
             <div class="card-accent" style="background: var(--color-primary-gradient-bright)"></div>
-            <h3><VIcon icon="mdi:text-box-check-outline" /> 趋势总结</h3>
-            <div class="ts-section" v-for="(part, i) in trendParts" :key="i"><p>{{ part }}</p></div>
+            <h3>
+              <VIcon icon="mdi:robot-outline" /> 趋势总结
+              <button class="ts-regen-btn" @click="regenerateTrend" :disabled="trendLoading">
+                <VIcon icon="mdi:refresh" :class="{ spinning: trendLoading }" /> {{ trendLoading ? '生成中' : '重新生成' }}
+              </button>
+            </h3>
+            <div class="ts-cards">
+              <div class="ts-card" v-for="(card, i) in trendCards" :key="i" :style="{ animationDelay: (0.1 * i) + 's' }">
+                <span class="ts-card-icon">{{ card.icon }}</span>
+                <div class="ts-card-body">
+                  <div class="ts-card-title">{{ card.title }}</div>
+                  <div class="ts-card-text">{{ card.text }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -114,7 +127,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from "vue"
 import * as echarts from "echarts"
-import { getHistory } from "../api/module2"
+import { getHistory, generateTrendSummary } from "../api/module2"
 import { DIMENSION_CONFIG } from "../utils/scoreHelper"
 
 const props = defineProps({
@@ -292,7 +305,36 @@ const dimDetailRows = computed(() => {
   })
 })
 
-// ---- 模块5：趋势总结 ----
+// ---- 模块5：AI趋势总结 ----
+const trendLoading = ref(false)
+const trendCache = ref(null)
+
+const trendCards = computed(() => {
+  if (trendCache.value?.length) return trendCache.value
+  return localTrendCards()
+})
+
+function localTrendCards() {
+  const ss = semesters.value
+  if (ss.length < 2) return [{ icon:'🎉', title:'首次评定', text:'这是你的首次评定，完成更多学期后将自动生成趋势分析。' }]
+  const first = ss[0], last = ss[ss.length - 1]
+  const totalChange = last.scores.total - first.scores.total
+  const dimChanges = DIM_CONFIG.map(d => ({
+    name: d.name, icon: dimIcons[d.key], color: d.color,
+    change: (last.scores[d.key] || 0) - (first.scores[d.key] || 0)
+  })).sort((a, b) => b.change - a.change)
+  const best = dimChanges[0], worst = dimChanges[dimChanges.length - 1]
+  const trendWord = totalChange > 5 ? '📈 显著上升' : totalChange >= 2 ? '📈 稳中有进' : totalChange >= -3 ? '➡️ 保持稳定' : '📉 有所下降'
+  const cards = [
+    { icon:'📊', title:'整体趋势', text:`综合素质呈${totalChange > 5 ? '显著上升趋势' : totalChange >= 2 ? '稳中有进态势' : totalChange >= -3 ? '基本保持稳定' : '有所下降，需要关注'}，总分从 ${first.scores.total} 分变化至 ${last.scores.total} 分，${totalChange >= 0 ? '提升' : '下降'}了 ${Math.abs(totalChange).toFixed(1)} 分，${totalChange >= 2 ? '展现了持续的努力和进步。' : totalChange >= -3 ? '整体表现较为平稳，期待下学年能有所突破。' : '建议分析原因并制定针对性改进方案。'}` },
+    { icon:'🏆', title:'最快进步', text:`${best.icon}${best.name}维度表现最为亮眼，从 ${first.scores[best.key]||'?'} 分提升至 ${last.scores[best.key]||'?'} 分，提升了 ${best.change} 分${best.change >= 5 ? '，进步幅度显著，是你的核心竞争力所在。' : '，保持这个势头将会越来越好。'}建议继续发挥${best.name}维度优势，争取成为综测的核心加分来源。` },
+    { icon:'🎯', title:'重点关注', text:worst.change <= -2 ? `${worst.icon}${worst.name}维度从 ${first.scores[worst.key]||'?'} 分下滑至 ${last.scores[worst.key]||'?'} 分，下降了 ${Math.abs(worst.change)} 分。该维度是当前最大的短板，建议本学期优先制定提升计划，从低门槛活动入手逐步改善。` : `各维度均保持稳定或有所提升，未出现明显下滑趋势。五维全面发展态势良好，建议继续保持现有的学习和活动节奏。` },
+    { icon:'💡', title:'成长建议', text:((()=>{const r=Math.max(...ss.map(s=>({'待提升':0,'合格':1,'中等':2,'良好':3,'优秀':4})[s.rating]||0));return r>=3?`当前处于"${ss[ss.length-1].rating}"水平，距离"优秀"仅一步之遥。建议重点突破薄弱维度，同时保持优势维度的领先地位，下一学年有望冲刺更高等级。`:r>=2?`当前处于"${ss[ss.length-1].rating}"水平，已具备一定基础。建议每学期制定2-3个具体可执行的小目标，逐步缩小与更高等级的差距。`:`建议与辅导员深入沟通，结合本年度表现制定个性化成长方案，从日常积累做起，稳步提升综测表现。`})()) },
+  ]
+  return cards
+}
+
+// 旧的 trendParts 保留作为 AI prompt 输入
 const trendParts = computed(() => {
   const ss = semesters.value
   if (ss.length < 2) return ["🎉 这是你的首次评定，期待未来的成长！"]
@@ -334,7 +376,29 @@ async function loadHistory() {
     if (res.code === 200) history.value = res.data
     else history.value = null
     initCharts()
+    // 加载AI趋势缓存
+    try {
+      const cached = localStorage.getItem('lingshu_trend_cache_v2')
+      if (cached) trendCache.value = JSON.parse(cached)
+    } catch {}
   } catch { history.value = null }
+}
+
+async function regenerateTrend() {
+  if (trendLoading.value || semesters.value.length < 2) return
+  trendLoading.value = true
+  try {
+    const res = await generateTrendSummary({
+      semesters: semesters.value.map(s => ({
+        year: s.year, scores: s.scores, rating: s.rating,
+        ranking: s.ranking
+      }))
+    })
+    if (res.code === 200 && res.data?.cards?.length) {
+      trendCache.value = res.data.cards
+      localStorage.setItem('lingshu_trend_cache_v2', JSON.stringify(res.data.cards))
+    }
+  } catch {} finally { trendLoading.value = false }
 }
 
 watch(() => history.value, initCharts)
@@ -395,10 +459,10 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart
 
 /* 明细表 */
 .detail-table-wrap { overflow-x: auto; }
-.detail-table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.detail-table { width: 100%; border-collapse: collapse; font-size: 16px; }
 .detail-table th, .detail-table td { padding: 13px 10px; text-align: center; border-bottom: 1px solid var(--color-border); }
-.detail-table th { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); font-size: 14px; }
-.detail-table td:first-child { text-align: left; font-weight: var(--font-weight-medium); }
+.detail-table th { font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); font-size: 15px; }
+.detail-table td:first-child { font-weight: var(--font-weight-medium); }
 .td-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .arrow-up { color: #059669; font-size: 12px; margin-left: 3px; }
 .arrow-down { color: #DC2626; font-size: 12px; margin-left: 3px; }
@@ -408,6 +472,19 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); dimChart
 .text-gray { color: #9CA3AF; }
 
 /* 趋势总结 */
+.ts-regen-btn { margin-left:auto; padding:4px 12px; border:1px solid var(--color-border); border-radius:var(--radius-full); background:transparent; color:var(--color-text-secondary); font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; transition:all 0.2s; }
+.ts-regen-btn:hover:not(:disabled) { border-color:var(--color-primary); color:var(--color-primary); }
+.ts-regen-btn:disabled { opacity:0.5; cursor:not-allowed; }
+.spinning { animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+.ts-cards { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.ts-card { display:flex; gap:12px; padding:14px 16px; background:var(--color-surface-variant); border-radius:12px; opacity:0; animation:fadeInUp 0.4s ease forwards; }
+.ts-card-icon { font-size:20px; flex-shrink:0; }
+.ts-card-body { flex:1; }
+.ts-card-title { font-size:14px; font-weight:600; color:var(--color-text); margin-bottom:4px; }
+.ts-card-text { font-size:15px; color:var(--color-text-secondary); line-height:1.7; }
+
 .trend-summary .ts-section { padding: 8px 0; font-size: 14px; line-height: 1.8; color: var(--color-text); }
 .trend-summary .ts-section p { margin: 0; }
 
