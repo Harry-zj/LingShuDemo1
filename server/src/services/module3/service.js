@@ -358,10 +358,10 @@ async function getUser(id, db = pool) {
     `SELECT u.id, u.username, u.role, u.real_name, u.student_no, u.class_id, u.class_name,
             u.college, u.major, u.grade, u.phone, u.avatar, u.is_assessment_member,
             (SELECT COUNT(*) FROM assessment_batch_members bm WHERE bm.student_id=u.id AND bm.status='active') AS active_member_count,
-            s.college AS scope_college, s.grade AS scope_grade, s.class_ids AS scope_class_ids
+            s.college AS scope_college, s.major AS scope_major, s.grade AS scope_grade, s.class_ids AS scope_class_ids
      FROM users u
      LEFT JOIN counselor_scopes s ON s.counselor_id = u.id
-     WHERE u.id = ? LIMIT 1`,
+     WHERE u.id = ? AND COALESCE(u.is_active,1)=1 LIMIT 1`,
     [id]
   );
   if (!rows.length) throw new Error("用户不存在");
@@ -391,6 +391,7 @@ function formatUser(row) {
   if (row.role === "counselor") {
     user.scope = {
       college: row.scope_college || row.college || "",
+      major: row.scope_major || "",
       grade: row.scope_grade || row.grade || "",
       class_ids: normalizeIds(parseJson(row.scope_class_ids, [])),
     };
@@ -408,6 +409,7 @@ function isInScope(user, target) {
   if (!scope.college || !scope.grade) return false;
   if (scope.college !== (target.college || "")) return false;
   if (scope.grade !== (target.grade || target.enrollment_grade || "")) return false;
+  if (scope.major && scope.major !== (target.major || "")) return false;
   const classIds = normalizeIds(scope.class_ids);
   return !classIds.length || classIds.includes(Number(target.class_id));
 }
@@ -460,7 +462,7 @@ async function enrichBatch(row, db = pool) {
   const options = parseJson(row.options, {});
   const [counts] = await db.execute(
     `SELECT
-       (SELECT COUNT(*) FROM users u WHERE u.role='student' AND u.college=? AND u.grade=?) AS target_student_count,
+       (SELECT COUNT(*) FROM users u WHERE u.role='student' AND COALESCE(u.is_active,1)=1 AND u.college=? AND u.grade=?) AS target_student_count,
        SUM(CASE WHEN f.status <> 'smart_ready' THEN 1 ELSE 0 END) AS submitted_count,
        SUM(CASE WHEN f.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
        SUM(CASE WHEN f.status IN ('pending_class_committee','pending_counselor','pending_student_affairs','pending_objection_review') THEN 1 ELSE 0 END) AS pending_count
@@ -726,14 +728,14 @@ async function getScopeOptions() {
     `SELECT u.id, u.username, u.role, u.real_name, u.student_no, u.class_id, u.class_name, u.college, u.major, u.grade,
             u.is_assessment_member,
             (SELECT COUNT(*) FROM assessment_batch_members bm WHERE bm.student_id=u.id AND bm.status='active') AS active_member_count
-     FROM users u WHERE u.role='student' ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
+     FROM users u WHERE u.role='student' AND COALESCE(u.is_active,1)=1 ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
   );
   const [batchMembers] = await pool.execute(
     `SELECT bm.id, bm.batch_id, bm.student_id, bm.status, bm.assigned_at, bm.removed_at,
             u.real_name, u.student_no, u.class_id, u.class_name, u.college, u.major, u.grade
      FROM assessment_batch_members bm
      JOIN users u ON u.id=bm.student_id
-     WHERE bm.status='active'
+     WHERE bm.status='active' AND COALESCE(u.is_active,1)=1
      ORDER BY bm.batch_id, u.class_name, u.student_no`
   );
   const formatted = students.map(formatUser);
@@ -817,25 +819,46 @@ async function updateUserProfile(userId, data = {}) {
 async function updateCounselorScope(userId, scope) {
   const counselor = await getUser(userId);
   if (counselor.role !== "counselor") throw new Error("仅辅导员可设置管辖范围");
-  if (!scope.college) throw new Error("学院为必选项");
-  if (!scope.grade) throw new Error("年级为必选项");
+  const college = String(scope.college || "").trim();
+  const grade = String(scope.grade || "").trim();
+  const major = String(scope.major || "").trim();
+  if (!college) throw new Error("学院为必选项");
+  if (!grade) throw new Error("年级为必选项");
+
+  if (major) {
+    const [majorClasses] = await pool.execute(
+      "SELECT id FROM assessment_classes WHERE college=? AND grade=? AND major=? AND COALESCE(status,'active') <> 'inactive' LIMIT 1",
+      [college, grade, major]
+    );
+    if (!majorClasses.length) throw new Error("所选专业与当前学院、年级不匹配");
+  }
+
   const classIds = normalizeIds(scope.class_ids);
   if (classIds.length) {
     const placeholders = classIds.map(() => "?").join(",");
-    const [classes] = await pool.execute(
-      `SELECT id FROM assessment_classes WHERE id IN (${placeholders}) AND college=? AND grade=?`,
-      [...classIds, scope.college, scope.grade]
-    );
-    if (classes.length !== classIds.length) throw new Error("所选班级必须属于当前学院和年级");
+    let classSql = `SELECT id FROM assessment_classes
+      WHERE id IN (${placeholders}) AND college=? AND grade=?
+        AND COALESCE(status,'active') <> 'inactive'`;
+    const classParams = [...classIds, college, grade];
+    if (major) {
+      classSql += " AND major=?";
+      classParams.push(major);
+    }
+    const [classes] = await pool.execute(classSql, classParams);
+    if (classes.length !== classIds.length) {
+      throw new Error(major
+        ? "所选班级必须属于当前学院、年级和专业"
+        : "所选班级必须属于当前学院和年级");
+    }
   }
   await withTransaction(async conn => {
     await conn.execute(
-      `INSERT INTO counselor_scopes (counselor_id, college, grade, class_ids)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE college=VALUES(college), grade=VALUES(grade), class_ids=VALUES(class_ids)`,
-      [userId, scope.college, scope.grade, JSON.stringify(classIds)]
+      `INSERT INTO counselor_scopes (counselor_id, college, major, grade, class_ids)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE college=VALUES(college), major=VALUES(major), grade=VALUES(grade), class_ids=VALUES(class_ids)`,
+      [userId, college, major, grade, JSON.stringify(classIds)]
     );
-    await addLog(conn, counselor, "设置管辖范围", counselor.real_name || counselor.username, `${scope.college}${scope.grade}`);
+    await addLog(conn, counselor, "设置管辖范围", counselor.real_name || counselor.username, `${college}${grade}${major}`);
   });
   return getUser(userId);
 }
@@ -849,7 +872,7 @@ async function listStudents(user) {
      LEFT JOIN assessment_forms f ON f.id = (
        SELECT f2.id FROM assessment_forms f2 WHERE f2.student_id=u.id ORDER BY f2.updated_at DESC, f2.id DESC LIMIT 1
      )
-     WHERE u.role='student'
+     WHERE u.role='student' AND COALESCE(u.is_active,1)=1
      ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
   );
   return rows
@@ -883,7 +906,7 @@ async function getActiveBatchMembers(db, batchId, classId = null, excludeStudent
   let sql = `SELECT bm.id AS membership_id, u.id, u.real_name, u.username, u.student_no, u.class_id, u.class_name
              FROM assessment_batch_members bm
              JOIN users u ON u.id=bm.student_id
-             WHERE bm.batch_id=? AND bm.status='active' AND u.role='student'`;
+             WHERE bm.batch_id=? AND bm.status='active' AND u.role='student' AND COALESCE(u.is_active,1)=1`;
   if (classId) {
     sql += " AND u.class_id=?";
     params.push(Number(classId));
@@ -1648,23 +1671,25 @@ async function selectWorkflowReviewer(conn, form, stage) {
   let candidates = [];
   if (role === "counselor") {
     const [rows] = await conn.execute(
-      `SELECT u.id, u.username, u.real_name, u.student_no, u.college, u.grade,
-              s.college AS scope_college, s.grade AS scope_grade, s.class_ids AS scope_class_ids
+      `SELECT u.id, u.username, u.real_name, u.student_no, u.college, u.major, u.grade,
+              s.college AS scope_college, s.major AS scope_major, s.grade AS scope_grade, s.class_ids AS scope_class_ids
        FROM users u
        LEFT JOIN counselor_scopes s ON s.counselor_id=u.id
-       WHERE u.role='counselor'`
+       WHERE u.role='counselor' AND COALESCE(u.is_active,1)=1`
     );
     candidates = rows.filter(row => {
       const college = row.scope_college || row.college || "";
+      const major = row.scope_major || row.major || "";
       const grade = row.scope_grade || row.grade || "";
       const classIds = normalizeIds(parseJson(row.scope_class_ids, []));
       return college === String(form.college || "")
         && grade === String(form.grade || "")
+        && (!major || major === String(form.major || ""))
         && (!classIds.length || classIds.includes(Number(form.class_id)));
     });
   } else {
     const [rows] = await conn.execute(
-      "SELECT id, username, real_name, student_no FROM users WHERE role='student_affairs'"
+      "SELECT id, username, real_name, student_no FROM users WHERE role='student_affairs' AND COALESCE(is_active,1)=1"
     );
     candidates = rows;
   }
@@ -1748,7 +1773,7 @@ async function selectReviewer(conn, form) {
      JOIN assessment_batch_members bm ON bm.student_id=u.id AND bm.batch_id=? AND bm.status='active'
      LEFT JOIN assessment_review_tasks t
        ON t.reviewer_id=u.id AND t.batch_id=? AND t.status <> 'cancelled'
-     WHERE u.role='student' AND u.class_id=?
+     WHERE u.role='student' AND COALESCE(u.is_active,1)=1 AND u.class_id=?
      GROUP BY u.id
      ORDER BY task_count ASC, u.id ASC
      LIMIT 1`,
@@ -1804,6 +1829,10 @@ async function listFormsByUser(user) {
     if (!user.scope?.college || !user.scope?.grade) return [];
     sql += " WHERE college=? AND grade=?";
     params.push(user.scope.college, user.scope.grade);
+    if (user.scope.major) {
+      sql += " AND major=?";
+      params.push(user.scope.major);
+    }
     const classIds = normalizeIds(user.scope.class_ids);
     if (classIds.length) {
       sql += ` AND class_id IN (${classIds.map(() => "?").join(",")})`;
@@ -2076,6 +2105,10 @@ async function getStatistics(query = {}, user = null) {
     if (!user.scope?.college || !user.scope?.grade) return emptyStatistics();
     where += " AND f.college=? AND f.grade=?";
     params.push(user.scope.college, user.scope.grade);
+    if (user.scope.major) {
+      where += " AND f.major=?";
+      params.push(user.scope.major);
+    }
     const classIds = normalizeIds(user.scope.class_ids);
     if (classIds.length) {
       where += ` AND f.class_id IN (${classIds.map(() => "?").join(",")})`;
@@ -2116,7 +2149,7 @@ async function getStatistics(query = {}, user = null) {
      WHERE t.status <> 'cancelled' AND ${where}`,
     params
   );
-  const [[studentCount]] = await pool.execute("SELECT COUNT(*) AS count FROM users WHERE role='student'");
+  const [[studentCount]] = await pool.execute("SELECT COUNT(*) AS count FROM users WHERE role='student' AND COALESCE(is_active,1)=1");
   return {
     total_students: Number(studentCount.count || 0),
     submitted: forms.filter(form => form.status !== "smart_ready").length,

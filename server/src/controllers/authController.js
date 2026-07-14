@@ -4,6 +4,7 @@ const { pool } = require("../config/database");
 const config = require("../config");
 const Res = require("../utils/response");
 const module3Service = require("../services/module3/service");
+const { getPublicKeyInfo, decryptCredentialFields } = require("../services/credentialCrypto");
 
 const ROLE_LABEL = {
   student: "学生",
@@ -12,9 +13,15 @@ const ROLE_LABEL = {
   student_affairs: "学生工作处",
 };
 
+exports.getCredentialPublicKey = (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json(Res.success(getPublicKeyInfo()));
+};
+
 exports.register = async (req, res) => {
   try {
-    const { username, password, role, real_name, student_no, class_name, college, major, grade, phone } = req.body;
+    const secureBody = decryptCredentialFields(req.body || {}, ["username", "student_no", "password"]);
+    const { username, password, role, real_name, student_no, class_name, college, major, grade, phone } = secureBody;
     const account = String(student_no || username || "").trim();
     if (role && role !== "student") return res.json(Res.error("辅导员、学生工作处和管理员账号不允许自主注册，请由管理员创建"));
     const settings = await module3Service.getSettings();
@@ -63,10 +70,11 @@ exports.getRegisterOptions = async (_req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { account, username, password, role } = req.body;
+    const secureBody = decryptCredentialFields(req.body || {}, ["account", "username", "password"]);
+    const { account, username, password, role } = secureBody;
     const loginAccount = String(account || username || "").trim();
     if (!loginAccount || !password) return res.json(Res.error("学号/账号和密码不能为空"));
-    const [rows] = await pool.execute("SELECT * FROM users WHERE username = ? OR student_no = ? LIMIT 1", [loginAccount, loginAccount]);
+    const [rows] = await pool.execute("SELECT * FROM users WHERE (username = ? OR student_no = ?) AND COALESCE(is_active,1)=1 LIMIT 1", [loginAccount, loginAccount]);
     if (rows.length === 0) return res.json(Res.error("学号/账号或密码错误"));
     const user = rows[0];
     if (user.role === "class_committee") {
@@ -114,7 +122,8 @@ exports.updateProfile = async (req, res) => {
 
 exports.changePassword = async (req, res) => {
   try {
-    const { old_password, new_password } = req.body || {};
+    const secureBody = decryptCredentialFields(req.body || {}, ["old_password", "new_password"]);
+    const { old_password, new_password } = secureBody;
     if (!old_password || !new_password) return res.json(Res.error("原密码和新密码不能为空"));
     if (String(new_password).length < 6) return res.json(Res.error("新密码至少需要 6 位"));
     const [rows] = await pool.execute("SELECT password FROM users WHERE id=? LIMIT 1", [req.user.id]);

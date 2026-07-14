@@ -31,6 +31,7 @@ export const adminCreateStudent = (d) => request.post("/module3/admin/accounts/s
 export const adminImportStudents = (d) => request.post("/module3/admin/accounts/student-import", d);
 export const adminGenerateAccounts = (d) => request.post("/module3/admin/accounts/generate", d);
 export const adminResetPassword = (d) => request.put("/module3/admin/accounts/reset-password", d);
+export const adminDeleteUser = (id) => request.delete(`/module3/admin/accounts/${id}`);
 export const getOrganizations = () => request.get("/module3/org");
 export const createCollege = (d) => request.post("/module3/org/colleges", d);
 export const createMajor = (d) => request.post("/module3/org/majors", d);

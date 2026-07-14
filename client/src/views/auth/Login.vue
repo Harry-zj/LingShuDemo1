@@ -83,7 +83,7 @@ async function handleLogin() {
       alert(res.msg);
     }
   } catch (e) {
-    alert('登录失败，请检查网络连接');
+    alert(e?.response?.data?.msg || e?.message || '登录失败，请检查网络连接');
   } finally {
     loading.value = false;
   }

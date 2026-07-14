@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const ctrl = require("../controllers/authController");
 const auth = require("../middleware/auth");
+router.get("/public-key", ctrl.getCredentialPublicKey);
 router.get("/register-options", ctrl.getRegisterOptions);
 router.post("/register", ctrl.register);
 router.post("/login", ctrl.login);

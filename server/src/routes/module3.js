@@ -42,6 +42,7 @@ router.post("/admin/accounts/student", auth, roleCheck("admin"), ctrl.adminCreat
 router.post("/admin/accounts/student-import", auth, roleCheck("admin"), ctrl.adminImportStudents);
 router.post("/admin/accounts/generate", auth, roleCheck("admin"), ctrl.adminGenerateAccounts);
 router.put("/admin/accounts/reset-password", auth, roleCheck("admin"), ctrl.adminResetPassword);
+router.delete("/admin/accounts/:id", auth, roleCheck("admin"), ctrl.adminDeleteUser);
 
 router.get("/org", auth, roleCheck("admin", "counselor", "student", "student_affairs"), ctrl.getOrganizations);
 router.post("/org/colleges", auth, roleCheck("admin"), ctrl.createCollege);
