@@ -18,6 +18,14 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function normalizeClassGrade(value) {
+  const matched = normalizeText(value).match(/^(\d{4})(?:级)?$/);
+  if (!matched) throw new Error("请选择有效年级");
+  const year = Number(matched[1]);
+  if (year < 2000 || year > 2126) throw new Error("年级必须在 2000-2126 之间");
+  return `${year}级`;
+}
+
 async function withTransaction(work) {
   const conn = await pool.getConnection();
   try {
@@ -210,7 +218,7 @@ async function createClass(operator, data = {}) {
   requireAdmin(operator);
   const collegeId = Number(data.college_id || 0);
   const majorId = Number(data.major_id || 0);
-  const grade = normalizeText(data.grade);
+  const grade = normalizeClassGrade(data.grade);
   const name = normalizeText(data.name);
   if (!collegeId || !majorId || !grade || !name) throw new Error("学院、专业、年级和班级名称均不能为空");
   const [[college]] = await pool.execute("SELECT name FROM assessment_colleges WHERE id=? LIMIT 1", [collegeId]);

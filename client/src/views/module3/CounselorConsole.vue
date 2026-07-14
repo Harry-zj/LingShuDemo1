@@ -17,33 +17,40 @@
     <div class="panel-card glass-card" v-if="view === 'scope'">
       <div class="panel-header">
         <h3><VIcon icon="mdi:map-marker-radius-outline" />管辖范围设置</h3>
-        <span class="panel-count">学院和年级必选，班级可多选；不选班级默认全部班级</span>
+        <span class="panel-count">学院和年级必选，专业可选；不选专业表示全部专业，不选班级表示当前范围内全部班级</span>
       </div>
       <div class="form-grid">
         <label class="field-block">
           <span>管辖学院</span>
-          <select v-model="draftScope.college">
+          <select v-model="draftScope.college" @change="onScopeCollegeChange">
             <option value="">选择学院</option>
             <option v-for="college in options.colleges" :key="college" :value="college">{{ college }}</option>
           </select>
         </label>
         <label class="field-block">
           <span>管辖年级</span>
-          <select v-model="draftScope.grade">
+          <select v-model="draftScope.grade" @change="onScopeGradeChange">
             <option value="">选择年级</option>
             <option v-for="grade in options.grades" :key="grade" :value="grade">{{ grade }}</option>
           </select>
         </label>
         <label class="field-block">
+          <span>管辖专业（可选）</span>
+          <select v-model="draftScope.major" :disabled="!draftScope.college || !draftScope.grade" @change="onScopeMajorChange">
+            <option value="">全部专业</option>
+            <option v-for="major in scopeMajors" :key="major" :value="major">{{ major }}</option>
+          </select>
+        </label>
+        <label class="field-block">
           <span>限定班级（可多选）</span>
-          <select v-model="draftScope.class_ids" multiple>
-            <option v-for="cls in scopeClasses" :key="cls.id" :value="cls.id">{{ cls.name }}</option>
+          <select v-model="draftScope.class_ids" multiple :disabled="!draftScope.college || !draftScope.grade">
+            <option v-for="cls in scopeClasses" :key="cls.id" :value="cls.id">{{ classDisplayName(cls) }}</option>
           </select>
         </label>
       </div>
       <div class="scope-summary">
         <VIcon icon="mdi:information-outline" />
-        <span>当前设置将影响学生查询和评价小组管理；批次权限仍按学院、年级判断。</span>
+        <span>当前设置将按学院、年级、可选专业和所选班级限制学生查询及评价小组管理；未选择专业时覆盖全部专业。批次权限仍按学院、年级判断。</span>
       </div>
       <div class="scope-actions">
         <button class="btn-primary" @click="confirmScopeChange"><VIcon icon="mdi:check-circle-outline" />保存管辖范围</button>
@@ -151,14 +158,14 @@
             <span>被评班级</span>
             <select v-model.number="item.target_class_id" @change="syncClassName(item, 'target')">
               <option value="">请选择</option>
-              <option v-for="cls in batchClasses(batch)" :key="cls.id" :value="cls.id">{{ cls.name }}</option>
+              <option v-for="cls in batchClasses(batch)" :key="cls.id" :value="cls.id">{{ classDisplayName(cls) }}</option>
             </select>
           </label>
           <label class="field-block">
             <span>评价班级</span>
             <select v-model.number="item.reviewer_class_id" @change="syncClassName(item, 'reviewer')">
               <option value="">请选择</option>
-              <option v-for="cls in batchClasses(batch)" :key="cls.id" :value="cls.id" :disabled="Number(cls.id) === Number(item.target_class_id)">{{ cls.name }}</option>
+              <option v-for="cls in batchClasses(batch)" :key="cls.id" :value="cls.id" :disabled="Number(cls.id) === Number(item.target_class_id)">{{ classDisplayName(cls) }}</option>
             </select>
           </label>
           <button class="danger small row-delete" @click="batch.review_assignments.splice(index, 1)"><VIcon icon="mdi:trash-can-outline" />删除</button>
@@ -189,18 +196,27 @@ const options = ref({ colleges: [], grades: [], classes: [], members: [], batch_
 const students = ref([]);
 const batches = ref([]);
 const selectedBatchId = ref(0);
-const draftScope = ref({ college: '', grade: '', class_ids: [] });
+const draftScope = ref({ college: '', grade: '', major: '', class_ids: [] });
 const studentKeyword = ref('');
 
 const view = computed(() => props.view);
 const sectionMeta = computed(() => ({
-  scope: { shortTitle: '管辖范围', title: '管辖范围设置', description: '设置辅导员负责的学院、年级和可选班级范围。', icon: 'mdi:map-marker-radius-outline' },
+  scope: { shortTitle: '管辖范围', title: '管辖范围设置', description: '设置辅导员负责的学院、年级、可选专业和班级范围；专业留空代表全部专业。', icon: 'mdi:map-marker-radius-outline' },
   students: { shortTitle: '学生信息', title: '管辖学生信息', description: '集中查看管辖范围内学生资料和最新综测状态。', icon: 'mdi:account-group-outline' },
   members: { shortTitle: '评价小组', title: '评价小组管理', description: '按具体批次赋予或移除学生的临时评价权限。', icon: 'mdi:account-multiple-check-outline' },
   assignments: { shortTitle: '跨班互评', title: '批次跨班互评配置', description: '为不同班级建立清晰的被评与评价关系。', icon: 'mdi:swap-horizontal-bold' },
 }[view.value] || { shortTitle: '功能设置', title: '辅导员功能设置', description: '', icon: 'mdi:cog-outline' }));
 
-const scopeClasses = computed(() => options.value.classes.filter(cls => (!draftScope.value.college || cls.college === draftScope.value.college) && (!draftScope.value.grade || cls.grade === draftScope.value.grade)));
+const scopeMajors = computed(() => [...new Set(options.value.classes
+  .filter(cls => (!draftScope.value.college || cls.college === draftScope.value.college)
+    && (!draftScope.value.grade || cls.grade === draftScope.value.grade))
+  .map(cls => String(cls.major || '').trim())
+  .filter(Boolean))].sort());
+const scopeClasses = computed(() => options.value.classes.filter(cls =>
+  (!draftScope.value.college || cls.college === draftScope.value.college)
+  && (!draftScope.value.grade || cls.grade === draftScope.value.grade)
+  && (!draftScope.value.major || cls.major === draftScope.value.major)
+));
 const publishedBatches = computed(() => batches.value.filter(batch => batch.status === 'published'));
 const filteredStudents = computed(() => {
   const keyword = studentKeyword.value.trim().toLowerCase();
@@ -214,7 +230,32 @@ function statusText(status) {
 }
 
 function batchClasses(batch) {
-  return options.value.classes.filter(cls => cls.college === batch.college && cls.grade === batch.grade);
+  const scopeMajor = draftScope.value.major || userStore.user?.scope?.major || '';
+  return options.value.classes.filter(cls => cls.college === batch.college
+    && cls.grade === batch.grade
+    && (!scopeMajor || cls.major === scopeMajor));
+}
+
+function classDisplayName(cls) {
+  const major = String(cls?.major || '').trim();
+  const className = String(cls?.name || '').trim();
+  if (!major) return className || '未命名班级';
+  if (!className) return major;
+  return className.startsWith(major) ? className : `${major}${className}`;
+}
+
+function onScopeCollegeChange() {
+  draftScope.value.major = '';
+  draftScope.value.class_ids = [];
+}
+
+function onScopeGradeChange() {
+  draftScope.value.major = '';
+  draftScope.value.class_ids = [];
+}
+
+function onScopeMajorChange() {
+  draftScope.value.class_ids = [];
 }
 
 function isBatchMember(studentId, batchId = selectedBatchId.value) {
@@ -239,7 +280,12 @@ async function load() {
     if (!selectedStillAvailable) selectedBatchId.value = batches.value.find(batch => batch.status === 'published')?.id || 0;
   }
   const savedScope = userStore.user?.scope;
-  if (savedScope) draftScope.value = { college: savedScope.college || '', grade: savedScope.grade || '', class_ids: savedScope.class_ids || [] };
+  if (savedScope) draftScope.value = {
+    college: savedScope.college || '',
+    grade: savedScope.grade || '',
+    major: savedScope.major || '',
+    class_ids: savedScope.class_ids || [],
+  };
 }
 
 async function confirmScopeChange() {
@@ -316,7 +362,7 @@ onMounted(load);
 .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .panel-header h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; }
 .panel-count { color: var(--color-text-secondary); font-size: 13px; }
-.form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.form-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 .field-block { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
 .field-block > span { color: var(--color-text-secondary); font-size: 12px; }
 .scope-summary, .assignment-guide { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }

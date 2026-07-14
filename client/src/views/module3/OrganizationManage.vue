@@ -69,7 +69,10 @@
           <option value="">请选择专业</option>
           <option v-for="m in activeMajorsForClass" :key="m.id" :value="m.id">{{ m.name }}</option>
         </select>
-        <input v-model="classForm.grade" placeholder="年级，如：2024级" />
+        <select v-model="classForm.grade">
+          <option value="">请选择年级</option>
+          <option v-for="year in gradeYears" :key="year" :value="String(year)">{{ year }}</option>
+        </select>
         <input v-model="classForm.name" placeholder="班级名称，如：计科2401班" />
       </div>
       <button class="btn-primary" @click="saveClass">保存班级</button>
@@ -114,15 +117,22 @@ const pageDescription = computed(() => pageMeta[view.value]?.[1] || '');
 const org = ref({ colleges: [], majors: [], classes: [] });
 const collegeName = ref('');
 const majorForm = ref({ college_id: '', name: '' });
-const classForm = ref({ college_id: '', major_id: '', grade: '', name: '' });
+const currentGradeYear = Math.min(2126, Math.max(2000, new Date().getFullYear()));
+const classForm = ref({ college_id: '', major_id: '', grade: String(currentGradeYear), name: '' });
+const gradeYears = Array.from({ length: 2126 - 2000 + 1 }, (_, index) => 2000 + index);
 const activeColleges = computed(() => org.value.colleges.filter(c => c.is_active));
 const activeMajorsForClass = computed(() => org.value.majors.filter(m => m.is_active && Number(m.college_id) === Number(classForm.value.college_id)));
 watch(() => classForm.value.college_id, () => { classForm.value.major_id = ''; });
 
 async function loadOrg() {
-  const res = await getOrganizations();
-  if (res.code === 200) org.value = res.data || { colleges: [], majors: [], classes: [] };
-  else alert(res.msg || '加载组织数据失败');
+  try {
+    const res = await getOrganizations();
+    if (res.code === 200) org.value = res.data || { colleges: [], majors: [], classes: [] };
+    else alert(res.msg || '加载组织数据失败');
+  } catch (error) {
+    console.error('加载组织数据失败:', error);
+    alert('加载组织数据失败，请确认后端服务和数据库已正常启动');
+  }
 }
 async function saveCollege() {
   const res = await createCollege({ name: collegeName.value });
@@ -134,7 +144,10 @@ async function saveMajor() {
 }
 async function saveClass() {
   const res = await createOrgClass(classForm.value);
-  if (res.code === 200) { org.value = res.data; classForm.value = { college_id: '', major_id: '', grade: '', name: '' }; } else alert(res.msg || '保存失败');
+  if (res.code === 200) {
+    org.value = res.data;
+    classForm.value = { college_id: '', major_id: '', grade: String(currentGradeYear), name: '' };
+  } else alert(res.msg || '保存失败');
 }
 async function removeCollege(c) {
   if (!confirm(`确认删除或停用学院“${c.name}”？`)) return;
@@ -152,7 +165,9 @@ async function removeClass(c) {
   if (res.code === 200) org.value = res.data; else alert(res.msg || '操作失败');
 }
 
-onMounted(loadOrg);
+onMounted(() => {
+  if (view.value !== 'menu') loadOrg();
+});
 </script>
 
 <style scoped>

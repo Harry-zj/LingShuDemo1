@@ -68,6 +68,7 @@ async function createModule3Tables(conn) {
       id INT AUTO_INCREMENT PRIMARY KEY,
       counselor_id INT NOT NULL,
       college VARCHAR(100) NOT NULL DEFAULT '',
+      major VARCHAR(100) NOT NULL DEFAULT '',
       grade VARCHAR(20) NOT NULL DEFAULT '',
       class_ids JSON DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -313,6 +314,7 @@ async function migrateModule3(conn) {
   await tryQuery(conn, "ALTER TABLE assessment_classes ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active' AFTER grade");
   await tryQuery(conn, "ALTER TABLE assessment_classes DROP INDEX uk_assessment_class");
   await tryQuery(conn, "ALTER TABLE assessment_classes ADD UNIQUE KEY uk_assessment_class_scope (college, major, grade, name)");
+  await tryQuery(conn, "ALTER TABLE counselor_scopes ADD COLUMN major VARCHAR(100) NOT NULL DEFAULT '' AFTER college");
   await backfillClasses(conn);
   await backfillOrganizations(conn);
   await backfillBatches(conn);
