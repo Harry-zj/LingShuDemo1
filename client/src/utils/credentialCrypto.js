@@ -21,7 +21,11 @@ function bytesToBase64(buffer) {
 }
 
 async function getCredentialPublicKey() {
-  if (!globalThis.crypto?.subtle) throw new Error("当前浏览器不支持安全凭据加密，请升级浏览器后重试");
+  // 浏览器不支持 crypto.subtle（非 HTTPS 环境），返回 null 走明文降级
+  if (!globalThis.crypto?.subtle) {
+    console.warn("[安全] 当前环境不支持 Web Crypto API（需要 HTTPS），登录凭据将明文传输");
+    return null;
+  }
   if (!publicKeyPromise) {
     publicKeyPromise = request.get("/auth/public-key")
       .then((res) => {
@@ -50,6 +54,8 @@ async function encryptValue(value, key) {
 
 export async function encryptCredentialFields(data = {}, fields = []) {
   const key = await getCredentialPublicKey();
+  // 不支持 crypto.subtle 时返回明文（不标记 credential_encrypted，后端会原样处理）
+  if (!key) return { ...data };
   const payload = { ...data, credential_encrypted: true, credential_algorithm: "RSA-OAEP-256" };
   await Promise.all(fields.map(async (field) => {
     if (Object.prototype.hasOwnProperty.call(payload, field) && payload[field] !== null && payload[field] !== undefined) {

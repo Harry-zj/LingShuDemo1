@@ -14,8 +14,9 @@ function getPublicKeyInfo() {
 }
 
 function decryptValue(value) {
+  // 非加密值直接透传（HTTP 降级场景）
   if (typeof value !== "string" || !value.startsWith("rsa:")) {
-    throw new Error("登录凭据未加密或格式不正确，请刷新页面后重试");
+    return value;
   }
   try {
     const encrypted = Buffer.from(value.slice(4), "base64");
@@ -33,8 +34,9 @@ function decryptValue(value) {
 }
 
 function decryptCredentialFields(body = {}, fields = []) {
-  if (body.credential_encrypted !== true || body.credential_algorithm !== "RSA-OAEP-256") {
-    throw new Error("登录凭据必须加密传输，请刷新页面后重试");
+  // 未加密的请求直接透传（HTTP 降级场景）
+  if (body.credential_encrypted !== true) {
+    return { ...body };
   }
   const result = { ...body };
   for (const field of fields) {
