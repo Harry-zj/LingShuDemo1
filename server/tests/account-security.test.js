@@ -60,3 +60,19 @@ test("admin account deletion is wired and guarded", () => {
   assert.match(service, /SET is_active=0, deleted_at=NOW\(\)/);
   assert.match(client, /删除账号/);
 });
+
+test("admin manual student organization fields use linked organization dropdowns", () => {
+  const client = read("client/src/views/module3/AdminAccountManage.vue");
+  const service = read("server/src/services/module3/adminService.js");
+  assert.match(client, /select v-model="student\.college"/);
+  assert.match(client, /select v-model="student\.major"/);
+  assert.match(client, /select v-model="student\.grade"/);
+  assert.match(client, /select v-model="student\.class_name"/);
+  assert.doesNotMatch(client, /input v-model="student\.(college|major|grade|class_name)"/);
+  assert.match(client, /getOrganizations/);
+  assert.match(client, /studentMajorOptions/);
+  assert.match(client, /studentGradeOptions/);
+  assert.match(client, /studentClassOptions/);
+  assert.match(service, /resolveStudentOrganization/);
+  assert.match(service, /所选班级不存在、已停用或与学院专业年级不匹配/);
+});

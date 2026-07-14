@@ -76,6 +76,68 @@ async function listUsers(operator, query = {}) {
   }));
 }
 
+async function resolveStudentOrganization(data = {}) {
+  const college = normalizeText(data.college);
+  const major = normalizeText(data.major);
+  let grade = normalizeText(data.grade);
+  const className = normalizeText(data.class_name);
+
+  if (!college && !major && !grade && !className) {
+    return { college: "", major: "", grade: "", className: "", classId: null };
+  }
+  if (!college) throw new Error("请先选择学院");
+
+  const [[collegeRow]] = await pool.execute(
+    "SELECT id, name FROM assessment_colleges WHERE name=? AND COALESCE(is_active,1)=1 LIMIT 1",
+    [college]
+  );
+  if (!collegeRow) throw new Error("所选学院不存在或已停用");
+
+  let majorRow = null;
+  if (major) {
+    [[majorRow]] = await pool.execute(
+      "SELECT id, name FROM assessment_majors WHERE college_id=? AND name=? AND COALESCE(is_active,1)=1 LIMIT 1",
+      [collegeRow.id, major]
+    );
+    if (!majorRow) throw new Error("所选专业不属于该学院或已停用");
+  }
+
+  if (grade) {
+    grade = normalizeClassGrade(grade);
+    const params = [collegeRow.name, grade];
+    let gradeSql = "SELECT id FROM assessment_classes WHERE college=? AND grade=? AND COALESCE(status,'active') <> 'inactive'";
+    if (majorRow) {
+      gradeSql += " AND major=?";
+      params.push(majorRow.name);
+    }
+    gradeSql += " LIMIT 1";
+    const [[gradeRow]] = await pool.execute(gradeSql, params);
+    if (!gradeRow) throw new Error("所选年级在当前学院或专业下没有可用班级");
+  }
+
+  let classId = null;
+  if (className) {
+    if (!majorRow || !grade) throw new Error("选择班级前请先选择专业和年级");
+    const [[classRow]] = await pool.execute(
+      `SELECT id, name, college, major, grade
+         FROM assessment_classes
+        WHERE name=? AND college=? AND major=? AND grade=? AND COALESCE(status,'active') <> 'inactive'
+        LIMIT 1`,
+      [className, collegeRow.name, majorRow.name, grade]
+    );
+    if (!classRow) throw new Error("所选班级不存在、已停用或与学院专业年级不匹配");
+    classId = classRow.id;
+  }
+
+  return {
+    college: collegeRow.name,
+    major: majorRow?.name || "",
+    grade,
+    className,
+    classId,
+  };
+}
+
 async function createStudentAccount(operator, data = {}) {
   requireAdmin(operator);
   const studentNo = normalizeText(data.student_no || data.username);
@@ -83,17 +145,23 @@ async function createStudentAccount(operator, data = {}) {
   const [existing] = await pool.execute("SELECT id FROM users WHERE username=? OR student_no=? LIMIT 1", [studentNo, studentNo]);
   if (existing.length) throw new Error("该学号已存在");
   const password = await bcrypt.hash(studentNo, 10);
-  const classId = await module3Service.ensureClass({
-    name: data.class_name,
-    college: data.college,
-    major: data.major,
-    grade: data.grade,
-  });
+  const organization = await resolveStudentOrganization(data);
   await withTransaction(async conn => {
     await conn.execute(
       `INSERT INTO users (username, password, role, real_name, student_no, class_id, class_name, college, major, grade, phone)
        VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [studentNo, password, data.real_name || "", studentNo, classId, data.class_name || "", data.college || "", data.major || "", data.grade || "", data.phone || ""]
+      [
+        studentNo,
+        password,
+        data.real_name || "",
+        studentNo,
+        organization.classId,
+        organization.className,
+        organization.college,
+        organization.major,
+        organization.grade,
+        data.phone || "",
+      ]
     );
     await addAdminLog(conn, operator, "创建学生账号", studentNo, "管理员手动创建学生账号，初始密码为学号");
   });

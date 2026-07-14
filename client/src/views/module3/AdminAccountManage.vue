@@ -20,11 +20,24 @@
       <div class="form-grid">
         <input v-model="student.student_no" placeholder="学号（必填，初始密码=学号）" />
         <input v-model="student.real_name" placeholder="姓名（选填）" />
-        <input v-model="student.college" placeholder="学院（选填）" />
-        <input v-model="student.major" placeholder="专业（选填）" />
-        <input v-model="student.grade" placeholder="年级（选填）" />
-        <input v-model="student.class_name" placeholder="班级（选填）" />
+        <select v-model="student.college" @change="onStudentCollegeChange">
+          <option value="">学院（选填）</option>
+          <option v-for="college in activeColleges" :key="college.id" :value="college.name">{{ college.name }}</option>
+        </select>
+        <select v-model="student.major" :disabled="!student.college" @change="onStudentMajorChange">
+          <option value="">专业（选填）</option>
+          <option v-for="major in studentMajorOptions" :key="major.id" :value="major.name">{{ major.name }}</option>
+        </select>
+        <select v-model="student.grade" :disabled="!student.college" @change="onStudentGradeChange">
+          <option value="">年级（选填）</option>
+          <option v-for="grade in studentGradeOptions" :key="grade" :value="grade">{{ grade }}</option>
+        </select>
+        <select v-model="student.class_name" :disabled="!student.college || !student.major || !student.grade">
+          <option value="">班级（选填）</option>
+          <option v-for="cls in studentClassOptions" :key="cls.id" :value="cls.name">{{ cls.name }}</option>
+        </select>
       </div>
+      <p class="hint organization-hint">学院、专业、年级和班级均来自组织结构管理；请先维护组织数据，再为学生选择归属信息。</p>
       <button class="btn-primary" @click="createStudent">创建学生账号</button>
     </section>
 
@@ -110,7 +123,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
-import { adminCreateStudent, adminDeleteUser, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword } from '../../api/module3';
+import { adminCreateStudent, adminDeleteUser, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword, getOrganizations } from '../../api/module3';
 import { useUserStore } from '../../stores/user';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
@@ -134,6 +147,25 @@ const pageTitle = computed(() => pageMeta[view.value]?.[0] || '账号管理');
 const pageDescription = computed(() => pageMeta[view.value]?.[1] || '');
 
 const student = ref({ student_no: '', real_name: '', college: '', major: '', grade: '', class_name: '' });
+const org = ref({ colleges: [], majors: [], classes: [] });
+const activeColleges = computed(() => org.value.colleges.filter(item => item.is_active !== 0 && item.is_active !== false));
+const selectedStudentCollege = computed(() => activeColleges.value.find(item => item.name === student.value.college));
+const studentMajorOptions = computed(() => org.value.majors.filter(item =>
+  item.is_active !== 0
+  && item.is_active !== false
+  && selectedStudentCollege.value
+  && Number(item.college_id) === Number(selectedStudentCollege.value.id)
+));
+const activeStudentClasses = computed(() => org.value.classes.filter(item => item.status !== 'inactive'));
+const studentGradeOptions = computed(() => [...new Set(activeStudentClasses.value
+  .filter(cls => cls.college === student.value.college && (!student.value.major || cls.major === student.value.major))
+  .map(cls => cls.grade)
+  .filter(Boolean))].sort().reverse());
+const studentClassOptions = computed(() => activeStudentClasses.value.filter(cls =>
+  cls.college === student.value.college
+  && cls.major === student.value.major
+  && cls.grade === student.value.grade
+));
 const importText = ref('');
 const importResult = ref(null);
 const latestResult = ref([]);
@@ -142,6 +174,24 @@ const resetAccount = ref('');
 const users = ref([]);
 const query = ref({ role: '', keyword: '' });
 const deletingId = ref(0);
+
+function onStudentCollegeChange() {
+  student.value.major = '';
+  student.value.grade = '';
+  student.value.class_name = '';
+}
+function onStudentMajorChange() {
+  student.value.grade = '';
+  student.value.class_name = '';
+}
+function onStudentGradeChange() {
+  student.value.class_name = '';
+}
+async function loadOrganizations() {
+  const res = await getOrganizations();
+  if (res.code === 200) org.value = res.data || { colleges: [], majors: [], classes: [] };
+  else alert(res.msg || '加载组织数据失败');
+}
 
 async function loadUsers() {
   const res = await adminListUsers(query.value);
@@ -200,13 +250,17 @@ async function deleteAccount(user) {
   }
 }
 
-watch(view, value => { if (value === 'list') loadUsers(); }, { immediate: true });
+watch(view, value => {
+  if (value === 'list') loadUsers();
+  if (value === 'manual') loadOrganizations();
+}, { immediate: true });
 </script>
 
 <style scoped>
 .admin-page { display:flex; flex-direction:column; gap:22px; animation:fadeIn .35s var(--easing-decelerate); }
 .page-header h2 { font-size:22px; font-weight:var(--font-weight-semibold); }
 .page-desc, .hint { color:var(--color-text-secondary); font-size:13px; margin-top:4px; }
+.organization-hint { margin-top:12px; }
 .panel { padding:22px; border-radius: 8px !important; }
 .panel-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
 .panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }
