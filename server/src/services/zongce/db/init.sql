@@ -59,10 +59,10 @@ CREATE TABLE IF NOT EXISTS scoring_rules (
   item_name VARCHAR(50),
   score_level VARCHAR(20),
   score_rank VARCHAR(50),
-  score INT NOT NULL DEFAULT 0,
+  score DECIMAL(5,2) NOT NULL DEFAULT 0,
   keywords TEXT,
   description TEXT,
-  max_score INT DEFAULT NULL,
+  max_score DECIMAL(5,2) DEFAULT NULL,
   dedup_group VARCHAR(50) DEFAULT NULL,
   status ENUM('active','inactive') DEFAULT 'active',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -180,7 +180,7 @@ CREATE TABLE IF NOT EXISTS ai_tasks (
   id INT AUTO_INCREMENT PRIMARY KEY,
   target_type VARCHAR(50) NOT NULL,
   target_id INT NOT NULL,
-  status ENUM('pending','processing','completed','failed') DEFAULT 'pending',
+  status ENUM('pending','processing','completed','failed','cancelled') DEFAULT 'pending',
   result JSON DEFAULT NULL,
   error_msg TEXT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -483,8 +483,11 @@ CREATE TABLE IF NOT EXISTS batch_fill_tasks (
   mappings JSON DEFAULT NULL,
   status VARCHAR(30) DEFAULT 'uploaded',
   result_path VARCHAR(500) DEFAULT '',
+  result_files JSON DEFAULT NULL,
   success_count INT DEFAULT 0,
   fail_count INT DEFAULT 0,
+  is_deleted TINYINT(1) DEFAULT 0,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -496,10 +499,25 @@ CREATE TABLE IF NOT EXISTS chat_fill_sessions (
   id VARCHAR(64) PRIMARY KEY,
   user_id INT NOT NULL,
   template_id INT NOT NULL,
+  template_name VARCHAR(255) DEFAULT '',
+  template_oss_url VARCHAR(500) DEFAULT '',
   fields_json JSON DEFAULT NULL,
+  result_oss_url VARCHAR(500) DEFAULT '',
   status VARCHAR(30) DEFAULT 'analyzed',
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 对话填表消息记录
+CREATE TABLE IF NOT EXISTS chat_fill_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  session_id VARCHAR(64) NOT NULL,
+  field_key VARCHAR(100) NOT NULL,
+  role ENUM('user','assistant') NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cfmsg_session_field (session_id, field_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

@@ -4,7 +4,7 @@
     :title="`${currentRoleName}待评价任务`"
     description="首次评价和异议复评分开进入，避免不同处理规则的任务混在同一列表。"
     :back-path="workbenchPath"
-    back-label="返回模块三工作台"
+    back-label="返回管理员工作台"
     :cards="menuCards"
   />
 

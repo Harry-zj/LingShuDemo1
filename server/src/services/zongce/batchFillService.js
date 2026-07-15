@@ -11,8 +11,11 @@ const PizZip = require("pizzip");
 const Docxtemplater = require("docxtemplater");
 const { chatStreamJson } = require("./ai/aiService");
 
-function parseExcel(filePath) {
-  const workbook = XLSX.readFile(filePath);
+function parseExcel(input) {
+  // 支持 Buffer 或文件路径
+  const workbook = Buffer.isBuffer(input)
+    ? XLSX.read(input, { type: "buffer" })
+    : XLSX.readFile(input);
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
   const rows = XLSX.utils.sheet_to_json(sheet);
@@ -20,8 +23,9 @@ function parseExcel(filePath) {
   return { columns, rows, totalRows: rows.length };
 }
 
-function scanPlaceholders(templatePath) {
-  const content = fs.readFileSync(templatePath);
+function scanPlaceholders(input) {
+  // 支持 Buffer 或文件路径
+  const content = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
   const zip = new PizZip(content);
   let xml = "";
   try { xml = zip.files["word/document.xml"].asText(); } catch (e) { return []; }
@@ -76,8 +80,9 @@ function fallbackMapping(excelColumns, placeholders) {
   });
 }
 
-function batchFill(templatePath, rows, mappings) {
-  const templateBuf = fs.readFileSync(templatePath);
+function batchFill(templateInput, rows, mappings) {
+  // 支持 Buffer 或文件路径
+  const templateBuf = Buffer.isBuffer(templateInput) ? templateInput : fs.readFileSync(templateInput);
   const results = [];
   const numberFields = ["F1_total","F1_weighted","F2_weighted_avg","F2_weighted",
     "F3_total","F3_weighted","total_score"];
@@ -107,12 +112,13 @@ function batchFill(templatePath, rows, mappings) {
   return results;
 }
 
-function previewRowText(templatePath, row, mappings) {
+function previewRowText(templateInput, row, mappings) {
   const fillData = {};
   for (const m of mappings) {
     if (m.placeholder && row[m.excelCol] !== undefined) fillData[m.placeholder] = row[m.excelCol];
   }
-  const zip = new PizZip(fs.readFileSync(templatePath));
+  const templateBuf = Buffer.isBuffer(templateInput) ? templateInput : fs.readFileSync(templateInput);
+  const zip = new PizZip(templateBuf);
   let xml; try { xml = zip.files["word/document.xml"].asText(); } catch(e){ return {error:"无法读取"}; }
   let px = xml;
   for(const [k,v] of Object.entries(fillData)){

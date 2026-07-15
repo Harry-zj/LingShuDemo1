@@ -111,7 +111,7 @@ import { useSmartFillStore } from '@/stores/smartFill'
 const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String] })
 const smartFillStore = useSmartFillStore()
 
-const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template'])
+const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template','submit'])
 const fileInput = ref(null)
 const isDragging = ref(false)
 const formatError = ref(false)
@@ -193,14 +193,14 @@ const F1Items=computed(()=>[
 ])
 
 const F3Items=computed(()=>[
-  {key:'B1',scoreKey:'F3_B1_score',detailKey:'F3_B1_detail',label:'B1 职业技格?',score:fillData.value.F3_B1_score,detail:fillData.value.F3_B1_detail},
-  {key:'B2',scoreKey:'F3_B2_score',detailKey:'F3_B2_detail',label:'B2 科技学术',score:fillData.value.F3_B2_score,detail:fillData.value.F3_B2_detail},
-  {key:'B3',scoreKey:'F3_B3_score',detailKey:'F3_B3_detail',label:'B3 社会工作',score:fillData.value.F3_B3_score,detail:fillData.value.F3_B3_detail},
+  {key:'B1',scoreKey:'F3_B1_score',detailKey:'F3_B1_detail',label:'B1 职业技能',score:fillData.value.F3_B1_score,detail:fillData.value.F3_B1_detail},
+  {key:'B2',scoreKey:'F3_B2_score',detailKey:'F3_B2_detail',label:'B2 学科竞赛',score:fillData.value.F3_B2_score,detail:fillData.value.F3_B2_detail},
+  {key:'B3',scoreKey:'F3_B3_score',detailKey:'F3_B3_detail',label:'B3 科研学术',score:fillData.value.F3_B3_score,detail:fillData.value.F3_B3_detail},
   {key:'B4',scoreKey:'F3_B4_score',detailKey:'F3_B4_detail',label:'B4 宣传报道',score:fillData.value.F3_B4_score,detail:fillData.value.F3_B4_detail},
-  {key:'B5',scoreKey:'F3_B5_score',detailKey:'F3_B5_detail',label:'B5 文艺创作',score:fillData.value.F3_B5_score,detail:fillData.value.F3_B5_detail},
-  {key:'B6',scoreKey:'F3_B6_score',detailKey:'F3_B6_detail',label:'B6 文体竞赛',score:fillData.value.F3_B6_score,detail:fillData.value.F3_B6_detail},
-  {key:'B7',scoreKey:'F3_B7_score',detailKey:'F3_B7_detail',label:'B7 其他实践',score:fillData.value.F3_B7_score,detail:fillData.value.F3_B7_detail},
-  {key:'B8',scoreKey:'F3_B8_score',detailKey:'F3_B8_detail',label:"B8 劳育格?",score:fillData.value.F3_B8_score,detail:fillData.value.F3_B8_detail},
+  {key:'B5',scoreKey:'F3_B5_score',detailKey:'F3_B5_detail',label:'B5 社会工作',score:fillData.value.F3_B5_score,detail:fillData.value.F3_B5_detail},
+  {key:'B6',scoreKey:'F3_B6_score',detailKey:'F3_B6_detail',label:'B6 社会实践',score:fillData.value.F3_B6_score,detail:fillData.value.F3_B6_detail},
+  {key:'B7',scoreKey:'F3_B7_score',detailKey:'F3_B7_detail',label:'B7 文体竞赛',score:fillData.value.F3_B7_score,detail:fillData.value.F3_B7_detail},
+  {key:'B8',scoreKey:'F3_B8_score',detailKey:'F3_B8_detail',label:"B8 劳动教育",score:fillData.value.F3_B8_score,detail:fillData.value.F3_B8_detail},
 ])
 
 const allPlaceholders = [
@@ -425,6 +425,7 @@ async function submitToReview() {
     console.log('[submitToReview] updateSmartResult payload:', JSON.stringify(payload).slice(0,200))
     const res = await updateSmartResult(payload)
     if (res.code === 200) {
+      emit('submit')
       alert("已提交到审核流程，可在信息管理页查看")
     } else {
       alert(res.msg)

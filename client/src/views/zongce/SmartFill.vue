@@ -4,7 +4,7 @@
     <div v-if="currentBatch" class="batch-info-bar">
       <span class="batch-icon">📋</span>
       <span class="batch-title">{{ currentBatch.title }}</span>
-      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
+      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}级</span>
       <span class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
     </div>
     <div v-else-if="batchError" class="batch-error-bar">
@@ -61,7 +61,7 @@
         <SmartFillRule v-else-if="activeCard === 'rule'" key="rule" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
         <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
         <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" />
+        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" @submit="formDone = true" />
       </Transition>
     </div>
   </div>
@@ -146,8 +146,9 @@ const totalScore = computed(() => evaluation.value?.total_score ?? null)
 // ★ 步骤④⑤完成状态
 const f1Done = ref(false)
 const f2Done = ref(false)
-function onF1Complete() { f1Done.value = true }
-function onF2Complete() { f2Done.value = true }
+const formDone = ref(false)
+function onF1Complete() { f1Done.value = true; activeCard.value = 'f2' }
+function onF2Complete() { f2Done.value = true; activeCard.value = 'form' }
 
 // ★ 步进条步骤配置
 const steps = computed(() => [
@@ -156,13 +157,16 @@ const steps = computed(() => [
   { key: 'score', title: 'F3 评分清单', desc: '查看 B1-B8 加分汇总明细', ready: confirmedRecCount.value > 0, doneLabel: confirmedRecCount.value + ' 条确认', pendingLabel: '查看清单', locked: !ruleReady.value, lockedLabel: '请先确认识别结果' },
   { key: 'f1', title: 'F1 基本素质', desc: '思想政治、道德品质等评分', ready: f1Done.value, doneLabel: '已填写', pendingLabel: '填写评分', locked: !ruleReady.value, lockedLabel: '请先发布规则集' },
   { key: 'f2', title: 'F2 课程成绩', desc: '录入学期课程学分和考试成绩', ready: f2Done.value, doneLabel: '已录入', pendingLabel: '录入成绩', locked: !ruleReady.value, lockedLabel: '请先发布规则集' },
-  { key: 'form', title: '自动填表', desc: '上传 Word 模板，一键填充并下载', ready: false, doneLabel: '已完成', pendingLabel: '开始填表', locked: confirmedRecCount.value === 0, lockedLabel: '暂无已确认的识别结果' },
+  { key: 'form', title: '自动填表', desc: '上传 Word 模板，一键填充并下载', ready: formDone.value, doneLabel: '已提交', pendingLabel: '开始填表', locked: confirmedRecCount.value === 0, lockedLabel: '暂无已确认的识别结果' },
 ])
 
 // ========== 刷新 ==========
 async function refreshAll() {
   await Promise.all([loadPublishedRules(), loadRuleSets(), refreshMaterials(), refreshEval(), refreshTemplates()])
   await restoreStoreFromPreview()
+  f1Done.value = store.f1Items.some(a => a.score !== a.base || a.detail)
+  f2Done.value = store.f2Courses.some(c => c.name && c.score > 0)
+  if (evaluation.value?.total_score != null) formDone.value = true
   if (templates.value.length > 0) {
     const latest = templates.value[0]
     uploadedTemplate.value = { id: latest.id, name: latest.name, size: 0 }

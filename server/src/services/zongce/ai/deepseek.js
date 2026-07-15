@@ -6,7 +6,7 @@ function apiUrl(baseUrl) { const clean = (baseUrl || '').replace(/\/+$/, ''); re
 //  流式对话（统一使用，不超时，边生成边接收）
 // ============================================================
 async function chatStream(messages, options = {}) {
-  const { temperature = 0.3, maxTokens = 4096, timeoutMs = 300000, jsonMode = false } = options;
+  const { temperature = 0.3, maxTokens = 4096, timeoutMs = 300000, jsonMode = false, signal } = options;
 
   const body = {
     model: DEEPSEEK.model,
@@ -33,11 +33,11 @@ async function chatStream(messages, options = {}) {
         Authorization: `Bearer ${DEEPSEEK.apiKey}`,
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal: signal || controller.signal,
     });
   } catch (e) {
     clearTimeout(timer);
-    if (e.name === 'AbortError') throw new Error(`DeepSeek API 超时 (${timeoutMs / 1000}s)`);
+    if (e.name === 'AbortError') throw new Error(signal?.aborted ? 'CANCELLED' : `DeepSeek API 超时 (${timeoutMs / 1000}s)`);
     throw e;
   }
 

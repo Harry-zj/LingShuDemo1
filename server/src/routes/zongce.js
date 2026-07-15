@@ -79,19 +79,28 @@ router.post("/smart-fill/generate-f1", auth, fillCtrl.generateF1Descriptions);
 
 
 // ===== 批量填表 =====
-router.post("/batch-fill/upload", auth, upload.fields([
+router.post("/batch-fill/upload", auth, uploadOss.fields([
   { name: "excel", maxCount: 1 },
   { name: "template", maxCount: 1 },
 ]), batchFillCtrl.uploadFiles);
 router.put("/batch-fill/mapping",  auth, batchFillCtrl.updateMapping);
 router.post("/batch-fill/execute/:taskId", auth, batchFillCtrl.executeBatchFill);
-router.get("/batch-fill/:id/download",     batchFillCtrl.downloadResult);
+router.get("/batch-fill/list",     auth, batchFillCtrl.listTasks);
+router.get("/batch-fill/:id",      auth, batchFillCtrl.getTaskDetail);
+router.delete("/batch-fill/:id",   auth, batchFillCtrl.deleteTask);
+router.get("/batch-fill/:id/download", auth, batchFillCtrl.downloadResult);
 
-// ===== 对话式填�?=====
-router.post("/chat-fill/upload",      auth, upload.single("file"), chatFillCtrl.uploadTemplate);
-router.post("/chat-fill/analyze/:templateId", auth, chatFillCtrl.analyzeTemplate);
+// ===== 对话式填表（V2 OSS） =====
+router.post("/chat-fill/create",      auth, uploadOss.single("file"), chatFillCtrl.createSession);
+router.get("/chat-fill/list",         auth, chatFillCtrl.listSessions);
+router.get("/chat-fill/:id",          auth, chatFillCtrl.getSession);
+router.get("/chat-fill/:id/messages/:fieldKey", auth, chatFillCtrl.getMessages);
+router.put("/chat-fill/:id/simple-field", auth, chatFillCtrl.saveSimpleField);
 router.post("/chat-fill/chat",        auth, chatFillCtrl.chatField);
-router.post("/chat-fill/fill",        auth, chatFillCtrl.doFill);
+router.post("/chat-fill/accept",      auth, chatFillCtrl.acceptContent);
+router.post("/chat-fill/:id/fill",    auth, chatFillCtrl.fillSession);
+router.get("/chat-fill/:id/download", auth, chatFillCtrl.downloadResult);
+router.delete("/chat-fill/:id",       auth, chatFillCtrl.deleteSession);
 
 
 // ===== 测评批次（智能填表模块使用） =====

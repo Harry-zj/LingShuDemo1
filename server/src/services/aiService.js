@@ -140,4 +140,61 @@ ${allScores.map(d => `- ${d.name}：${d.score}分 [${d.levelLabel}]`).join('\n')
   }
 }
 
-module.exports = { generateReport, generateDimensionProfile };
+/**
+ * 生成历史趋势智能总结
+ */
+async function generateTrendSummary(data) {
+  const { semesters } = data;
+  const historyText = semesters.map((s, i) => {
+    const prev = i > 0 ? semesters[i-1] : null;
+    const totalDiff = prev ? (s.scores.total - prev.scores.total).toFixed(1) : '首次';
+    const rankDiff = prev && prev.ranking?.majorRank ? (prev.ranking.majorRank - s.ranking.majorRank) : 0;
+    const rankInfo = s.ranking?.majorRank ? `，专业排名第${s.ranking.majorRank}名` : '';
+    return `${s.year}：总分${s.scores.total}分(${s.rating})${rankInfo}${prev ? `，较上学年${totalDiff > 0 ? '+' : ''}${totalDiff}分` : ''}`;
+  }).join('\n');
+
+  const prompt = `你是高校综测趋势分析助手。根据以下学生历年数据生成3-4张总结卡片：
+
+## 历史数据
+${historyText}
+
+## 五维变化
+${semesters.length >= 2 ? DIM_CONFIG_KEYS.map(k => {
+  const first = semesters[0].scores[k] || 0;
+  const last = semesters[semesters.length-1].scores[k] || 0;
+  const DIM_NAMES = { de:'德育', zhi:'智育', ti:'体育', mei:'美育', lao:'劳育' };
+  return `${DIM_NAMES[k] || k}：${first}分→${last}分（${change >= 0 ? '+' : ''}${change}分）`;
+}).join('\n') : ''}
+
+## 要求
+用JSON返回，每张卡片含icon(emoji)、title(5-10字)、text(40-80字，2-3句话，先描述现状再给建议)：
+{"cards":[{"icon":"📊","title":"整体趋势","text":"总分变化与趋势判断"},{"icon":"🏆","title":"最快进步","text":"进步最大维度及具体分值"},{"icon":"🎯","title":"重点关注","text":"下滑维度及具体分值"},{"icon":"💡","title":"成长建议","text":"2-3条具体可操作建议"}]}`;
+
+  try {
+    const res = await fetch(DEEPSEEK_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 1000,
+      }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const text = json.choices?.[0]?.message?.content || "";
+    const clean = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    return JSON.parse(clean);
+  } catch (e) {
+    console.error("[AI] 趋势总结生成失败:", e.message);
+    return null;
+  }
+}
+
+const DIM_CONFIG_KEYS = ['de','zhi','ti','mei','lao'];
+
+module.exports = { generateReport, generateDimensionProfile, generateTrendSummary };

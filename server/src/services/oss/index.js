@@ -73,4 +73,33 @@ function generateKey(originalName) {
   return `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
 }
 
-module.exports = { uploadBuffer, downloadBuffer, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey };
+/**
+ * 删除单个 OSS 对象
+ * @param {string} key OSS key 或完整 URL
+ */
+async function deleteBuffer(key) {
+  const client = getClient();
+  let fullKey;
+  if (key.startsWith('http')) {
+    fullKey = extractKeyFromUrl(key);
+  } else {
+    fullKey = key.startsWith(KEY_PREFIX) ? key : KEY_PREFIX + key;
+  }
+  await client.delete(fullKey);
+}
+
+/**
+ * 批量删除 OSS 对象
+ * @param {string[]} keys OSS key 或 URL 数组
+ */
+async function deleteMultiple(keys) {
+  if (!keys || keys.length === 0) return;
+  const client = getClient();
+  const fullKeys = keys.map(k => {
+    if (k.startsWith('http')) return extractKeyFromUrl(k);
+    return k.startsWith(KEY_PREFIX) ? k : KEY_PREFIX + k;
+  });
+  await client.deleteMulti(fullKeys, { quiet: true });
+}
+
+module.exports = { uploadBuffer, downloadBuffer, deleteBuffer, deleteMultiple, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey };
