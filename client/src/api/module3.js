@@ -10,6 +10,7 @@ export const updateBatch = (id, d) => request.put(`/module3/batches/${id}`, d);
 export const updateBatchStatus = (id, d) => request.put(`/module3/batches/${id}/status`, d);
 export const deleteBatch = (id) => request.delete(`/module3/batches/${id}`);
 export const getSettings = () => request.get("/module3/settings");
+export const getScorePolicy = () => request.get("/module3/score-policy");
 export const updateSettings = (d) => request.put("/module3/settings", d);
 export const getScopeOptions = () => request.get("/module3/scope-options");
 export const getStudents = () => request.get("/module3/students");
@@ -19,7 +20,6 @@ export const getMyMaterials = (p) => request.get("/module3/materials", { params:
 export const getFormDetail = (id) => request.get(`/module3/forms/${id}`);
 export const getFormWordPreview = (id) => request.get(`/module3/forms/${id}/word-preview`);
 export const downloadFormWord = (id) => request.get(`/module3/forms/${id}/word`, { responseType: "blob" });
-export const setFormLevel = (id, d) => request.put(`/module3/forms/${id}/level`, d);
 export const reviewMaterial = (id, d) => request.put(`/module3/materials/${id}/review`, d);
 export const submitObjection = (id, d) => request.post(`/module3/forms/${id}/objections`, d);
 export const getPendingReviews = () => request.get("/module3/pending");

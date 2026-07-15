@@ -108,7 +108,7 @@ import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
-const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String] })
+const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String], scorePolicy: Object })
 const smartFillStore = useSmartFillStore()
 
 const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template','submit'])
@@ -151,16 +151,17 @@ function syncF3FromScoreList() {
   for (const ind of indicators) {
     const scoreKey = 'F3_' + ind.code + '_score'
     const detailKey = 'F3_' + ind.code + '_detail'
-    fillData.value[scoreKey] = ind.score || 0
+    const itemLimit = Number(props.scorePolicy?.scoreLimits?.[ind.code] ?? 30)
+    fillData.value[scoreKey] = Math.min(Math.max(Number(ind.score || 0), 0), itemLimit)
     const autoDesc = (ind.facts || []).map(f => {
       const name = f.award_name || f.competition_name || '加分项'
       return name + '(+' + (f.score || 0) + '分)'
     }).filter(Boolean).join('；')
     fillData.value[detailKey] = autoDesc || fillData.value[detailKey]
-    f3Total += ind.score || 0
+    f3Total += fillData.value[scoreKey]
   }
-  fillData.value.F3_total = f3Total
-  fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1))
+  fillData.value.F3_total = Math.min(f3Total, Number(props.scorePolicy?.scoreLimits?.F3 ?? 100))
+  fillData.value.F3_weighted = parseFloat((fillData.value.F3_total * 0.25).toFixed(2))
   updateTotalScore()
 }
 
@@ -238,6 +239,11 @@ watch(() => props.scoreList, () => {
   syncF1F2Data()
 }, { deep: true, immediate: true });
 
+watch(() => props.scorePolicy, () => {
+  syncF1F2Data()
+  syncF3FromScoreList()
+}, { deep: true });
+
 // ★ 从服务端数据恢复到 Pinia Store（仅恢复 Store 中仍为默认值的项）
 // 解决刷新后 Store 为空、syncF1F2Data() 用空数据覆盖服务端数据的问题
 function restoreStoreFromServer() {
@@ -265,29 +271,40 @@ function restoreStoreFromServer() {
 function syncF1F2Data() {
   const items = smartFillStore.f1Items;
   for (const a of items) {
+    const max = Number(props.scorePolicy?.scoreLimits?.[a.key] ?? 20)
+    a.base = max
+    a.score = Math.min(Math.max(Number(a.score || 0), 0), max)
     fillData.value['F1_' + a.key + '_score'] = a.score;
     fillData.value['F1_' + a.key + '_detail'] = a.detail;
     fillData.value['F1_' + a.key + '_base'] = a.base;
   }
   let f1t = 0;
   ['A1','A2','A3','A4','A5'].forEach(k => f1t += fillData.value['F1_' + k + '_score'] || 0);
-  fillData.value.F1_total = f1t;
-  fillData.value.F1_weighted = parseFloat((f1t * 0.1).toFixed(1));
+  fillData.value.F1_total = Math.min(f1t, Number(props.scorePolicy?.scoreLimits?.F1 ?? 100));
+  fillData.value.F1_weighted = parseFloat((fillData.value.F1_total * 0.1).toFixed(2));
 
   const courses = smartFillStore.f2Courses;
   fillData.value.F2_courses = courses;
   let wsum = 0, tcred = 0;
-  for (const c of courses) { wsum += (c.score || 0) * (c.credit || 0); tcred += (c.credit || 0); }
-  fillData.value.F2_weighted_avg = tcred > 0 ? parseFloat((wsum / tcred).toFixed(2)) : 0;
-  fillData.value.F2_weighted = parseFloat((fillData.value.F2_weighted_avg * 0.65).toFixed(1));
+  const courseLimit = Number(props.scorePolicy?.scoreLimits?.COURSE ?? 100)
+  for (const c of courses) {
+    c.score = Math.min(Math.max(Number(c.score || 0), 0), courseLimit)
+    wsum += (c.score || 0) * (c.credit || 0); tcred += (c.credit || 0);
+  }
+  const average = tcred > 0 ? parseFloat((wsum / tcred).toFixed(2)) : 0;
+  fillData.value.F2_weighted_avg = Math.min(average, Number(props.scorePolicy?.scoreLimits?.F2 ?? 100));
+  fillData.value.F2_weighted = parseFloat((fillData.value.F2_weighted_avg * 0.65).toFixed(2));
 
   updateTotalScore();
 }
 
 function updateTotalScore() {
   const total = (fillData.value.F1_weighted || 0) + (fillData.value.F2_weighted || 0) + (fillData.value.F3_weighted || 0);
-  fillData.value.total_score = parseFloat(total.toFixed(2));
-  fillData.value.grade = total >= 90 ? '优秀' : total >= 80 ? '良好' : total >= 70 ? '中等' : total >= 60 ? '合格' : '不合格';
+  fillData.value.total_score = Math.min(parseFloat(total.toFixed(2)), Number(props.scorePolicy?.scoreLimits?.total ?? 100));
+  const rules = Array.isArray(props.scorePolicy?.gradeRules) ? [...props.scorePolicy.gradeRules] : [
+    { grade: '优', min: 80 }, { grade: '良', min: 70 }, { grade: '合格', min: 60 }, { grade: '不合格', min: 0 },
+  ]
+  fillData.value.grade = rules.sort((a, b) => Number(b.min) - Number(a.min)).find(rule => fillData.value.total_score >= Number(rule.min))?.grade || '不合格';
 }
 
 

@@ -1,6 +1,6 @@
 <template>
   <div class="f1-root">
-    <div class="f1-header"><h4>F1 基本素质（权重10%，满分100分）</h4></div>
+    <div class="f1-header"><h4>F1 基本素质（权重10%，满分{{ sectionLimit }}分）</h4></div>
     <div class="dim-list">
       <div v-for="a in store.f1Items" :key="a.key" class="dim-row">
         <span class="dim-name">{{ a.label }}</span>
@@ -11,20 +11,32 @@
       </div>
     </div>
     <div class="f1-footer">
-      <span>合计：<b>{{ store.f1Total }}</b> / 100 分</span>
-      <span class="weight-note">加权后 {{ store.f1Weighted }} 分</span>
+      <span>合计：<b>{{ f1Total }}</b> / {{ sectionLimit }} 分</span>
+      <span class="weight-note">加权后 {{ f1Weighted }} 分</span>
       <button class="btn-complete" @click="emit('complete')">✓ 完成填写</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { watch, onBeforeUnmount } from 'vue'
+import { computed, watch, onBeforeUnmount } from 'vue'
 import { useSmartFillStore } from '@/stores/smartFill'
 import * as api from '@/api/zongce'
 
 const store = useSmartFillStore()
 const emit = defineEmits(['complete'])
+const props = defineProps({ scorePolicy: { type: Object, default: () => ({}) } })
+const sectionLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.F1 ?? 100))
+const f1Total = computed(() => Math.min(Number(store.f1Total || 0), sectionLimit.value))
+const f1Weighted = computed(() => Number((f1Total.value * 0.1).toFixed(2)))
+
+watch(() => props.scorePolicy?.scoreLimits, limits => {
+  for (const item of store.f1Items) {
+    const max = Number(limits?.[item.key] ?? 20)
+    item.base = max
+    item.score = Math.min(Math.max(Number(item.score || 0), 0), max)
+  }
+}, { immediate: true, deep: true })
 
 let saveTimer = null
 watch(() => store.f1Items.map(a => ({ key: a.key, score: a.score, detail: a.detail })), () => {

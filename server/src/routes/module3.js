@@ -16,6 +16,7 @@ router.put("/batches/:id", auth, roleCheck("admin", "counselor"), ctrl.updateBat
 router.put("/batches/:id/status", auth, roleCheck("admin"), ctrl.updateBatchStatus);
 router.delete("/batches/:id", auth, roleCheck("admin"), ctrl.deleteBatch);
 
+router.get("/score-policy", auth, ctrl.getScorePolicy);
 router.get("/settings", auth, roleCheck("admin"), ctrl.getSettings);
 router.put("/settings", auth, roleCheck("admin"), ctrl.updateSettings);
 
@@ -28,7 +29,6 @@ router.get("/materials", auth, ctrl.getMyMaterials);
 router.get("/forms/:id", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormDetail);
 router.get("/forms/:id/word-preview", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.getFormWordPreview);
 router.get("/forms/:id/word", auth, roleCheck("student", "admin", "counselor", "student_affairs"), ctrl.downloadFormWord);
-router.put("/forms/:id/level", auth, roleCheck("counselor", "student_affairs"), ctrl.setFormLevel);
 router.put("/materials/:id/review", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.reviewMaterial);
 router.post("/forms/:id/objections", auth, roleCheck("student"), ctrl.submitObjection);
 router.get("/pending", auth, roleCheck("student", "counselor", "student_affairs"), ctrl.getPendingReviews);

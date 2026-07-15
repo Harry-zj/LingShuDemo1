@@ -19,7 +19,7 @@
         <div v-for="(c, i) in store.f2Courses" :key="i" class="course-row">
           <input class="course-inp name" v-model="c.name" placeholder="如：高等数学" />
           <input class="course-inp credit" type="number" v-model.number="c.credit" min="0" max="10" step="0.5" />
-          <input class="course-inp score" type="number" v-model.number="c.score" min="0" max="100" />
+          <input class="course-inp score" type="number" v-model.number="c.score" min="0" :max="courseLimit" @input="clampCourse(c)" />
           <button class="btn-del" @click="removeCourse(i)" title="删除">×</button>
         </div>
       </div>
@@ -29,11 +29,11 @@
       <div class="f2-summary">
         <div class="summary-item">
           <span class="summary-label">加权平均分</span>
-          <span class="summary-value">{{ Number(store.f2WeightedAvg).toFixed(2) }}</span>
+          <span class="summary-value">{{ Number(weightedAvg).toFixed(2) }}</span>
         </div>
         <div class="summary-item accent">
           <span class="summary-label">加权得分</span>
-          <span class="summary-value">{{ store.f2Weighted }}</span>
+          <span class="summary-value">{{ weightedScore }}</span>
         </div>
         <div class="summary-item">
           <span class="summary-label">已录入</span>
@@ -45,13 +45,25 @@
 </template>
 
 <script setup>
-import { ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useSmartFillStore } from '@/stores/smartFill'
 import * as api from '@/api/zongce'
 
 const emit = defineEmits(['saved', 'complete'])
 const store = useSmartFillStore()
 const isCompleted = ref(false)
+const props = defineProps({ scorePolicy: { type: Object, default: () => ({}) } })
+const courseLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.COURSE ?? 100))
+const sectionLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.F2 ?? 100))
+const weightedAvg = computed(() => Math.min(Number(store.f2WeightedAvg || 0), sectionLimit.value))
+const weightedScore = computed(() => Number((weightedAvg.value * 0.65).toFixed(2)))
+
+function clampCourse(course) {
+  const value = Number(course.score || 0)
+  course.score = Number(Math.min(Math.max(Number.isFinite(value) ? value : 0, 0), courseLimit.value).toFixed(2))
+}
+
+watch(courseLimit, () => store.f2Courses.forEach(clampCourse), { immediate: true })
 
 let saveTimer = null
 watch(() => store.f2Courses.map(c => ({ name: c.name, credit: c.credit, score: c.score })), () => {

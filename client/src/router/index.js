@@ -46,7 +46,7 @@ const routes = [
   { path: "/module3/admin/rules", name: "AdminRuleManage", component: () => import("../views/module3/AdminRuleManage.vue"), props: { view: "menu" }, meta: { layout: "main", title: "批次规则管理", roles: ["admin"] } },
   { path: "/module3/admin/rules/manage", name: "AdminRuleManage_manage", component: () => import("../views/module3/AdminRuleManage.vue"), props: { view: "manage" }, meta: { layout: "main", title: "批次规则管理", roles: ["admin"] } },
   { path: "/module3/batch-manage", name: "BatchManage", component: () => import("../views/module3/BatchManage.vue"), props: { view: "menu" }, meta: { layout: "main", title: "批次管理", roles: ["admin"] } },
-  ...[["create", "创建批次"], ["settings", "全局流程设置"], ["active", "进行中的批次"], ["history", "历史批次"]].map(([view, title]) => ({ path: `/module3/batch-manage/${view}`, name: `BatchManage_${view}`, component: () => import("../views/module3/BatchManage.vue"), props: { view }, meta: { layout: "main", title, roles: ["admin"] } })),
+  ...[["create", "创建批次"], ["settings", "全局流程设置"], ["limits", "分数上限设置"], ["active", "进行中的批次"], ["history", "历史批次"]].map(([view, title]) => ({ path: `/module3/batch-manage/${view}`, name: `BatchManage_${view}`, component: () => import("../views/module3/BatchManage.vue"), props: { view }, meta: { layout: "main", title, roles: ["admin"] } })),
 ];
 const router = createRouter({ history: createWebHistory(), routes });
 
