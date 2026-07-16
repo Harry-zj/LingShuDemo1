@@ -4,7 +4,7 @@
       <div>
         <span class="eyebrow">MODULE 03</span>
         <h2>{{ config.title }}</h2>
-        <p>{{ config.description }}</p>
+        <p v-if="config.description">{{ config.description }}</p>
       </div>
       <div class="role-chip">
         <VIcon :icon="config.icon" />
@@ -12,11 +12,35 @@
       </div>
     </section>
 
+    <section class="notice-panel glass-card" v-if="attentionItems.length">
+      <div class="notice-heading">
+        <div>
+          <span class="notice-icon"><VIcon icon="mdi:bell-ring-outline" /></span>
+          <div>
+            <h3>消息提醒</h3>
+            <p>有新的综测事项需要关注</p>
+          </div>
+        </div>
+        <span class="notice-count">{{ attentionCount }}</span>
+      </div>
+      <div class="notice-list">
+        <button v-for="notice in attentionItems" :key="notice.key || notice.type" class="notice-item" @click="openNotice(notice)">
+          <VIcon :icon="notice.icon" />
+          <span>
+            <strong>{{ notice.title }}</strong>
+            <small>{{ notice.description }}</small>
+          </span>
+          <em v-if="notice.count">{{ notice.count }} 项</em>
+          <VIcon icon="mdi:chevron-right" />
+        </button>
+      </div>
+    </section>
+
     <section class="section-block">
       <div class="section-heading">
         <div>
           <h3>{{ config.sectionTitle }}</h3>
-          <p>{{ config.sectionDescription }}</p>
+          <p v-if="config.sectionDescription">{{ config.sectionDescription }}</p>
         </div>
         <span>{{ primaryCards.length }} 个功能入口</span>
       </div>
@@ -26,10 +50,11 @@
           v-for="card in primaryCards"
           :key="card.title"
           class="feature-card glass-card"
-          :class="{ disabled: card.disabled }"
+          :class="{ disabled: card.disabled, attention: card.attention }"
           :disabled="card.disabled"
           @click="open(card)"
         >
+          <span v-if="card.badgeCount" class="attention-badge">{{ card.badgeCount }}</span>
           <span class="icon-box"><VIcon :icon="card.icon" /></span>
           <span class="card-content">
             <strong>{{ card.title }}</strong>
@@ -45,13 +70,13 @@
       <div class="section-heading compact">
         <div>
           <h3>常用入口</h3>
-          <p>进入待办、统计或个人资料页面</p>
         </div>
       </div>
       <div class="quick-grid">
-        <button v-for="card in secondaryCards" :key="card.title" class="quick-card" @click="open(card)">
+        <button v-for="card in secondaryCards" :key="card.title" class="quick-card" :class="{ attention: card.attention }" @click="open(card)">
+          <span v-if="card.badgeCount" class="quick-badge">{{ card.badgeCount }}</span>
           <VIcon :icon="card.icon" />
-          <span><strong>{{ card.title }}</strong><small>{{ card.description }}</small></span>
+          <span><strong>{{ card.title }}</strong><small>{{ card.description }}</small><em v-if="card.note">{{ card.note }}</em></span>
           <VIcon icon="mdi:chevron-right" />
         </button>
       </div>
@@ -60,12 +85,16 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { getMyMaterials, getPendingReviews, getStudentBatches } from '../../api/module3';
 import { useUserStore } from '../../stores/user';
 
 const router = useRouter();
 const userStore = useUserStore();
+const studentNoticeSource = ref([]);
+const seenNoticeKeys = ref(new Set());
+const pendingReviewCount = ref(0);
 
 const configs = {
   admin: {
@@ -121,11 +150,11 @@ const configs = {
   },
   student: {
     title: '学生综测工作台',
-    description: '填写材料、查看结果、处理评价任务和维护个人资料分别进入，避免所有信息同时堆在一个页面。',
+    description: '',
     icon: 'mdi:school-outline',
     roleLabel: '学生',
     sectionTitle: '综测功能',
-    sectionDescription: '选择当前要完成的事项',
+    sectionDescription: '',
     primary: [
       { title: '综测信息填写', description: '选择批次，编辑、保存并提交综测表', icon: 'mdi:file-document-edit-outline', to: '/module3/student/forms' },
       { title: '结果与异议', description: '选择批次查看最终评价记录，并统一提交异议', icon: 'mdi:message-question-outline', to: '/module3/student/results' },
@@ -137,12 +166,160 @@ const configs = {
 };
 
 const config = computed(() => configs[userStore.userRole] || configs.student);
-const primaryCards = computed(() => config.value.primary);
-const secondaryCards = computed(() => config.value.secondary || []);
+const unseenStudentNotices = computed(() => studentNoticeSource.value.filter(notice => !seenNoticeKeys.value.has(notice.key)));
+const formNoticeCount = computed(() => unseenStudentNotices.value.filter(notice => ['batch', 'returned'].includes(notice.type)).length);
+const resultNoticeCount = computed(() => unseenStudentNotices.value.filter(notice => notice.type === 'result').length);
+const attentionCount = computed(() => unseenStudentNotices.value.length + pendingReviewCount.value);
+const attentionItems = computed(() => {
+  const items = [...unseenStudentNotices.value];
+  if (pendingReviewCount.value > 0) {
+    items.push({
+      type: 'review',
+      title: '还有待评价项目',
+      description: `当前有 ${pendingReviewCount.value} 份综测表等待评价处理。`,
+      icon: 'mdi:clipboard-alert-outline',
+      to: '/module3/class-leader',
+      count: pendingReviewCount.value,
+    });
+  }
+  return items;
+});
+
+function decorateCard(card) {
+  let badgeCount = 0;
+  if (userStore.userRole === 'student' && card.title === '综测信息填写') badgeCount = formNoticeCount.value;
+  if (userStore.userRole === 'student' && card.title === '结果与异议') badgeCount = resultNoticeCount.value;
+  if (['我的待评价', '待评价任务'].includes(card.title)) badgeCount = pendingReviewCount.value;
+  return {
+    ...card,
+    badgeCount,
+    attention: badgeCount > 0,
+    note: badgeCount > 0 ? `${badgeCount} 条待处理提醒` : card.note,
+  };
+}
+
+const primaryCards = computed(() => config.value.primary.map(decorateCard));
+const secondaryCards = computed(() => (config.value.secondary || []).map(decorateCard));
+
+function noticeStorageKey() {
+  return `lingshu-module3-seen-notices-${userStore.user?.id || 'anonymous'}`;
+}
+
+function readSeenNotices() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(noticeStorageKey()) || '[]');
+    seenNoticeKeys.value = new Set(Array.isArray(saved) ? saved : []);
+  } catch {
+    seenNoticeKeys.value = new Set();
+  }
+}
+
+function persistSeenNotices() {
+  try {
+    localStorage.setItem(noticeStorageKey(), JSON.stringify([...seenNoticeKeys.value]));
+  } catch {
+    // 本地存储不可用时仍保留当前页面状态
+  }
+  window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
+}
+
+function markNotices(predicate) {
+  const next = new Set(seenNoticeKeys.value);
+  studentNoticeSource.value.filter(predicate).forEach(notice => next.add(notice.key));
+  seenNoticeKeys.value = next;
+  persistSeenNotices();
+}
+
+function makeStudentNotices(batches, forms) {
+  const notices = [];
+  const publishedBatches = (batches || []).filter(batch => batch.status === 'published');
+  publishedBatches.forEach(batch => {
+    notices.push({
+      key: `batch-${batch.id}`,
+      type: 'batch',
+      title: '新的综测批次已发布',
+      description: `“${batch.title}”已开放，请进入综测信息填写。`,
+      icon: 'mdi:calendar-star-outline',
+      to: `/module3/student/forms/${batch.id}`,
+    });
+  });
+
+  (forms || []).forEach(form => {
+    const batchId = Number(form.batch_id || 0);
+    if (!batchId) return;
+    if (String(form.status || '').startsWith('returned')) {
+      notices.push({
+        key: `returned-${form.id}-${form.updated_at || form.status}`,
+        type: 'returned',
+        title: '综测表已被退回',
+        description: `“${form.batch_title || '当前批次'}”需要修改后重新提交。`,
+        icon: 'mdi:file-undo-outline',
+        to: `/module3/student/forms/${batchId}`,
+      });
+      return;
+    }
+    if (form.result_released && form.status !== 'pending_objection_review') {
+      notices.push({
+        key: `result-${form.id}-${form.result_released_at || form.updated_at || form.status}`,
+        type: 'result',
+        title: '综测结果已返回',
+        description: `“${form.batch_title || '当前批次'}”结果已生成，可查看评价记录和异议入口。`,
+        icon: 'mdi:bell-check-outline',
+        to: `/module3/student/results/${batchId}`,
+      });
+    }
+  });
+  return notices;
+}
+
+async function loadAttention() {
+  readSeenNotices();
+  const role = userStore.userRole;
+  if (role === 'student') {
+    const jobs = [getStudentBatches(), getMyMaterials()];
+    if (userStore.user?.is_assessment_member) jobs.push(getPendingReviews());
+    const results = await Promise.allSettled(jobs);
+    const batchRes = results[0]?.status === 'fulfilled' ? results[0].value : null;
+    const formRes = results[1]?.status === 'fulfilled' ? results[1].value : null;
+    studentNoticeSource.value = makeStudentNotices(
+      batchRes?.code === 200 ? batchRes.data || [] : [],
+      formRes?.code === 200 ? formRes.data || [] : []
+    );
+    const pendingRes = results[2]?.status === 'fulfilled' ? results[2].value : null;
+    pendingReviewCount.value = pendingRes?.code === 200 ? (pendingRes.data || []).length : 0;
+    return;
+  }
+
+  if (['counselor', 'student_affairs'].includes(role)) {
+    try {
+      const res = await getPendingReviews();
+      pendingReviewCount.value = res.code === 200 ? (res.data || []).length : 0;
+    } catch {
+      pendingReviewCount.value = 0;
+    }
+  }
+}
+
+function openNotice(notice) {
+  if (notice.key) markNotices(current => current.key === notice.key);
+  if (notice.to) router.push(notice.to);
+}
 
 function open(card) {
-  if (!card.disabled && card.to) router.push(card.to);
+  if (card.disabled || !card.to) return;
+  if (userStore.userRole === 'student' && card.title === '综测信息填写') {
+    markNotices(notice => ['batch', 'returned'].includes(notice.type));
+  }
+  if (userStore.userRole === 'student' && card.title === '结果与异议') {
+    markNotices(notice => notice.type === 'result');
+  }
+  router.push(card.to);
 }
+
+onMounted(async () => {
+  await loadAttention();
+  window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
+});
 </script>
 
 <style scoped>
@@ -152,6 +329,20 @@ function open(card) {
 .hero h2 { font-size: 26px; line-height: 1.25; }
 .hero p { max-width: 760px; margin-top: 8px; color: var(--color-text-secondary); line-height: 1.7; }
 .role-chip { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-primary); white-space: nowrap; }
+.notice-panel { padding: 18px; border: 1px solid color-mix(in srgb, #f59e0b 35%, var(--color-border)); background: color-mix(in srgb, #f59e0b 7%, var(--color-surface)); }
+.notice-heading, .notice-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.notice-heading > div { justify-content: flex-start; }
+.notice-icon { display: grid; place-items: center; width: 42px; height: 42px; background: rgba(245, 158, 11, .14); color: #d97706; font-size: 22px; }
+.notice-heading h3 { font-size: 16px; }
+.notice-heading p { margin-top: 3px; color: var(--color-text-secondary); font-size: 12px; }
+.notice-count, .attention-badge, .quick-badge { display: grid; place-items: center; min-width: 24px; height: 24px; padding: 0 7px; border-radius: 999px !important; background: #ef4444; color: #fff; font-size: 12px; font-weight: 700; }
+.notice-list { display: grid; gap: 8px; margin-top: 14px; }
+.notice-item { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 10px; width: 100%; padding: 12px; border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text-primary); text-align: left; cursor: pointer; }
+.notice-item > svg:first-child { color: #d97706; font-size: 22px; }
+.notice-item span { display: flex; flex-direction: column; gap: 3px; }
+.notice-item small { color: var(--color-text-secondary); line-height: 1.5; }
+.notice-item em { color: #d97706; font-size: 12px; font-style: normal; white-space: nowrap; }
+.notice-item:hover { border-color: color-mix(in srgb, #f59e0b 45%, var(--color-border)); transform: translateY(-1px); }
 .section-block { display: flex; flex-direction: column; gap: 16px; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
 .section-heading h3 { font-size: 18px; }
@@ -160,7 +351,9 @@ function open(card) {
 .feature-grid.four-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .feature-card { position: relative; min-height: 190px; padding: 22px; border: 1px solid var(--color-border); border-radius: 8px !important; color: var(--color-text-primary); text-align: left; cursor: pointer; overflow: hidden; transition: transform var(--duration-fast) var(--easing-standard), border-color var(--duration-fast), box-shadow var(--duration-fast); }
 .feature-card:hover:not(.disabled) { transform: translateY(-3px); border-color: color-mix(in srgb, var(--color-primary) 48%, var(--color-border)); box-shadow: var(--shadow-level-2); }
+.feature-card.attention { border-color: color-mix(in srgb, #f59e0b 48%, var(--color-border)); }
 .feature-card.disabled { opacity: .55; cursor: not-allowed; }
+.attention-badge { position: absolute; top: 14px; right: 14px; }
 .icon-box { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 12%, transparent); color: var(--color-primary); font-size: 24px; }
 .card-content { display: flex; flex-direction: column; gap: 7px; margin-top: 20px; padding-right: 34px; }
 .card-content strong { font-size: 17px; }
@@ -168,18 +361,22 @@ function open(card) {
 .card-content em { color: #d97706; font-size: 12px; font-style: normal; }
 .card-arrow { position: absolute; right: 20px; bottom: 20px; color: var(--color-primary); }
 .quick-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
-.quick-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-height: 76px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); text-align: left; cursor: pointer; }
-.quick-card > svg:first-child { color: var(--color-primary); font-size: 22px; }
+.quick-card { position: relative; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; min-height: 76px; padding: 14px 16px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); text-align: left; cursor: pointer; }
+.quick-card.attention { border-color: color-mix(in srgb, #f59e0b 48%, var(--color-border)); }
+.quick-badge { position: absolute; top: 8px; right: 8px; min-width: 20px; height: 20px; font-size: 11px; }
+.quick-card > svg:first-of-type { color: var(--color-primary); font-size: 22px; }
 .quick-card span { display: flex; flex-direction: column; gap: 3px; }
 .quick-card small { color: var(--color-text-secondary); line-height: 1.4; }
+.quick-card em { color: #d97706; font-size: 11px; font-style: normal; }
 @media (max-width: 800px) {
   .hero, .section-heading { flex-direction: column; align-items: stretch; }
   .feature-grid.four-grid { grid-template-columns: 1fr; }
+  .notice-item { grid-template-columns: auto 1fr auto; }
+  .notice-item em { display: none; }
 }
 
 /* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
 :deep(*) {
   border-radius: 8px !important;
 }
-
 </style>

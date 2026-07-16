@@ -268,6 +268,7 @@ async function saveEdit(options = {}) {
     });
     if (res.code === 200) {
       form.value = res.data;
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       if (!silent) alert('修改已保存');
       return true;
     }
@@ -297,6 +298,7 @@ async function submit() {
     const res = await submitStudentForm(batchId.value);
     if (res.code === 200) {
       form.value = res.data;
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       alert('已提交并分配给跨班评价小组成员');
     } else alert(res.msg || '提交失败');
   } catch (error) {
@@ -346,6 +348,7 @@ async function submitAllObjections() {
     if (res.code === 200) {
       form.value = res.data;
       clearObjectionDraft();
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       alert('异议申请已统一提交，等待原评价小组成员复评');
     } else alert(res.msg || '异议提交失败');
   } catch (error) {

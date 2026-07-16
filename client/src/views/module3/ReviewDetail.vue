@@ -24,20 +24,15 @@
       </div>
     </div>
 
-    <AssessmentFormPanel v-if="reviewPreviewForm" :form="reviewPreviewForm" start-collapsed />
 
     <div class="item-review-groups" v-if="form && reviewableItems.length">
       <div class="review-groups-header">
         <div>
           <h3><VIcon icon="mdi:format-list-checks" />逐项评测</h3>
-          <p>先查看 F1、F2、F3 概览，再展开需要核查的大项；修改内容在收起后仍会保留。</p>
+          <p>按 F1、F2、F3 分类逐项核查；各大项默认收起，同时只展开一个，修改内容在收起后仍会保留。</p>
         </div>
         <div class="review-header-actions">
           <span class="panel-count">共 {{ reviewableItems.length }} 项</span>
-          <button type="button" class="btn-outline compact" @click="toggleAllReviewSections">
-            <VIcon :icon="allReviewSectionsExpanded ? 'mdi:unfold-less-horizontal' : 'mdi:unfold-more-horizontal'" />
-            {{ allReviewSectionsExpanded ? '收起全部' : '展开全部' }}
-          </button>
         </div>
       </div>
 
@@ -102,41 +97,56 @@
             </div>
           </div>
           <div class="item-review-list">
-            <article class="item-review-card" :class="{ reviewed: isItemReviewed(item.id) }" v-for="item in group.items" :key="item.id">
-              <div class="item-head">
+            <section class="review-subgroup" v-for="subgroup in group.subgroups" :key="`${group.key}-${subgroup.key}`">
+              <div class="review-subgroup-header">
+                <span class="review-sub-code">{{ subgroup.key }}</span>
                 <div>
-                  <strong>{{ item.title || '未命名加分项' }}</strong>
-                  <p>{{ item.section }} / {{ item.subKey }} · 原分值 {{ item.score }} 分</p>
-                </div>
-                <div class="item-head-tags">
-                  <button type="button" class="review-confirm-btn" :class="{ reviewed: isItemReviewed(item.id) }" @click="toggleItemReviewed(item.id)">
-                    <VIcon :icon="isItemReviewed(item.id) ? 'mdi:check-circle' : 'mdi:check-circle-outline'" />
-                    {{ isItemReviewed(item.id) ? '已核查' : '标记已核查' }}
-                  </button>
-                  <span v-if="item.objection" class="objection-tag">异议：{{ item.objection.reason }}</span>
+                  <strong>{{ subgroup.title }}</strong>
+                  <small>{{ subgroup.items.length }} 个待评项目 · 以下项目相互独立</small>
                 </div>
               </div>
-              <div class="item-fields">
-                <label>
-                  <span>评测结论</span>
-                  <select v-model="reviewDrafts[item.id].action" @change="markItemReviewed(item.id)">
-                    <option value="approve">符合</option>
-                    <option value="return">需修改</option>
-                    <option value="reject">不符合</option>
-                  </select>
-                </label>
-                <label>
-                  <span>复核分值</span>
-                  <input type="number" min="0" :max="reviewScoreMax(item)" step="0.1" v-model.number="reviewDrafts[item.id].score" @input="handleReviewScoreInput(item)" />
-                  <small>本分类剩余上限 {{ reviewScoreMax(item) }} 分</small>
-                </label>
+
+              <div class="review-subgroup-items">
+                <article class="item-review-card" :class="{ reviewed: isItemReviewed(item.id) }" v-for="(item, itemIndex) in subgroup.items" :key="item.id">
+                  <div class="item-head">
+                    <div class="review-item-title">
+                      <span class="review-item-order">{{ itemIndex + 1 }}</span>
+                      <div>
+                        <strong>{{ item.title || '未命名加分项' }}</strong>
+                        <p>第 {{ itemIndex + 1 }} 项 · {{ subgroup.key }} · 原分值 {{ item.score }} 分</p>
+                      </div>
+                    </div>
+                    <div class="item-head-tags">
+                      <button type="button" class="review-confirm-btn" :class="{ reviewed: isItemReviewed(item.id) }" @click="toggleItemReviewed(item.id)">
+                        <VIcon :icon="isItemReviewed(item.id) ? 'mdi:check-circle' : 'mdi:check-circle-outline'" />
+                        {{ isItemReviewed(item.id) ? '已核查' : '标记已核查' }}
+                      </button>
+                      <span v-if="item.objection" class="objection-tag">异议：{{ item.objection.reason }}</span>
+                    </div>
+                  </div>
+                  <div class="item-fields">
+                    <label>
+                      <span>评测结论</span>
+                      <select v-model="reviewDrafts[item.id].action" @change="markItemReviewed(item.id)">
+                        <option value="approve">符合</option>
+                        <option value="return">需修改</option>
+                        <option value="reject">不符合</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>复核分值</span>
+                      <input type="number" min="0" :max="reviewScoreMax(item)" step="0.1" v-model.number="reviewDrafts[item.id].score" @input="handleReviewScoreInput(item)" />
+                      <small>本分类剩余上限 {{ reviewScoreMax(item) }} 分</small>
+                    </label>
+                  </div>
+                  <div class="template-row">
+                    <span>常用评价：</span>
+                    <button v-for="text in templates" :key="text" @click="useTemplate(item.id, text)">{{ text }}</button>
+                  </div>
+                  <textarea v-model="reviewDrafts[item.id].reason" placeholder="该项评测理由（选填）" @input="markItemReviewed(item.id)"></textarea>
+                </article>
               </div>
-              <div class="template-row">
-                <span>常用评价：</span>
-                <button v-for="text in templates" :key="text" @click="useTemplate(item.id, text)">{{ text }}</button>
-              </div>
-              <textarea v-model="reviewDrafts[item.id].reason" placeholder="该项评测理由（选填）" @input="markItemReviewed(item.id)"></textarea>
-            </article>
+            </section>
           </div>
         </section>
       </div>
@@ -184,7 +194,6 @@ import { getFormDetail, getPendingReviews, reviewMaterial } from '../../api/modu
 import { useUserStore } from '../../stores/user';
 import { FORM_STRUCTURE, ROLE_LABEL } from '../../utils/constants';
 import { calculateFormScores, calculateLevel, scoreLimitForItem } from '../../utils/scorePolicy';
-import AssessmentFormPanel from './AssessmentFormPanel.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -194,7 +203,7 @@ const comment = ref('');
 const processing = ref(false);
 const reviewDrafts = reactive({});
 const reviewedItemIds = ref(new Set());
-const expandedReviewSections = ref(new Set());
+const expandedReviewSection = ref('');
 
 const REVIEW_SECTION_META = {
   F1: { shortTitle: '基本素质', weight: '占综合总分 10%' },
@@ -228,34 +237,26 @@ const groupedReviewItems = computed(() => {
     F2: 'f2_course_learning',
     F3: 'f3_innovation_practice',
   };
-  return FORM_STRUCTURE.map(section => ({
-    key: section.key,
-    title: section.title,
-    shortTitle: REVIEW_SECTION_META[section.key].shortTitle,
-    weight: REVIEW_SECTION_META[section.key].weight,
-    score: draftScores.value?.[scoreKeyMap[section.key]] ?? 0,
-    items: reviewableItems.value.filter(item => item.section === section.key),
-  }));
+  return FORM_STRUCTURE.map(section => {
+    const items = reviewableItems.value.filter(item => item.section === section.key);
+    return {
+      key: section.key,
+      title: section.title,
+      shortTitle: REVIEW_SECTION_META[section.key].shortTitle,
+      weight: REVIEW_SECTION_META[section.key].weight,
+      score: draftScores.value?.[scoreKeyMap[section.key]] ?? 0,
+      items,
+      subgroups: section.children
+        .map(child => ({
+          key: child.key,
+          title: child.title,
+          items: items.filter(item => item.subKey === child.key),
+        }))
+        .filter(child => child.items.length),
+    };
+  });
 });
-const nonEmptyReviewGroups = computed(() => groupedReviewItems.value.filter(group => group.items.length));
-const allReviewSectionsExpanded = computed(() => nonEmptyReviewGroups.value.length > 0
-  && nonEmptyReviewGroups.value.every(group => expandedReviewSections.value.has(group.key)));
 const draftLevel = computed(() => calculateLevel(draftScores.value.total, form.value?.grade_rules));
-const reviewPreviewForm = computed(() => {
-  if (!form.value) return null;
-  const items = (form.value.items || []).map(item => ({
-    ...item,
-    score: reviewDrafts[item.id]?.score ?? item.score ?? 0,
-  }));
-  return {
-    ...form.value,
-    items,
-    scores: draftScores.value,
-    level: draftLevel.value,
-    auto_level: draftLevel.value,
-  };
-});
-
 function initDrafts(data) {
   Object.keys(reviewDrafts).forEach(key => delete reviewDrafts[key]);
   const currentStage = data.review_stage || 'initial';
@@ -276,27 +277,17 @@ function initDrafts(data) {
 }
 
 function initializeReviewExpansion() {
-  const first = FORM_STRUCTURE.find(section => reviewableItems.value.some(item => item.section === section.key));
-  expandedReviewSections.value = new Set(first ? [first.key] : []);
+  expandedReviewSection.value = '';
 }
 
 function isReviewSectionExpanded(sectionKey) {
-  return expandedReviewSections.value.has(sectionKey);
+  return expandedReviewSection.value === sectionKey;
 }
 
 function toggleReviewSection(sectionKey) {
   const group = groupedReviewItems.value.find(current => current.key === sectionKey);
   if (!group?.items.length) return;
-  const next = new Set(expandedReviewSections.value);
-  if (next.has(sectionKey)) next.delete(sectionKey);
-  else next.add(sectionKey);
-  expandedReviewSections.value = next;
-}
-
-function toggleAllReviewSections() {
-  expandedReviewSections.value = allReviewSectionsExpanded.value
-    ? new Set()
-    : new Set(nonEmptyReviewGroups.value.map(group => group.key));
+  expandedReviewSection.value = expandedReviewSection.value === sectionKey ? '' : sectionKey;
 }
 
 function isItemReviewed(itemId) {
@@ -408,6 +399,7 @@ async function handleReview(action) {
     });
     if (res.code !== 200) return alert(res.msg || '评价处理失败');
 
+    window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
     const pendingRes = await getPendingReviews();
     const next = pendingRes.code === 200 ? (pendingRes.data || [])[0] : null;
     if (next) {
@@ -440,7 +432,6 @@ onMounted(() => load());
 .review-groups-header h3 { display: flex; align-items: center; gap: 8px; font-size: 17px; }
 .review-groups-header p { margin-top: 5px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
 .review-header-actions { display: flex; align-items: center; gap: 10px; }
-.btn-outline.compact { height: 34px; padding: 0 11px; font-size: 12px; }
 .review-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .review-overview-card { --section-accent: var(--color-primary); display: flex; flex-direction: column; min-width: 0; padding: 18px; overflow: hidden; border: 1px solid var(--color-border); border-top: 3px solid var(--section-accent); color: var(--color-text-primary); text-align: left; cursor: pointer; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
 .review-overview-card.review-section-f1 { --section-accent: #2563eb; }
@@ -486,10 +477,19 @@ onMounted(() => load());
 .stage-tag, .objection-tag { padding: 5px 10px; border-radius: 8px !important; background: rgba(245,158,11,.12); color: #d97706; }
 .task-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .task-list span { padding: 6px 10px; border-radius: 8px !important; background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); }
-.item-review-list { display: flex; flex-direction: column; gap: 12px; }
-.item-review-card { padding: 14px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-bg); }
-.item-review-card.reviewed { border-color: color-mix(in srgb, var(--section-accent) 35%, var(--color-border)); }
-.item-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.item-review-list { display: flex; flex-direction: column; gap: 20px; }
+.review-subgroup { overflow: hidden; border: 1px solid color-mix(in srgb, var(--section-accent) 24%, var(--color-border)); border-radius: 10px !important; background: var(--color-surface); box-shadow: 0 8px 20px rgba(15, 23, 42, .055); }
+.review-subgroup-header { display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid color-mix(in srgb, var(--section-accent) 18%, var(--color-border)); background: color-mix(in srgb, var(--section-accent) 7%, var(--color-surface)); }
+.review-sub-code { display: grid; place-items: center; min-width: 42px; height: 34px; padding: 0 8px; border-radius: 7px !important; background: var(--section-accent); color: #fff; font-size: 13px; font-weight: 900; letter-spacing: .05em; }
+.review-subgroup-header strong { display: block; font-size: 14px; }
+.review-subgroup-header small { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: 11px; }
+.review-subgroup-items { display: flex; flex-direction: column; gap: 16px; padding: 16px; background: color-mix(in srgb, var(--color-bg) 74%, transparent); }
+.item-review-card { padding: 16px; border: 1px solid color-mix(in srgb, var(--section-accent) 20%, var(--color-border)); border-left: 4px solid var(--section-accent); border-radius: 9px !important; background: var(--color-surface); box-shadow: 0 5px 14px rgba(15, 23, 42, .05); }
+.item-review-card.reviewed { border-color: color-mix(in srgb, var(--section-accent) 42%, var(--color-border)); border-left-color: #34a853; }
+.item-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px dashed color-mix(in srgb, var(--section-accent) 24%, var(--color-border)); }
+.review-item-title { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.review-item-order { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50% !important; background: color-mix(in srgb, var(--section-accent) 14%, var(--color-bg)); color: var(--section-accent); font-size: 13px; font-weight: 900; }
+.review-item-title > div { min-width: 0; }
 .item-head p { margin-top: 5px; color: var(--color-text-secondary); font-size: 12px; }
 .item-head-tags { display: flex; align-items: flex-end; flex-direction: column; gap: 6px; }
 .review-confirm-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border: 1px solid var(--color-border); border-radius: 999px !important; background: var(--color-surface); color: var(--color-text-secondary); font-size: 11px; cursor: pointer; }
@@ -518,7 +518,7 @@ textarea { width: 100%; min-height: 86px; border: 1px solid var(--color-border);
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px; color: var(--color-text-tertiary); }
 .empty-state .v-icon { font-size: 40px; }
 @media (max-width: 960px) { .review-overview-grid { grid-template-columns: 1fr; } }
-@media (max-width: 768px) { .page-header, .item-head, .review-groups-header, .section-review-header { flex-direction: column; align-items: stretch; } .review-header-actions, .section-review-header-right { align-items: stretch; justify-content: space-between; } .item-fields, .review-score-summary { grid-template-columns: 1fr; } .item-head-tags { align-items: flex-start; } .objection-tag { max-width: none; } .section-review-meta { align-self: flex-start; } .section-review-meta span { text-align: left; } }
+@media (max-width: 768px) { .page-header, .item-head, .review-groups-header, .section-review-header { flex-direction: column; align-items: stretch; } .review-subgroup-items { padding: 12px; } .review-header-actions, .section-review-header-right { align-items: stretch; justify-content: space-between; } .item-fields, .review-score-summary { grid-template-columns: 1fr; } .item-head-tags { align-items: flex-start; } .objection-tag { max-width: none; } .section-review-meta { align-self: flex-start; } .section-review-meta span { text-align: left; } }
 
 /* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
 :deep(*) {

@@ -2022,10 +2022,23 @@ async function getPendingReviews(user) {
            WHERE f.status IN ('pending_class_committee','pending_objection_review') AND t.reviewer_id=? AND t.status='pending'`;
     params = [user.id, user.id];
   } else if (user.role === "counselor") {
+    const scope = user.scope || {};
+    if (!scope.college || !scope.grade) return [];
     sql = `SELECT DISTINCT f.* FROM assessment_forms f
            JOIN assessment_review_tasks t ON t.form_id=f.id
-           WHERE f.status='pending_counselor' AND t.reviewer_id=? AND t.stage='counselor' AND t.status='pending'`;
-    params = [user.id];
+           WHERE f.status='pending_counselor'
+             AND t.reviewer_id=? AND t.stage='counselor' AND t.status='pending'
+             AND f.college=? AND f.grade=?`;
+    params = [user.id, scope.college, scope.grade];
+    if (scope.major) {
+      sql += " AND f.major=?";
+      params.push(scope.major);
+    }
+    const classIds = normalizeIds(scope.class_ids);
+    if (classIds.length) {
+      sql += ` AND f.class_id IN (${classIds.map(() => "?").join(",")})`;
+      params.push(...classIds);
+    }
   } else if (user.role === "student_affairs") {
     sql = `SELECT DISTINCT f.* FROM assessment_forms f
            JOIN assessment_review_tasks t ON t.form_id=f.id

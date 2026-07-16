@@ -35,6 +35,7 @@
         >
           <VIcon :icon="item.icon" />
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
         </router-link>
       </nav>
 
@@ -142,6 +143,7 @@
           </span>
 
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge side-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
 
           <span class="active-marker"></span>
         </router-link>
@@ -226,6 +228,7 @@
         @click="mobileMenuOpen = !mobileMenuOpen"
       >
         <VIcon :icon="mobileMenuOpen ? 'mdi:close' : 'mdi:menu'" />
+        <span v-if="module3NoticeCount" class="mobile-menu-notice" aria-label="有待处理消息">{{ formatNoticeCount(module3NoticeCount) }}</span>
       </button>
 
       <button
@@ -266,6 +269,7 @@
         >
           <VIcon :icon="item.icon" />
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge mobile-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
         </router-link>
 
         <button
@@ -323,12 +327,14 @@ import {
   computed,
   nextTick,
   onBeforeUnmount,
+  onMounted,
   ref,
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import ThemeToggle from '../components/ThemeToggle.vue'
+import { getMyMaterials, getPendingReviews, getStudentBatches } from '../api/module3'
 
 const route = useRoute()
 const router = useRouter()
@@ -339,11 +345,14 @@ const mobileMenuOpen = ref(false)
 
 const navMode = ref(getSavedNavMode())
 const pageShell = ref(null)
+const module3NoticeCount = ref(0)
 
 const NAV_SWITCH_DURATION = 320
+const NOTICE_REFRESH_INTERVAL = 60000
 
 let navResizeFrame = 0
 let navLayoutAnimation = null
+let noticeRefreshTimer = 0
 
 function getSavedNavMode() {
   try {
@@ -496,6 +505,103 @@ const managementHome = computed(() =>
   '/module3/student'
 )
 
+
+function noticeStorageKey() {
+  return `lingshu-module3-seen-notices-${userStore.user?.id || 'anonymous'}`
+}
+
+function readSeenNoticeKeys() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(noticeStorageKey()) || '[]')
+    return new Set(Array.isArray(saved) ? saved : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function formatNoticeCount(count) {
+  const number = Number(count || 0)
+  return number > 99 ? '99+' : String(number)
+}
+
+function calculateStudentNoticeCount(batches, forms, pendingCount = 0) {
+  const seenKeys = readSeenNoticeKeys()
+  const formsByBatch = new Map(
+    (forms || [])
+      .filter(form => Number(form?.batch_id || 0))
+      .map(form => [Number(form.batch_id), form])
+  )
+  const actionableKeys = new Set()
+  const unreadResultKeys = new Set()
+
+  ;(batches || [])
+    .filter(batch => batch?.status === 'published')
+    .forEach(batch => {
+      const batchId = Number(batch.id || 0)
+      if (!batchId) return
+      const form = formsByBatch.get(batchId)
+      const status = String(form?.status || '')
+      if (!form || ['draft', 'smart_ready'].includes(status) || status.startsWith('returned')) {
+        actionableKeys.add(`form-${batchId}`)
+      }
+    })
+
+  ;(forms || []).forEach(form => {
+    const batchId = Number(form?.batch_id || 0)
+    if (!batchId) return
+    const status = String(form?.status || '')
+    if (status.startsWith('returned')) {
+      actionableKeys.add(`form-${batchId}`)
+    }
+    if (form?.result_released && status !== 'pending_objection_review') {
+      const key = `result-${form.id}-${form.result_released_at || form.updated_at || status}`
+      if (!seenKeys.has(key)) unreadResultKeys.add(key)
+    }
+  })
+
+  return actionableKeys.size + unreadResultKeys.size + Math.max(Number(pendingCount || 0), 0)
+}
+
+async function refreshModule3NoticeCount() {
+  if (!userStore.isLoggedIn) {
+    module3NoticeCount.value = 0
+    return
+  }
+
+  const role = userStore.userRole
+  if (role === 'student') {
+    const jobs = [getStudentBatches(), getMyMaterials()]
+    if (userStore.user?.is_assessment_member) jobs.push(getPendingReviews())
+    const results = await Promise.allSettled(jobs)
+    const batchRes = results[0]?.status === 'fulfilled' ? results[0].value : null
+    const formRes = results[1]?.status === 'fulfilled' ? results[1].value : null
+    const pendingRes = results[2]?.status === 'fulfilled' ? results[2].value : null
+    const pendingCount = pendingRes?.code === 200 && Array.isArray(pendingRes.data)
+      ? pendingRes.data.length
+      : 0
+    module3NoticeCount.value = calculateStudentNoticeCount(
+      batchRes?.code === 200 && Array.isArray(batchRes.data) ? batchRes.data : [],
+      formRes?.code === 200 && Array.isArray(formRes.data) ? formRes.data : [],
+      pendingCount
+    )
+    return
+  }
+
+  if (['counselor', 'student_affairs'].includes(role)) {
+    try {
+      const response = await getPendingReviews()
+      module3NoticeCount.value = response?.code === 200 && Array.isArray(response.data)
+        ? response.data.length
+        : 0
+    } catch {
+      module3NoticeCount.value = 0
+    }
+    return
+  }
+
+  module3NoticeCount.value = 0
+}
+
 const navItems = computed(() => {
   const items = []
 
@@ -532,6 +638,7 @@ const navItems = computed(() => {
       path: '/module3/admin',
       section: '/module3/admin',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: 0,
     })
   }
 
@@ -542,6 +649,7 @@ const navItems = computed(() => {
       path: '/module3/counselor',
       section: '/module3/counselor',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -552,6 +660,7 @@ const navItems = computed(() => {
       path: '/module3/student-affairs',
       section: '/module3/student-affairs',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -562,6 +671,7 @@ const navItems = computed(() => {
       path: managementHome.value,
       section: '/module3',
       icon: 'mdi:account-group-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -601,7 +711,13 @@ function closeUserMenu() {
 }
 
 function goHome() {
-  router.push('/home')
+  const roleLanding = {
+    admin: '/module3/admin',
+    counselor: '/module3/counselor',
+    student_affairs: '/module3/student-affairs',
+    student: '/home',
+  }
+  router.push(roleLanding[userStore.userRole] || (userStore.isLoggedIn ? '/login' : '/home'))
 }
 
 function handleLogout() {
@@ -615,12 +731,33 @@ watch(
   () => {
     showUserMenu.value = false
     mobileMenuOpen.value = false
+    refreshModule3NoticeCount()
   }
 )
+
+function handleNoticeRefreshEvent() {
+  refreshModule3NoticeCount()
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') refreshModule3NoticeCount()
+}
+
+onMounted(() => {
+  refreshModule3NoticeCount()
+  noticeRefreshTimer = window.setInterval(refreshModule3NoticeCount, NOTICE_REFRESH_INTERVAL)
+  window.addEventListener('focus', handleNoticeRefreshEvent)
+  window.addEventListener('lingshu-module3-notice-change', handleNoticeRefreshEvent)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(navResizeFrame)
   navLayoutAnimation?.cancel()
+  window.clearInterval(noticeRefreshTimer)
+  window.removeEventListener('focus', handleNoticeRefreshEvent)
+  window.removeEventListener('lingshu-module3-notice-change', handleNoticeRefreshEvent)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -739,6 +876,64 @@ onBeforeUnmount(() => {
 
 .nav-item.active svg {
   color: #f4b847;
+}
+
+.nav-notice-badge {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 2px solid rgba(14, 15, 22, 0.96);
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  animation: noticePulse 1.8s ease-in-out infinite;
+}
+
+.side-notice-badge {
+  position: absolute;
+  top: 8px;
+  right: 11px;
+  border-color: rgba(18, 19, 27, 0.97);
+}
+
+.mobile-notice-badge {
+  margin-left: auto;
+  border-color: rgba(17, 18, 26, 0.97);
+}
+
+.mobile-menu-button {
+  position: relative;
+}
+
+.mobile-menu-notice {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  border: 2px solid rgba(14, 15, 22, 0.98);
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+@keyframes noticePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 .top-actions {

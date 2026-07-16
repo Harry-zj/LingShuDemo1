@@ -37,11 +37,8 @@
       </div>
 
       <div class="section-overview-toolbar">
-        <span>点击卡片可展开或收起对应大项</span>
-        <div>
-          <button type="button" :disabled="allSectionsExpanded" @click="expandAllSections"><VIcon icon="mdi:unfold-more-horizontal" />展开全部</button>
-          <button type="button" :disabled="!expandedSections.size" @click="collapseAllSections"><VIcon icon="mdi:unfold-less-horizontal" />收起全部</button>
-        </div>
+        <span>点击卡片切换大项，同时仅展开一个大项</span>
+        <button type="button" :disabled="!expandedSections.size" @click="collapseAllSections"><VIcon icon="mdi:unfold-less-horizontal" />收起当前</button>
       </div>
 
       <div class="section-overview-grid">
@@ -104,21 +101,32 @@
 
           <div class="sub-block" v-for="child in section.children" :key="child.key">
             <div class="sub-head">
-              <div class="sub-title">{{ child.title }}</div>
+              <div class="sub-identity">
+                <span class="sub-code">{{ child.key }}</span>
+                <div>
+                  <div class="sub-title">{{ child.title }}</div>
+                  <small>{{ child.items.length }} 个项目 · 每个项目独立展示</small>
+                </div>
+              </div>
               <button v-if="editable" class="mini-btn" @click="addItem(section.key, child.key)">
                 <VIcon icon="mdi:plus" />新增项目
               </button>
             </div>
 
             <div v-if="child.items.length" class="item-list">
-              <div class="item-card" v-for="item in child.items" :key="item.id">
+              <div class="item-card" v-for="(item, itemIndex) in child.items" :key="item.id">
+                <div class="item-location-head">
+                  <span class="item-order">{{ itemIndex + 1 }}</span>
+                  <span class="item-location-copy">
+                    <strong>第 {{ itemIndex + 1 }} 项</strong>
+                    <small>{{ child.key }} · {{ child.title }}</small>
+                  </span>
+                  <button v-if="editable" class="danger-btn" @click="removeItem(item)">
+                    <VIcon icon="mdi:trash-can-outline" />删除
+                  </button>
+                </div>
+
                 <template v-if="editable">
-                  <div class="item-edit-head">
-                    <span>项目内容</span>
-                    <button class="danger-btn" @click="removeItem(item)">
-                      <VIcon icon="mdi:trash-can-outline" />删除
-                    </button>
-                  </div>
 
                   <label class="field-label">项目名称</label>
                   <input v-model="item.title" class="item-input" placeholder="请输入加分项目名称" />
@@ -322,9 +330,6 @@ const localGrouped = computed(() => {
   });
 });
 
-const allSectionsExpanded = computed(() => localGrouped.value.length > 0
-  && localGrouped.value.every(section => expandedSections.value.has(section.key)));
-
 watch(localGrouped, groups => {
   const context = `${props.form?.id ?? 'form'}:${props.editable}:${props.objectionMode}:${props.startCollapsed}`;
   if (context === expandedContext) return;
@@ -407,14 +412,9 @@ function isSectionExpanded(sectionKey) {
 }
 
 function toggleSection(sectionKey) {
-  const next = new Set(expandedSections.value);
-  if (next.has(sectionKey)) next.delete(sectionKey);
-  else next.add(sectionKey);
-  expandedSections.value = next;
-}
-
-function expandAllSections() {
-  expandedSections.value = new Set(localGrouped.value.map(section => section.key));
+  expandedSections.value = expandedSections.value.has(sectionKey)
+    ? new Set()
+    : new Set([sectionKey]);
 }
 
 function collapseAllSections() {
@@ -554,7 +554,6 @@ function removeItem(item) {
 .score-formula { margin: -6px 0 16px; color: var(--color-text-secondary); font-size: 12px; line-height: 1.6; }
 .edit-tip { padding: 12px 14px; border-radius: 8px !important; background: var(--color-bg); color: var(--color-text-secondary); line-height: 1.6; font-size: 13px; }
 .section-overview-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-secondary); font-size: 12px; }
-.section-overview-toolbar > div { display: flex; gap: 8px; }
 .section-overview-toolbar button, .section-close-btn { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 0 11px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-secondary); cursor: pointer; }
 .section-overview-toolbar button:hover, .section-close-btn:hover { color: var(--color-primary); border-color: color-mix(in srgb, var(--color-primary) 45%, var(--color-border)); }
 .section-overview-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
@@ -596,12 +595,21 @@ function removeItem(item) {
 .section-score span { grid-column: 1 / -1; text-align: right; }
 .section-score strong { color: var(--section-accent); font-size: 22px; }
 .section-score small { color: var(--color-text-tertiary); }
-.sub-block { padding: 14px; margin-bottom: 12px; border-radius: 8px !important; background: var(--color-bg); }
-.sub-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; }
-.sub-title { font-weight: var(--font-weight-semibold); }
-.item-list { display: flex; flex-direction: column; gap: 10px; }
-.item-card { padding: 12px; border-radius: 8px !important; background: var(--color-surface); border: 1px solid var(--color-border); }
-.item-edit-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; font-weight: var(--font-weight-semibold); }
+.sub-block { margin-bottom: 20px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--section-accent) 24%, var(--color-border)); border-radius: 10px !important; background: var(--color-surface); box-shadow: 0 8px 20px rgba(15, 23, 42, .055); }
+.sub-block:last-child { margin-bottom: 0; }
+.sub-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 16px; margin-bottom: 0; border-bottom: 1px solid color-mix(in srgb, var(--section-accent) 18%, var(--color-border)); background: color-mix(in srgb, var(--section-accent) 7%, var(--color-surface)); }
+.sub-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.sub-code { display: grid; place-items: center; min-width: 42px; height: 34px; padding: 0 8px; border-radius: 7px !important; background: var(--section-accent); color: #fff; font-size: 13px; font-weight: 900; letter-spacing: .05em; }
+.sub-title { font-weight: 800; line-height: 1.4; }
+.sub-identity small { display: block; margin-top: 3px; color: var(--color-text-secondary); font-size: 11px; }
+.item-list { display: flex; flex-direction: column; gap: 16px; padding: 16px; background: color-mix(in srgb, var(--color-bg) 74%, transparent); }
+.item-card { position: relative; padding: 16px; overflow: hidden; border: 1px solid color-mix(in srgb, var(--section-accent) 20%, var(--color-border)); border-left: 4px solid var(--section-accent); border-radius: 9px !important; background: var(--color-surface); box-shadow: 0 5px 14px rgba(15, 23, 42, .05); }
+.item-card + .item-card { margin-top: 2px; }
+.item-location-head { display: flex; align-items: center; gap: 10px; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px dashed color-mix(in srgb, var(--section-accent) 24%, var(--color-border)); }
+.item-order { display: grid; place-items: center; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50% !important; background: color-mix(in srgb, var(--section-accent) 14%, var(--color-bg)); color: var(--section-accent); font-size: 13px; font-weight: 900; }
+.item-location-copy { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.item-location-copy strong { font-size: 13px; }
+.item-location-copy small { color: var(--color-text-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .field-label { display: block; margin: 10px 0 6px; font-size: 12px; color: var(--color-text-secondary); }
 .item-title { font-weight: var(--font-weight-semibold); }
 .item-title span { color: var(--color-primary); }
@@ -629,7 +637,7 @@ function removeItem(item) {
 .evidence-remove { display: inline-flex; align-items: center; justify-content: center; width: 27px; height: 27px; border: 0; border-left: 1px solid var(--color-border); background: transparent; color: var(--color-text-tertiary); cursor: pointer; }
 .evidence-remove:hover { color: #ef4444; background: rgba(239,68,68,.08); }
 .evidence-empty { color: var(--color-text-tertiary); font-size: 12px; }
-.empty-sub { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--color-text-tertiary); font-size: 13px; }
+.empty-sub { display: flex; align-items: center; justify-content: center; min-height: 76px; padding: 18px 16px; color: var(--color-text-tertiary); background: color-mix(in srgb, var(--color-bg) 74%, transparent); font-size: 13px; text-align: center; }
 .item-input, .item-textarea, .edit-row input, .edit-row select {
   border: 1px solid var(--color-border); border-radius: 8px !important;
   background: var(--color-bg); color: var(--color-text-primary); padding: 8px; width: 100%;

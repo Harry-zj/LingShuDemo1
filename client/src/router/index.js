@@ -8,14 +8,14 @@ const routes = [
   { path: "/", redirect: "/home" },
   { path: "/home", name: "Home", component: () => import("../views/Home.vue"), meta: { layout: "main", title: "首页" } },
   /* 综测核心 */
-  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表" } },
-  { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表" } },
-  { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表" } },
+  { path: "/zongce/smart-fill", name: "SmartFill", component: smartFillView, meta: { layout: "main", title: "智能填表", roles: ["student"] } },
+  { path: "/zongce/batch-fill", name: "BatchFill", component: () => import("../views/zongce/BatchFill.vue"), meta: { layout: "main", title: "批量填表", roles: ["student"] } },
+  { path: "/zongce/chat-fill", name: "ChatFill", component: () => import("../views/zongce/ChatFill.vue"), meta: { layout: "main", title: "对话填表", roles: ["student"] } },
   /* 模块二 */
-  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "数据总览" } },
-  { path: "/module2/profile", name: "PersonalProfile", component: () => import("../views/module2/PersonalProfile.vue"), meta: { layout: "main", title: "个人画像" } },
-  { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告" } },
-{ path: "/module2/dimension/:key", name: "DimensionDetail", component: () => import("../views/module2/DimensionDetail.vue"), meta: { layout: "main", title: "维度活动指南" } },
+  { path: "/module2/evaluation", name: "EvaluationResult", component: () => import("../views/module2/EvaluationResult.vue"), meta: { layout: "main", title: "数据总览", roles: ["student"] } },
+  { path: "/module2/profile", name: "PersonalProfile", component: () => import("../views/module2/PersonalProfile.vue"), meta: { layout: "main", title: "个人画像", roles: ["student"] } },
+  { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告", roles: ["student"] } },
+{ path: "/module2/dimension/:key", name: "DimensionDetail", component: () => import("../views/module2/DimensionDetail.vue"), meta: { layout: "main", title: "维度活动指南", roles: ["student"] } },
   /* 模块三 */
   { path: "/module3/profile", name: "Module3Profile", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "menu" }, meta: { layout: "main", title: "个人中心", roles: ["student", "admin", "counselor", "student_affairs"] } },
   { path: "/module3/profile/basic", name: "Module3ProfileBasic", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "basic" }, meta: { layout: "main", title: "基础信息", roles: ["student", "admin", "counselor", "student_affairs"] } },
@@ -50,15 +50,34 @@ const routes = [
 ];
 const router = createRouter({ history: createWebHistory(), routes });
 
-// 路由守卫：检查页面级角色权限
+const ROLE_LANDING = {
+  student: "/home",
+  admin: "/module3/admin",
+  counselor: "/module3/counselor",
+  student_affairs: "/module3/student-affairs",
+};
+
+function isStudentPortalRoute(path) {
+  return path === "/home" || path.startsWith("/zongce/") || path.startsWith("/module2/");
+}
+
+// 路由守卫：检查页面级角色权限，并隔离学生端与管理端入口。
 router.beforeEach((to, from, next) => {
   const store = useUserStore();
-  const requiredRoles = to.meta.roles;
-  if (requiredRoles && !requiredRoles.includes(store.userRole)) {
-    next({ name: "Home" });
+  const role = store.userRole;
+  const roleLanding = ROLE_LANDING[role] || "/login";
+
+  if (store.isLoggedIn && role !== "student" && isStudentPortalRoute(to.path)) {
+    next(roleLanding);
     return;
   }
-  if (store.userRole === "counselor" && store.user?.profile_complete === false && to.name !== "Module3ProfileBasic") {
+
+  const requiredRoles = to.meta.roles;
+  if (requiredRoles && !requiredRoles.includes(role)) {
+    next(store.isLoggedIn ? roleLanding : { name: "Login" });
+    return;
+  }
+  if (role === "counselor" && store.user?.profile_complete === false && to.name !== "Module3ProfileBasic") {
     next({ name: "Module3ProfileBasic", query: { required: "1" } });
     return;
   }
