@@ -99,6 +99,13 @@
         <p class="guide-note">提示：占位符需用花括号包裹，如 {real_name}，系统将自动查找并替换模板中的占位符。</p>
       </div>
     </details>
+
+    <div class="back-to-top-row">
+      <button type="button" class="back-to-top-btn" @click="scrollToTop">
+        <span aria-hidden="true">↑</span>
+        回到页面顶部
+      </button>
+    </div>
   </div>
 </template>
 <script setup>
@@ -120,6 +127,10 @@ const fillDone = ref(false)
 const fillError = ref('')
 const showPreview = ref(true)
 const isSubmitting = ref(false)
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 const fillData = ref({
   real_name: '', student_id: '', academic_year: '', grade: '', total_score: 0,
@@ -438,7 +449,7 @@ async function submitToReview() {
     } catch(e) { console.warn('saveEvaluationResult:', e.message) }
 
     // ③ 写入 assessment_forms + assessment_form_items（信息管理端）
-    const payload = { items, batch_id: props.batchId || null }
+    const payload = { items, batch_id: props.batchId || null, rule_set_id: props.ruleSetId || null }
     console.log('[submitToReview] updateSmartResult payload:', JSON.stringify(payload).slice(0,200))
     const res = await updateSmartResult(payload)
     if (res.code === 200) {
@@ -495,6 +506,10 @@ async function submitToReview() {
 .error-card{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background: var(--color-error-bg);border:1px solid #fecaca;border-radius:8px;color:#D93025;font-size:14px}
 .placeholder-guide{margin-top:4px;border:1px solid var(--color-border);border-radius:8px;padding:12px 16px}
 .placeholder-guide summary{cursor:pointer;font-size:14px;color:var(--color-primary);font-weight:500}
+.back-to-top-row{display:flex;justify-content:center;padding-top:4px}
+.back-to-top-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:180px;min-height:44px;padding:0 20px;border:1px solid color-mix(in srgb,var(--color-primary) 36%,var(--color-border));border-radius:8px;background:color-mix(in srgb,var(--color-primary) 9%,var(--color-surface));color:var(--color-primary);font-size:14px;font-weight:700;cursor:pointer;transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.back-to-top-btn:hover{transform:translateY(-2px);border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 14%,var(--color-surface))}
+.back-to-top-btn span{font-size:20px;font-weight:900;line-height:1}
 .guide-content{margin-top:12px}.guide-hint{font-size:13px;color: var(--color-text-secondary);margin-bottom:14px}
 .ph-group{margin-bottom:14px}.ph-group-title{font-size:13px;font-weight:600;margin-bottom:6px;color: var(--color-text)}
 .ph-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;padding:8px 12px;background: var(--color-surface-variant);border-radius:4px}

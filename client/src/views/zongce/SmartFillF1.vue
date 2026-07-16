@@ -13,19 +13,24 @@
     <div class="f1-footer">
       <span>合计：<b>{{ f1Total }}</b> / {{ sectionLimit }} 分</span>
       <span class="weight-note">加权后 {{ f1Weighted }} 分</span>
-      <button class="btn-complete" @click="emit('complete')">✓ 完成填写</button>
+      <button class="btn-complete" :disabled="saving" @click="completeF1">{{ saving ? '保存中...' : '✓ 完成填写' }}</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { useSmartFillStore } from '@/stores/smartFill'
 import * as api from '@/api/zongce'
 
 const store = useSmartFillStore()
 const emit = defineEmits(['complete'])
-const props = defineProps({ scorePolicy: { type: Object, default: () => ({}) } })
+const props = defineProps({
+  scorePolicy: { type: Object, default: () => ({}) },
+  ruleSetId: { type: Number, default: 0 },
+  batchId: { type: [Number, String], default: null },
+})
+const saving = ref(false)
 const sectionLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.F1 ?? 100))
 const f1Total = computed(() => Math.min(Number(store.f1Total || 0), sectionLimit.value))
 const f1Weighted = computed(() => Number((f1Total.value * 0.1).toFixed(2)))
@@ -38,18 +43,48 @@ watch(() => props.scorePolicy?.scoreLimits, limits => {
   }
 }, { immediate: true, deep: true })
 
+function buildSaveItems() {
+  return store.f1Items.map(a => ({
+    section: 'F1',
+    item_key: a.key,
+    score: a.base - a.score,
+    description: a.detail,
+    rule_set_id: props.ruleSetId || 0,
+  }))
+}
+
+async function persistF1() {
+  return api.saveFillData(buildSaveItems(), props.batchId)
+}
+
 let saveTimer = null
 watch(() => store.f1Items.map(a => ({ key: a.key, score: a.score, detail: a.detail })), () => {
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    api.saveFillData(store.f1Items.map(a => ({ section:'F1',item_key:a.key,score:a.base-a.score,description:a.detail,rule_set_id:0 }))).catch(()=>{})
+    persistF1().catch(() => {})
   }, 800)
 }, { deep: true })
 
 onBeforeUnmount(() => {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  api.saveFillData(store.f1Items.map(a => ({ section:'F1',item_key:a.key,score:a.base-a.score,description:a.detail,rule_set_id:0 }))).catch(()=>{})
+  persistF1().catch(() => {})
 })
+
+async function completeF1() {
+  if (saving.value) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+  saving.value = true
+  try {
+    const response = await persistF1()
+    if (response?.code !== 200) return alert(response?.msg || 'F1 保存失败')
+    emit('complete')
+  } catch (error) {
+    alert(error?.response?.data?.msg || error?.message || 'F1 保存失败')
+  } finally {
+    saving.value = false
+  }
+}
 
 async function generateAI(a) {
   try { const r = await api.generateF1Description('F1', a.key, a.label); if (r.code===200&&r.data?.description) a.detail = r.data.description } catch (_) {}

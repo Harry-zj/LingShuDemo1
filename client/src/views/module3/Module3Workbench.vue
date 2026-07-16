@@ -85,16 +85,24 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { getMyMaterials, getPendingReviews, getStudentBatches } from '../../api/module3';
 import { useUserStore } from '../../stores/user';
+import {
+  buildStudentNoticeSummary,
+  MODULE3_NOTICE_CHANGE_EVENT,
+  readModule3SeenNoticeKeys,
+  writeModule3SeenNoticeKeys,
+} from '../../utils/module3Notice';
 
 const router = useRouter();
 const userStore = useUserStore();
 const studentNoticeSource = ref([]);
 const seenNoticeKeys = ref(new Set());
 const pendingReviewCount = ref(0);
+const NOTICE_REFRESH_INTERVAL = 60000;
+let noticeRefreshTimer = 0;
 
 const configs = {
   admin: {
@@ -166,12 +174,14 @@ const configs = {
 };
 
 const config = computed(() => configs[userStore.userRole] || configs.student);
-const unseenStudentNotices = computed(() => studentNoticeSource.value.filter(notice => !seenNoticeKeys.value.has(notice.key)));
-const formNoticeCount = computed(() => unseenStudentNotices.value.filter(notice => ['batch', 'returned'].includes(notice.type)).length);
-const resultNoticeCount = computed(() => unseenStudentNotices.value.filter(notice => notice.type === 'result').length);
-const attentionCount = computed(() => unseenStudentNotices.value.length + pendingReviewCount.value);
+const activeStudentNotices = computed(() => studentNoticeSource.value.filter(notice =>
+  notice.lifecycle === 'actionable' || !seenNoticeKeys.value.has(notice.key)
+));
+const formNoticeCount = computed(() => activeStudentNotices.value.filter(notice => notice.type === 'form').length);
+const resultNoticeCount = computed(() => activeStudentNotices.value.filter(notice => notice.type === 'result').length);
+const attentionCount = computed(() => activeStudentNotices.value.length + pendingReviewCount.value);
 const attentionItems = computed(() => {
-  const items = [...unseenStudentNotices.value];
+  const items = [...activeStudentNotices.value];
   if (pendingReviewCount.value > 0) {
     items.push({
       type: 'review',
@@ -201,75 +211,22 @@ function decorateCard(card) {
 const primaryCards = computed(() => config.value.primary.map(decorateCard));
 const secondaryCards = computed(() => (config.value.secondary || []).map(decorateCard));
 
-function noticeStorageKey() {
-  return `lingshu-module3-seen-notices-${userStore.user?.id || 'anonymous'}`;
-}
-
 function readSeenNotices() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(noticeStorageKey()) || '[]');
-    seenNoticeKeys.value = new Set(Array.isArray(saved) ? saved : []);
-  } catch {
-    seenNoticeKeys.value = new Set();
-  }
+  seenNoticeKeys.value = readModule3SeenNoticeKeys(userStore.user?.id);
 }
 
 function persistSeenNotices() {
-  try {
-    localStorage.setItem(noticeStorageKey(), JSON.stringify([...seenNoticeKeys.value]));
-  } catch {
-    // 本地存储不可用时仍保留当前页面状态
-  }
-  window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
+  writeModule3SeenNoticeKeys(userStore.user?.id, seenNoticeKeys.value);
+  window.dispatchEvent(new CustomEvent(MODULE3_NOTICE_CHANGE_EVENT));
 }
 
 function markNotices(predicate) {
   const next = new Set(seenNoticeKeys.value);
-  studentNoticeSource.value.filter(predicate).forEach(notice => next.add(notice.key));
+  studentNoticeSource.value
+    .filter(notice => notice.lifecycle === 'unread' && predicate(notice))
+    .forEach(notice => next.add(notice.key));
   seenNoticeKeys.value = next;
   persistSeenNotices();
-}
-
-function makeStudentNotices(batches, forms) {
-  const notices = [];
-  const publishedBatches = (batches || []).filter(batch => batch.status === 'published');
-  publishedBatches.forEach(batch => {
-    notices.push({
-      key: `batch-${batch.id}`,
-      type: 'batch',
-      title: '新的综测批次已发布',
-      description: `“${batch.title}”已开放，请进入综测信息填写。`,
-      icon: 'mdi:calendar-star-outline',
-      to: `/module3/student/forms/${batch.id}`,
-    });
-  });
-
-  (forms || []).forEach(form => {
-    const batchId = Number(form.batch_id || 0);
-    if (!batchId) return;
-    if (String(form.status || '').startsWith('returned')) {
-      notices.push({
-        key: `returned-${form.id}-${form.updated_at || form.status}`,
-        type: 'returned',
-        title: '综测表已被退回',
-        description: `“${form.batch_title || '当前批次'}”需要修改后重新提交。`,
-        icon: 'mdi:file-undo-outline',
-        to: `/module3/student/forms/${batchId}`,
-      });
-      return;
-    }
-    if (form.result_released && form.status !== 'pending_objection_review') {
-      notices.push({
-        key: `result-${form.id}-${form.result_released_at || form.updated_at || form.status}`,
-        type: 'result',
-        title: '综测结果已返回',
-        description: `“${form.batch_title || '当前批次'}”结果已生成，可查看评价记录和异议入口。`,
-        icon: 'mdi:bell-check-outline',
-        to: `/module3/student/results/${batchId}`,
-      });
-    }
-  });
-  return notices;
 }
 
 async function loadAttention() {
@@ -281,10 +238,11 @@ async function loadAttention() {
     const results = await Promise.allSettled(jobs);
     const batchRes = results[0]?.status === 'fulfilled' ? results[0].value : null;
     const formRes = results[1]?.status === 'fulfilled' ? results[1].value : null;
-    studentNoticeSource.value = makeStudentNotices(
+    studentNoticeSource.value = buildStudentNoticeSummary(
       batchRes?.code === 200 ? batchRes.data || [] : [],
-      formRes?.code === 200 ? formRes.data || [] : []
-    );
+      formRes?.code === 200 ? formRes.data || [] : [],
+      seenNoticeKeys.value
+    ).notices;
     const pendingRes = results[2]?.status === 'fulfilled' ? results[2].value : null;
     pendingReviewCount.value = pendingRes?.code === 200 ? (pendingRes.data || []).length : 0;
     return;
@@ -301,24 +259,37 @@ async function loadAttention() {
 }
 
 function openNotice(notice) {
-  if (notice.key) markNotices(current => current.key === notice.key);
+  if (notice.lifecycle === 'unread' && notice.key) {
+    markNotices(current => current.key === notice.key);
+  }
   if (notice.to) router.push(notice.to);
 }
 
 function open(card) {
   if (card.disabled || !card.to) return;
-  if (userStore.userRole === 'student' && card.title === '综测信息填写') {
-    markNotices(notice => ['batch', 'returned'].includes(notice.type));
-  }
+  // “待填写/被退回”与导航栏保持一致：点击仅进入详情，不清除红点。
   if (userStore.userRole === 'student' && card.title === '结果与异议') {
     markNotices(notice => notice.type === 'result');
   }
   router.push(card.to);
 }
 
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') loadAttention();
+}
+
 onMounted(async () => {
   await loadAttention();
-  window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
+  window.dispatchEvent(new CustomEvent(MODULE3_NOTICE_CHANGE_EVENT));
+  noticeRefreshTimer = window.setInterval(loadAttention, NOTICE_REFRESH_INTERVAL);
+  window.addEventListener('focus', loadAttention);
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+onBeforeUnmount(() => {
+  window.clearInterval(noticeRefreshTimer);
+  window.removeEventListener('focus', loadAttention);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
 });
 </script>
 

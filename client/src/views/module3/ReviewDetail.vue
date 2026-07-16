@@ -24,6 +24,30 @@
       </div>
     </div>
 
+    <div class="smart-evidence-card glass-card" v-if="form?.smart_fill_evidence_files?.length">
+      <div class="panel-header">
+        <h3><VIcon icon="mdi:paperclip" />智能填表证明材料</h3>
+        <span class="panel-count">共 {{ form.smart_fill_evidence_files.length }} 份</span>
+      </div>
+      <p class="smart-evidence-hint">以下文件来自学生智能填表中已确认计分的材料，可直接打开核验；与具体项目匹配的文件也会显示在对应评价项中。</p>
+      <div class="smart-evidence-list">
+        <a
+          v-for="file in form.smart_fill_evidence_files"
+          :key="file.id"
+          class="smart-evidence-file"
+          :href="file.url"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <VIcon icon="mdi:file-document-outline" />
+          <span>
+            <strong>{{ file.name }}</strong>
+            <small>{{ file.material_title || file.type || '证明材料' }}</small>
+          </span>
+          <VIcon icon="mdi:open-in-new" />
+        </a>
+      </div>
+    </div>
 
     <div class="item-review-groups" v-if="form && reviewableItems.length">
       <div class="review-groups-header">
@@ -43,7 +67,6 @@
           :class="[`review-section-${group.key.toLowerCase()}`, { active: isReviewSectionExpanded(group.key), empty: !group.items.length, warning: reviewedGroupCount(group) < group.items.length }]"
           v-for="group in groupedReviewItems"
           :key="`review-overview-${group.key}`"
-          :disabled="!group.items.length"
           :aria-expanded="isReviewSectionExpanded(group.key)"
           @click="toggleReviewSection(group.key)"
         >
@@ -63,8 +86,8 @@
             <small>{{ reviewActionSummary(group) }}</small>
           </div>
           <div class="review-overview-action">
-            <span>{{ !group.items.length ? '当前无待评项目' : (isReviewSectionExpanded(group.key) ? '收起评价项' : '展开评价项') }}</span>
-            <VIcon v-if="group.items.length" :icon="isReviewSectionExpanded(group.key) ? 'mdi:chevron-up' : 'mdi:chevron-down'" />
+            <span>{{ isReviewSectionExpanded(group.key) ? '收起评价项' : (!group.items.length ? '展开查看' : '展开评价项') }}</span>
+            <VIcon :icon="isReviewSectionExpanded(group.key) ? 'mdi:chevron-up' : 'mdi:chevron-down'" />
           </div>
         </button>
       </div>
@@ -74,7 +97,7 @@
           class="item-review-box glass-card"
           :class="`review-section-${group.key.toLowerCase()}`"
           v-for="group in groupedReviewItems"
-          v-show="group.items.length && isReviewSectionExpanded(group.key)"
+          v-show="isReviewSectionExpanded(group.key)"
           :key="`review-detail-${group.key}`"
         >
           <div class="panel-header section-review-header">
@@ -96,7 +119,7 @@
               </button>
             </div>
           </div>
-          <div class="item-review-list">
+          <div v-if="group.items.length" class="item-review-list">
             <section class="review-subgroup" v-for="subgroup in group.subgroups" :key="`${group.key}-${subgroup.key}`">
               <div class="review-subgroup-header">
                 <span class="review-sub-code">{{ subgroup.key }}</span>
@@ -124,6 +147,30 @@
                       <span v-if="item.objection" class="objection-tag">异议：{{ item.objection.reason }}</span>
                     </div>
                   </div>
+
+                  <div class="student-submission">
+                    <div class="student-reason">
+                      <span><VIcon icon="mdi:text-box-outline" />学生填写理由</span>
+                      <p>{{ item.reason || '学生未填写该项理由' }}</p>
+                    </div>
+                    <div class="item-evidence">
+                      <span><VIcon icon="mdi:attachment" />本项证明材料</span>
+                      <div v-if="item.evidence_files?.length" class="item-evidence-list">
+                        <a
+                          v-for="file in item.evidence_files"
+                          :key="file.id"
+                          :href="file.url"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <VIcon icon="mdi:file-eye-outline" />
+                          {{ file.name }}
+                        </a>
+                      </div>
+                      <p v-else class="no-evidence">该项暂无单独关联的证明材料，可查看页面上方的智能填表证明材料汇总。</p>
+                    </div>
+                  </div>
+
                   <div class="item-fields">
                     <label>
                       <span>评测结论</span>
@@ -147,6 +194,11 @@
                 </article>
               </div>
             </section>
+          </div>
+          <div v-else class="review-empty-group">
+            <VIcon icon="mdi:information-outline" />
+            <strong>该项无加分项</strong>
+            <span>当前大项没有分数大于 0 的项目，无需逐项评价。</span>
           </div>
         </section>
       </div>
@@ -178,6 +230,13 @@
           <VIcon icon="mdi:close" />不予认定
         </button>
       </div>
+    </div>
+
+    <div class="back-to-top-row" v-if="form">
+      <button type="button" class="back-to-top-btn" @click="scrollToTop">
+        <VIcon icon="mdi:arrow-up-bold-circle-outline" />
+        回到页面顶部
+      </button>
     </div>
 
     <div class="empty-state" v-if="!form">
@@ -222,7 +281,10 @@ const visibleTasks = computed(() => {
 });
 const reviewableItems = computed(() => {
   const ids = new Set((form.value?.reviewable_item_ids || []).map(Number));
-  return (form.value?.items || []).filter(item => !ids.size || ids.has(Number(item.id)));
+  return (form.value?.items || []).filter(item => {
+    const assignedToCurrentStage = !ids.size || ids.has(Number(item.id));
+    return assignedToCurrentStage && Number(item.score || 0) > 0;
+  });
 });
 const draftScores = computed(() => {
   const items = (form.value?.items || []).map(item => ({
@@ -285,8 +347,6 @@ function isReviewSectionExpanded(sectionKey) {
 }
 
 function toggleReviewSection(sectionKey) {
-  const group = groupedReviewItems.value.find(current => current.key === sectionKey);
-  if (!group?.items.length) return;
   expandedReviewSection.value = expandedReviewSection.value === sectionKey ? '' : sectionKey;
 }
 
@@ -318,7 +378,7 @@ function groupReviewProgress(group) {
 }
 
 function groupReviewStatus(group) {
-  if (!group.items.length) return '暂无待评项目';
+  if (!group.items.length) return '无加分项';
   const remaining = group.items.length - reviewedGroupCount(group);
   return remaining > 0 ? `待核查 ${remaining} 项` : '本组已核查';
 }
@@ -381,6 +441,10 @@ async function load(id = route.params.id) {
 
 function exitReview() {
   router.push('/module3/class-leader');
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function handleReview(action) {
@@ -496,6 +560,24 @@ onMounted(() => load());
 .review-confirm-btn:hover { color: var(--section-accent); border-color: color-mix(in srgb, var(--section-accent) 40%, var(--color-border)); }
 .review-confirm-btn.reviewed { border-color: rgba(52, 168, 83, .28); background: rgba(52, 168, 83, .12); color: #218739; }
 .objection-tag { max-width: 360px; font-size: 12px; line-height: 1.5; }
+.smart-evidence-card { padding: 18px; }
+.smart-evidence-hint { margin: -6px 0 14px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.7; }
+.smart-evidence-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+.smart-evidence-file { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 11px 12px; border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); text-decoration: none; }
+.smart-evidence-file > span { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
+.smart-evidence-file strong, .smart-evidence-file small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.smart-evidence-file strong { font-size: 13px; }
+.smart-evidence-file small { color: var(--color-text-tertiary); font-size: 11px; }
+.smart-evidence-file:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.student-submission { display: grid; gap: 16px; margin-bottom: 16px; padding: 17px 18px; border: 1px solid color-mix(in srgb, var(--section-accent) 30%, var(--color-border)); border-left: 4px solid var(--section-accent); background: color-mix(in srgb, var(--section-accent) 8%, var(--color-bg)); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--section-accent) 12%, transparent); }
+.student-reason > span, .item-evidence > span { display: flex; align-items: center; gap: 8px; color: var(--section-accent); font-size: 15px; font-weight: 850; letter-spacing: .01em; }
+.student-reason > span .v-icon, .item-evidence > span .v-icon { font-size: 21px; }
+.student-reason p { margin-top: 9px; color: var(--color-text-primary); font-size: 15px; font-weight: 500; line-height: 1.8; white-space: pre-wrap; }
+.no-evidence { margin-top: 9px; color: var(--color-text-secondary); font-size: 14px; line-height: 1.75; white-space: pre-wrap; }
+.item-evidence-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.item-evidence-list a { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 9px 12px; border: 1px solid color-mix(in srgb, var(--section-accent) 28%, var(--color-border)); background: var(--color-surface); color: var(--color-primary); font-size: 14px; font-weight: 650; text-decoration: none; }
+.item-evidence-list a .v-icon { font-size: 19px; }
+.item-evidence-list a:hover { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 6%, var(--color-surface)); }
 .item-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .item-fields label { display: flex; flex-direction: column; gap: 6px; color: var(--color-text-secondary); font-size: 12px; }
 .item-fields select, .item-fields input { min-height: 38px; padding: 0 10px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); }
@@ -512,6 +594,14 @@ textarea { width: 100%; min-height: 86px; border: 1px solid var(--color-border);
 .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
 .actions button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 8px !important; border: none; color: white; cursor: pointer; }
 .actions button:disabled { opacity: .6; cursor: not-allowed; }
+.review-empty-group { display: flex; min-height: 180px; padding: 32px 20px; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--color-text-secondary); text-align: center; background: color-mix(in srgb, var(--section-accent) 4%, var(--color-bg)); }
+.review-empty-group .v-icon { color: var(--section-accent); font-size: 34px; }
+.review-empty-group strong { color: var(--color-text-primary); font-size: 18px; }
+.review-empty-group span { font-size: 14px; line-height: 1.6; }
+.back-to-top-row { display: flex; justify-content: center; padding-top: 4px; }
+.back-to-top-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 180px; min-height: 44px; padding: 0 20px; border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border)); border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); color: var(--color-primary); font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
+.back-to-top-btn:hover { transform: translateY(-2px); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface)); }
+.back-to-top-btn .v-icon { font-size: 20px; }
 .btn-pass { background: #34a853; }
 .btn-return { background: #f59e0b; }
 .btn-reject { background: #ef4444; }

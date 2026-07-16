@@ -28,7 +28,7 @@
             <p><strong>智能填表说明：</strong>{{ item.reason }}</p>
             <div class="evidence">
               <strong>支撑材料：</strong>
-              <span v-for="file in item.evidence_files" :key="file.id">{{ file.file_name }}</span>
+              <a v-for="file in item.evidence_files" :key="file.id" :href="file.url" target="_blank" rel="noopener noreferrer">{{ file.name || file.file_name }}</a>
             </div>
           </section>
         </div>
@@ -88,7 +88,7 @@ button { border: none; border-radius: 8px !important; padding: 10px 14px; cursor
 .bonus-card em { color: #2563eb; font-style: normal; font-size: 14px; }
 .bonus-card p { margin: 0; color: #4b5563; line-height: 1.7; }
 .evidence { display: flex; flex-wrap: wrap; gap: 8px; color: #374151; }
-.evidence span { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px !important; padding: 4px 10px; font-size: 13px; }
+.evidence a { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px !important; padding: 4px 10px; font-size: 13px; color: #2563eb; text-decoration: none; }
 textarea { min-height: 84px; border: 1px solid #d1d5db; border-radius: 8px !important; padding: 12px; resize: vertical; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .actions .approve { background: #16a34a; color: #fff; }

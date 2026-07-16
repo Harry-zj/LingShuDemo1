@@ -335,6 +335,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import ThemeToggle from '../components/ThemeToggle.vue'
 import { getMyMaterials, getPendingReviews, getStudentBatches } from '../api/module3'
+import { calculateStudentNoticeCount, readModule3SeenNoticeKeys } from '../utils/module3Notice'
 
 const route = useRoute()
 const router = useRouter()
@@ -506,60 +507,9 @@ const managementHome = computed(() =>
 )
 
 
-function noticeStorageKey() {
-  return `lingshu-module3-seen-notices-${userStore.user?.id || 'anonymous'}`
-}
-
-function readSeenNoticeKeys() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(noticeStorageKey()) || '[]')
-    return new Set(Array.isArray(saved) ? saved : [])
-  } catch {
-    return new Set()
-  }
-}
-
 function formatNoticeCount(count) {
   const number = Number(count || 0)
   return number > 99 ? '99+' : String(number)
-}
-
-function calculateStudentNoticeCount(batches, forms, pendingCount = 0) {
-  const seenKeys = readSeenNoticeKeys()
-  const formsByBatch = new Map(
-    (forms || [])
-      .filter(form => Number(form?.batch_id || 0))
-      .map(form => [Number(form.batch_id), form])
-  )
-  const actionableKeys = new Set()
-  const unreadResultKeys = new Set()
-
-  ;(batches || [])
-    .filter(batch => batch?.status === 'published')
-    .forEach(batch => {
-      const batchId = Number(batch.id || 0)
-      if (!batchId) return
-      const form = formsByBatch.get(batchId)
-      const status = String(form?.status || '')
-      if (!form || ['draft', 'smart_ready'].includes(status) || status.startsWith('returned')) {
-        actionableKeys.add(`form-${batchId}`)
-      }
-    })
-
-  ;(forms || []).forEach(form => {
-    const batchId = Number(form?.batch_id || 0)
-    if (!batchId) return
-    const status = String(form?.status || '')
-    if (status.startsWith('returned')) {
-      actionableKeys.add(`form-${batchId}`)
-    }
-    if (form?.result_released && status !== 'pending_objection_review') {
-      const key = `result-${form.id}-${form.result_released_at || form.updated_at || status}`
-      if (!seenKeys.has(key)) unreadResultKeys.add(key)
-    }
-  })
-
-  return actionableKeys.size + unreadResultKeys.size + Math.max(Number(pendingCount || 0), 0)
 }
 
 async function refreshModule3NoticeCount() {
@@ -582,7 +532,8 @@ async function refreshModule3NoticeCount() {
     module3NoticeCount.value = calculateStudentNoticeCount(
       batchRes?.code === 200 && Array.isArray(batchRes.data) ? batchRes.data : [],
       formRes?.code === 200 && Array.isArray(formRes.data) ? formRes.data : [],
-      pendingCount
+      pendingCount,
+      readModule3SeenNoticeKeys(userStore.user?.id)
     )
     return
   }
