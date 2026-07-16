@@ -4,7 +4,7 @@
     <div v-if="currentBatch" class="batch-info-bar">
       <span class="batch-icon">📋</span>
       <span class="batch-title">{{ currentBatch.title }}</span>
-      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}级</span>
+      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
       <span class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
     </div>
     <div v-else-if="batchError" class="batch-error-bar">
