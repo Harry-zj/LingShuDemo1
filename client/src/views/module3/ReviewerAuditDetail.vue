@@ -14,8 +14,8 @@
 
     <div class="review-box glass-card" v-if="form">
       <div class="panel-header">
-        <h3><VIcon icon="mdi:medal-outline" />等级确认</h3>
-        <span class="panel-badge">系统根据综合分自动建议，可手动修改</span>
+        <h3><VIcon icon="mdi:medal-outline" />自动等级</h3>
+        <span class="panel-badge">严格按照综合分实时计算，不允许手动修改</span>
       </div>
 
       <div class="grade-row">
@@ -25,16 +25,7 @@
         </div>
         <div>
           <span>自动等级</span>
-          <strong>{{ form.auto_grade }}</strong>
-        </div>
-        <div>
-          <span>确认等级</span>
-          <select v-model="grade">
-            <option value="优">优</option>
-            <option value="良">良</option>
-            <option value="合格">合格</option>
-            <option value="不合格">不合格</option>
-          </select>
+          <strong>{{ form.auto_level || form.level }}</strong>
         </div>
       </div>
 
@@ -64,14 +55,12 @@ import AssessmentFormPanel from './AssessmentFormPanel.vue';
 const route = useRoute();
 const router = useRouter();
 const form = ref(null);
-const grade = ref('');
 const comment = ref('');
 
 async function load() {
   const res = await getFormDetail(route.params.id);
   if (res.code === 200) {
     form.value = res.data;
-    grade.value = res.data.grade || res.data.auto_grade;
   } else {
     alert(res.msg);
   }
@@ -81,7 +70,6 @@ async function handleReview(action) {
   const res = await reviewMaterial(route.params.id, {
     action,
     comment: comment.value,
-    grade: grade.value,
   });
   if (res.code === 200) {
     alert('评价处理完成');

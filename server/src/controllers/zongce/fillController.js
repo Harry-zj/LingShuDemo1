@@ -160,8 +160,19 @@ exports.getFillPreview = async (req, res) => {
 // ★ 保存智能填表数据（分数 + 描述）
 exports.saveFillData = async (req, res) => {
   try {
-    const { items } = req.body;
+    const { items, batch_id } = req.body;
     if (!items || !Array.isArray(items)) return res.json(Res.error("缺少 items 数组"));
+
+    let batchRuleSetId = 0;
+    if (batch_id) {
+      const [ruleSets] = await pool.execute(
+        `SELECT id FROM rule_sets
+         WHERE batch_id=? AND status='published'
+         ORDER BY published_at DESC, id DESC LIMIT 1`,
+        [Number(batch_id)]
+      );
+      batchRuleSetId = Number(ruleSets[0]?.id || 0);
+    }
 
     const conn = await pool.getConnection();
     try {
@@ -172,7 +183,7 @@ exports.saveFillData = async (req, res) => {
           `INSERT INTO smart_fill_data (user_id, rule_set_id, section, item_key, score, description, extra_data)
            VALUES (?, ?, ?, ?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE score=VALUES(score), description=VALUES(description), extra_data=VALUES(extra_data)`,
-          [req.user.id, item.rule_set_id || 0, item.section, item.item_key,
+          [req.user.id, Number(item.rule_set_id || batchRuleSetId || 0), item.section, item.item_key,
            item.score ?? 0, item.description || '', item.extra_data ? JSON.stringify(item.extra_data) : null]
         );
       }

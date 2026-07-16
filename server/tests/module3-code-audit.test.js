@@ -60,11 +60,12 @@ test("[诊断] 辅导员获取范围选项时必须按当前账号过滤", () =>
   assert.match(block, /currentUser\(req\)/, "当前控制器未把当前辅导员传给服务层，会返回全部学生、班级和成员关系");
 });
 
-test("[诊断] 单独修改等级接口不得允许学生修改自己的结果", () => {
-  const routeLine = routes.split(/\r?\n/).find(line => line.includes('/forms/:id/level')) || "";
-  assert.doesNotMatch(routeLine, /roleCheck\([^)]*"student"/, "当前路由允许学生调用等级修改接口");
-  const block = between(service, "async function setFormLevel", "async function reviewForm");
-  assert.match(block, /stage=.*pending|assessment_review_tasks[\s\S]*status='pending'/, "当前服务层也未要求操作者持有该表单的待评任务");
+test("[诊断] 不得保留任何手动修改等级接口", () => {
+  assert.doesNotMatch(routes, /forms\/:id\/level/, "仍保留手动修改等级路由");
+  assert.doesNotMatch(service, /async function setFormLevel/, "仍保留手动修改等级服务");
+  const block = between(service, "async function reviewForm", "async function getStatistics");
+  assert.match(block, /calculateLevel\(recalculatedScores\.total, settings\.gradeRules\)/, "评测完成后未根据实时总分自动认定等级");
+  assert.doesNotMatch(block, /data\.level|manualLevel/, "评测接口仍接收手工等级");
 });
 
 test("[诊断] 统计中的学生总数必须使用同一批次和同一权限范围", () => {

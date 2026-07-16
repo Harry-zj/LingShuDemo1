@@ -56,12 +56,12 @@
         <span v-if="currentBatch" class="section-batch-label">当前批次：{{ currentBatch.title }}</span>
       </div>
       <Transition name="step" mode="out-in">
-        <SmartFillF1 v-if="activeCard === 'f1'" key="f1" @complete="onF1Complete" />
-        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" @saved="onF1F2Saved" @complete="onF2Complete" />
+        <SmartFillF1 v-if="activeCard === 'f1'" key="f1" :score-policy="scorePolicy" :rule-set-id="publishedRuleSetId" :batch-id="currentBatch?.id" @complete="onF1Complete" />
+        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" :score-policy="scorePolicy" @saved="onF1F2Saved" @complete="onF2Complete" />
         <SmartFillRule v-else-if="activeCard === 'rule'" key="rule" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
         <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
-        <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" @calculate="onCalculate" />
-        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" @submit="formDone = true" />
+        <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" :score-policy="scorePolicy" @calculate="onCalculate" />
+        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" :score-policy="scorePolicy" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" @submit="formDone = true" />
       </Transition>
     </div>
   </div>
@@ -76,6 +76,10 @@ import SmartFillMaterial from './SmartFillMaterial.vue'
 import SmartFillScore from './SmartFillScore.vue'
 import SmartFillForm from './SmartFillForm.vue'
 import * as api from '../../api/zongce'
+import { getScorePolicy } from '../../api/module3'
+import { DEFAULT_GRADE_RULES, DEFAULT_SCORE_LIMITS } from '../../utils/scorePolicy'
+
+const scorePolicy = ref({ scoreLimits: { ...DEFAULT_SCORE_LIMITS }, gradeRules: [...DEFAULT_GRADE_RULES] })
 
 // ========== 批次自动匹配 ==========
 const currentBatch = ref(null)
@@ -238,6 +242,10 @@ async function refreshTemplates() {
 }
 
 onMounted(async () => {
+  try {
+    const policyRes = await getScorePolicy()
+    if (policyRes.code === 200 && policyRes.data) scorePolicy.value = policyRes.data
+  } catch (_) {}
   await loadStudentBatch()
   if (currentBatch.value) {
     await refreshAll()
@@ -326,11 +334,11 @@ function onScoreChanged() { refreshEval(); refreshScoreList() }
 function onF1F2Saved() {
   const items = []
   for (const a of store.f1Items) {
-    items.push({ section: 'F1', item_key: a.key, score: a.base - a.score, description: a.detail, rule_set_id: 0 })
+    items.push({ section: 'F1', item_key: a.key, score: a.base - a.score, description: a.detail, rule_set_id: publishedRuleSetId.value || 0 })
   }
   const f2Courses = store.f2Courses.filter(c => c.name)
   if (f2Courses.length) {
-    items.push({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: f2Courses, rule_set_id: 0 })
+    items.push({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: f2Courses, rule_set_id: publishedRuleSetId.value || 0 })
   }
   if (items.length) api.saveFillData(items, currentBatch.value?.id)
 }

@@ -68,6 +68,26 @@
       <button class="btn-outline" @click="saveSettings"><VIcon icon="mdi:content-save-outline" /><span class="btn-label">保存设置</span></button>
     </div>
 
+    <div class="panel-card glass-card" v-if="view === 'limits' && settings">
+      <div class="panel-header">
+        <div>
+          <h3><VIcon icon="mdi:speedometer" />分数上限设置</h3>
+          <p class="panel-help">上限同时作用于智能填表、学生修改和评测人员复核。保存后会自动重算现有综测总分与等级。</p>
+        </div>
+      </div>
+      <div class="limit-group" v-for="group in scoreLimitGroups" :key="group.title">
+        <h4>{{ group.title }}</h4>
+        <div class="score-limit-grid">
+          <label class="score-limit-row" v-for="item in group.items" :key="item.key">
+            <span>{{ item.label }}</span>
+            <input type="number" min="0" max="999.99" step="0.1" v-model.number="settings.scoreLimits[item.key]" />
+            <small>分</small>
+          </label>
+        </div>
+      </div>
+      <button class="btn-outline" @click="saveSettings"><VIcon icon="mdi:content-save-outline" /><span class="btn-label">保存分数上限</span></button>
+    </div>
+
     <div class="panel-card glass-card" v-if="view === 'active'">
       <div class="panel-header">
         <h3><VIcon icon="mdi:progress-clock" />进行中的批次</h3>
@@ -186,12 +206,14 @@ const view = computed(() => props.view || 'menu');
 const menuCards = computed(() => [
   { title: '创建并发布批次', description: '设置学院、年级、评价链、材料锁定和异议期限', icon: 'mdi:calendar-plus-outline', to: '/module3/batch-manage/create' },
   { title: '全局流程设置', description: '设置自主注册、学生编辑、退回编辑、评价意见和等级规则', icon: 'mdi:tune-variant', to: '/module3/batch-manage/settings' },
+  { title: '分数上限设置', description: '配置 F1/F2/F3、A1-A5、B1-B8 及总分上限', icon: 'mdi:speedometer', to: '/module3/batch-manage/limits' },
   { title: '进行中的批次', description: `查看、修改、关闭或删除当前 ${activeBatches.value.length} 个批次`, icon: 'mdi:progress-clock', to: '/module3/batch-manage/active' },
   { title: '历史批次', description: `查看已关闭、已归档或历史学年的 ${historyBatches.value.length} 个批次`, icon: 'mdi:history', to: '/module3/batch-manage/history' },
 ]);
 const pageMeta = {
   create: ['创建并发布批次', '为指定学院和年级创建综测批次，并设置本批次评价流程。'],
   settings: ['全局流程设置', '维护学生注册、材料编辑、评价意见和等级规则等通用配置。'],
+  limits: ['分数上限设置', '设置每个大类、子项目和最终总分的最高允许分值。'],
   active: ['进行中的批次', '查看和维护当前学年的草稿或已发布批次。'],
   history: ['历史批次', '查看已关闭、已归档或历史学年的批次。'],
 };
@@ -202,6 +224,19 @@ const batches = ref([]);
 const settings = ref(null);
 const options = ref({ colleges: [], grades: [], classes: [], members: [], batch_memberships: [], students: [] });
 const editing = ref(null);
+const scoreLimitGroups = [
+  { title: '大类与最终总分', items: [
+    { key: 'F1', label: 'F1 基本素质' }, { key: 'F2', label: 'F2 课程学习成绩' },
+    { key: 'F3', label: 'F3 创新实践' }, { key: 'total', label: '最终综合总分' },
+  ] },
+  { title: 'F1 子项目', items: [
+    { key: 'A1', label: 'A1 思想政治表现' }, { key: 'A2', label: 'A2 道德品质修养' },
+    { key: 'A3', label: 'A3 学习态度作风' }, { key: 'A4', label: 'A4 组织纪律观念' },
+    { key: 'A5', label: 'A5 身心健康素质' },
+  ] },
+  { title: 'F2 子项目', items: [{ key: 'COURSE', label: '课程学习成绩' }] },
+  { title: 'F3 子项目', items: Array.from({ length: 8 }, (_, index) => ({ key: `B${index + 1}`, label: `B${index + 1}` })) },
+];
 
 // 规则文件管理（创建页内嵌 + active/history 弹窗）
 
@@ -354,6 +389,13 @@ textarea { grid-column: span 2; min-height: 80px; resize: vertical; }
 .grade-row input { width: 70px; }
 .grade-row span { font-weight: var(--font-weight-semibold); }
 .grade-row small { color: var(--color-text-secondary); }
+.panel-help { margin-top: 6px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
+.limit-group { display: flex; flex-direction: column; gap: 10px; }
+.limit-group h4 { font-size: 14px; }
+.score-limit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.score-limit-row { display: grid; grid-template-columns: 1fr 90px 20px; align-items: center; gap: 8px; padding: 10px 12px; background: var(--color-bg); color: var(--color-text-secondary); font-size: 13px; }
+.score-limit-row input { width: 90px; }
+.score-limit-row small { color: var(--color-text-tertiary); }
 .btn-primary, .btn-outline, .actions button, .btn-text {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   min-height: 36px; padding: 0 14px; border-radius: 8px !important; cursor: pointer;
@@ -374,7 +416,7 @@ textarea { grid-column: span 2; min-height: 80px; resize: vertical; }
 .history-tip { padding: 10px 12px; border-radius: 8px !important; background: rgba(245, 158, 11, 0.10); color: #b45309; font-size: 13px; }
 input:disabled, select:disabled, textarea:disabled { opacity: 0.68; cursor: not-allowed; }
 @media (max-width: 768px) {
-  .form-grid, .form-grid.compact, .grade-rules, .assignment-row { grid-template-columns: 1fr; }
+  .form-grid, .form-grid.compact, .grade-rules, .score-limit-grid, .assignment-row { grid-template-columns: 1fr; }
   textarea { grid-column: span 1; }
   .batch-row { flex-direction: column; }
 }

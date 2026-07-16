@@ -99,6 +99,13 @@
         <p class="guide-note">提示：占位符需用花括号包裹，如 {real_name}，系统将自动查找并替换模板中的占位符。</p>
       </div>
     </details>
+
+    <div class="back-to-top-row">
+      <button type="button" class="back-to-top-btn" @click="scrollToTop">
+        <span aria-hidden="true">↑</span>
+        回到页面顶部
+      </button>
+    </div>
   </div>
 </template>
 <script setup>
@@ -108,7 +115,7 @@ import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
-const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String] })
+const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String], scorePolicy: Object })
 const smartFillStore = useSmartFillStore()
 
 const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template','submit'])
@@ -120,6 +127,10 @@ const fillDone = ref(false)
 const fillError = ref('')
 const showPreview = ref(true)
 const isSubmitting = ref(false)
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
 
 const fillData = ref({
   real_name: '', student_id: '', academic_year: '', grade: '', total_score: 0,
@@ -151,16 +162,17 @@ function syncF3FromScoreList() {
   for (const ind of indicators) {
     const scoreKey = 'F3_' + ind.code + '_score'
     const detailKey = 'F3_' + ind.code + '_detail'
-    fillData.value[scoreKey] = ind.score || 0
+    const itemLimit = Number(props.scorePolicy?.scoreLimits?.[ind.code] ?? 30)
+    fillData.value[scoreKey] = Math.min(Math.max(Number(ind.score || 0), 0), itemLimit)
     const autoDesc = (ind.facts || []).map(f => {
       const name = f.award_name || f.competition_name || '加分项'
       return name + '(+' + (f.score || 0) + '分)'
     }).filter(Boolean).join('；')
     fillData.value[detailKey] = autoDesc || fillData.value[detailKey]
-    f3Total += ind.score || 0
+    f3Total += fillData.value[scoreKey]
   }
-  fillData.value.F3_total = f3Total
-  fillData.value.F3_weighted = parseFloat((f3Total * 0.25).toFixed(1))
+  fillData.value.F3_total = Math.min(f3Total, Number(props.scorePolicy?.scoreLimits?.F3 ?? 100))
+  fillData.value.F3_weighted = parseFloat((fillData.value.F3_total * 0.25).toFixed(2))
   updateTotalScore()
 }
 
@@ -238,6 +250,11 @@ watch(() => props.scoreList, () => {
   syncF1F2Data()
 }, { deep: true, immediate: true });
 
+watch(() => props.scorePolicy, () => {
+  syncF1F2Data()
+  syncF3FromScoreList()
+}, { deep: true });
+
 // ★ 从服务端数据恢复到 Pinia Store（仅恢复 Store 中仍为默认值的项）
 // 解决刷新后 Store 为空、syncF1F2Data() 用空数据覆盖服务端数据的问题
 function restoreStoreFromServer() {
@@ -265,29 +282,40 @@ function restoreStoreFromServer() {
 function syncF1F2Data() {
   const items = smartFillStore.f1Items;
   for (const a of items) {
+    const max = Number(props.scorePolicy?.scoreLimits?.[a.key] ?? 20)
+    a.base = max
+    a.score = Math.min(Math.max(Number(a.score || 0), 0), max)
     fillData.value['F1_' + a.key + '_score'] = a.score;
     fillData.value['F1_' + a.key + '_detail'] = a.detail;
     fillData.value['F1_' + a.key + '_base'] = a.base;
   }
   let f1t = 0;
   ['A1','A2','A3','A4','A5'].forEach(k => f1t += fillData.value['F1_' + k + '_score'] || 0);
-  fillData.value.F1_total = f1t;
-  fillData.value.F1_weighted = parseFloat((f1t * 0.1).toFixed(1));
+  fillData.value.F1_total = Math.min(f1t, Number(props.scorePolicy?.scoreLimits?.F1 ?? 100));
+  fillData.value.F1_weighted = parseFloat((fillData.value.F1_total * 0.1).toFixed(2));
 
   const courses = smartFillStore.f2Courses;
   fillData.value.F2_courses = courses;
   let wsum = 0, tcred = 0;
-  for (const c of courses) { wsum += (c.score || 0) * (c.credit || 0); tcred += (c.credit || 0); }
-  fillData.value.F2_weighted_avg = tcred > 0 ? parseFloat((wsum / tcred).toFixed(2)) : 0;
-  fillData.value.F2_weighted = parseFloat((fillData.value.F2_weighted_avg * 0.65).toFixed(1));
+  const courseLimit = Number(props.scorePolicy?.scoreLimits?.COURSE ?? 100)
+  for (const c of courses) {
+    c.score = Math.min(Math.max(Number(c.score || 0), 0), courseLimit)
+    wsum += (c.score || 0) * (c.credit || 0); tcred += (c.credit || 0);
+  }
+  const average = tcred > 0 ? parseFloat((wsum / tcred).toFixed(2)) : 0;
+  fillData.value.F2_weighted_avg = Math.min(average, Number(props.scorePolicy?.scoreLimits?.F2 ?? 100));
+  fillData.value.F2_weighted = parseFloat((fillData.value.F2_weighted_avg * 0.65).toFixed(2));
 
   updateTotalScore();
 }
 
 function updateTotalScore() {
   const total = (fillData.value.F1_weighted || 0) + (fillData.value.F2_weighted || 0) + (fillData.value.F3_weighted || 0);
-  fillData.value.total_score = parseFloat(total.toFixed(2));
-  fillData.value.grade = total >= 90 ? '优秀' : total >= 80 ? '良好' : total >= 70 ? '中等' : total >= 60 ? '合格' : '不合格';
+  fillData.value.total_score = Math.min(parseFloat(total.toFixed(2)), Number(props.scorePolicy?.scoreLimits?.total ?? 100));
+  const rules = Array.isArray(props.scorePolicy?.gradeRules) ? [...props.scorePolicy.gradeRules] : [
+    { grade: '优', min: 80 }, { grade: '良', min: 70 }, { grade: '合格', min: 60 }, { grade: '不合格', min: 0 },
+  ]
+  fillData.value.grade = rules.sort((a, b) => Number(b.min) - Number(a.min)).find(rule => fillData.value.total_score >= Number(rule.min))?.grade || '不合格';
 }
 
 
@@ -421,7 +449,7 @@ async function submitToReview() {
     } catch(e) { console.warn('saveEvaluationResult:', e.message) }
 
     // ③ 写入 assessment_forms + assessment_form_items（信息管理端）
-    const payload = { items, batch_id: props.batchId || null }
+    const payload = { items, batch_id: props.batchId || null, rule_set_id: props.ruleSetId || null }
     console.log('[submitToReview] updateSmartResult payload:', JSON.stringify(payload).slice(0,200))
     const res = await updateSmartResult(payload)
     if (res.code === 200) {
@@ -478,6 +506,10 @@ async function submitToReview() {
 .error-card{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background: var(--color-error-bg);border:1px solid #fecaca;border-radius:8px;color:#D93025;font-size:14px}
 .placeholder-guide{margin-top:4px;border:1px solid var(--color-border);border-radius:8px;padding:12px 16px}
 .placeholder-guide summary{cursor:pointer;font-size:14px;color:var(--color-primary);font-weight:500}
+.back-to-top-row{display:flex;justify-content:center;padding-top:4px}
+.back-to-top-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:180px;min-height:44px;padding:0 20px;border:1px solid color-mix(in srgb,var(--color-primary) 36%,var(--color-border));border-radius:8px;background:color-mix(in srgb,var(--color-primary) 9%,var(--color-surface));color:var(--color-primary);font-size:14px;font-weight:700;cursor:pointer;transition:transform .2s ease,border-color .2s ease,background .2s ease}
+.back-to-top-btn:hover{transform:translateY(-2px);border-color:var(--color-primary);background:color-mix(in srgb,var(--color-primary) 14%,var(--color-surface))}
+.back-to-top-btn span{font-size:20px;font-weight:900;line-height:1}
 .guide-content{margin-top:12px}.guide-hint{font-size:13px;color: var(--color-text-secondary);margin-bottom:14px}
 .ph-group{margin-bottom:14px}.ph-group-title{font-size:13px;font-weight:600;margin-bottom:6px;color: var(--color-text)}
 .ph-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px;padding:8px 12px;background: var(--color-surface-variant);border-radius:4px}
