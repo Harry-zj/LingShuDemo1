@@ -17,7 +17,7 @@ const routes = [
   { path: "/module2/report", name: "ReportView", component: () => import("../views/module2/ReportView.vue"), meta: { layout: "main", title: "评定报告", roles: ["student"] } },
 { path: "/module2/dimension/:key", name: "DimensionDetail", component: () => import("../views/module2/DimensionDetail.vue"), meta: { layout: "main", title: "维度活动指南", roles: ["student"] } },
   /* 模块三 */
-  { path: "/module3/profile", name: "Module3Profile", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "menu" }, meta: { layout: "main", title: "个人中心", roles: ["student", "admin", "counselor", "student_affairs"] } },
+  { path: "/module3/profile", name: "Module3Profile", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "basic" }, meta: { layout: "main", title: "个人中心", roles: ["student", "admin", "counselor", "student_affairs"] } },
   { path: "/module3/profile/basic", name: "Module3ProfileBasic", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "basic" }, meta: { layout: "main", title: "基础信息", roles: ["student", "admin", "counselor", "student_affairs"] } },
   { path: "/module3/profile/password", name: "Module3ProfilePassword", component: () => import("../views/module3/Module3Profile.vue"), props: { view: "password" }, meta: { layout: "main", title: "修改密码", roles: ["student", "admin", "counselor", "student_affairs"] } },
   { path: "/module3/admin", name: "AdminWorkbench", component: () => import("../views/module3/Module3Workbench.vue"), meta: { layout: "main", title: "管理员工作台", roles: ["admin"] } },

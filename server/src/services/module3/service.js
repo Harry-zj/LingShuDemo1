@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { pool } = require("../../config/database");
 const { getFillDataPreview } = require("../zongce/fillService");
-const { uploadBuffer, generateKey } = require("../oss");
+const { uploadBuffer, generateKey, uploadAvatarBuffer, deleteAvatarBuffer } = require("../oss");
 const { mergeSmartFillItems, resolveSmartFillEvidenceItem } = require("./smartFillEvidence");
 
 const ROLE_LABEL = {
@@ -1054,6 +1054,92 @@ async function updateUserProfile(userId, data = {}) {
     }
     await addLog(conn, { ...user, ...next }, "更新个人中心", user.username, "用户完善 module3 个人信息");
   });
+  return getUser(userId);
+}
+
+async function uploadUserAvatar(userId, file) {
+  const user = await getUser(userId);
+
+  // 归档旧头像（若存在且为 OSS URL）
+  const oldAvatar = (user.avatar || "").trim();
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 上传至 OSS
+  const ext = path.extname(file.originalname) || ".jpg";
+  const key = `avatars/${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const avatarUrl = await uploadAvatarBuffer(file.buffer, key, file.mimetype || "image/jpeg");
+
+  // 更新用户记录
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", [avatarUrl, userId]);
+
+  // 记录操作日志
+  await addLog(pool, user, "上传头像", user.username, "更新个人头像");
+
+  return getUser(userId);
+}
+
+async function deleteUserAvatar(userId) {
+  const user = await getUser(userId);
+
+  // 归档当前头像
+  const oldAvatar = (user.avatar || "").trim();
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 清空头像
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", ["", userId]);
+
+  // 记录操作日志
+  await addLog(pool, user, "删除头像", user.username, "移除个人头像");
+
+  return getUser(userId);
+}
+
+/** 获取用户的历史头像列表（最近 20 条） */
+async function getAvatarHistory(userId) {
+  const [rows] = await pool.execute(
+    "SELECT id, oss_url, created_at FROM user_avatar_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+    [userId]
+  );
+  return rows;
+}
+
+/** 从历史记录中恢复某张头像为当前头像 */
+async function restoreAvatar(userId, historyId) {
+  const [rows] = await pool.execute(
+    "SELECT id, oss_url FROM user_avatar_history WHERE id = ? AND user_id = ? LIMIT 1",
+    [historyId, userId]
+  );
+  if (!rows.length) throw new Error("历史头像记录不存在");
+
+  const user = await getUser(userId);
+  const oldAvatar = (user.avatar || "").trim();
+
+  // 先归档当前头像
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 设为当前头像
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", [rows[0].oss_url, userId]);
+
+  // 从历史表中移除该条（已恢复到当前）
+  await pool.execute("DELETE FROM user_avatar_history WHERE id = ?", [historyId]);
+
+  await addLog(pool, user, "恢复头像", user.username, "从历史记录恢复头像");
+
   return getUser(userId);
 }
 
@@ -2582,6 +2668,10 @@ module.exports = {
   ensureClass,
   getUser,
   updateUserProfile,
+  uploadUserAvatar,
+  deleteUserAvatar,
+  getAvatarHistory,
+  restoreAvatar,
   missingProfileFields,
   getSettings,
   getScorePolicy,

@@ -82,7 +82,7 @@
     </div>
         <div v-if="props.uploadedTemplate" class="action-bar">
       <button class="btn primary large" :disabled="isFilling" @click="handleDoFill"><span v-if="isFilling" class="spinner"></span>一键填充</button>
-      <button v-if="!fillDone" class="btn success large" :disabled="isFilling" @click="submitToReview">提交审核</button>
+      <button v-if="!fillDone" class="btn success large" :disabled="isFilling" @click="submitToReview">保存个人中心</button>
       <button v-if="fillDone" class="btn success large" @click="handleDownload">下载已填写文件</button>
       <button v-if="fillDone" class="btn outline" @click="resetFill">重新填表</button>
     </div>

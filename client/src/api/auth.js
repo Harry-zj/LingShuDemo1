@@ -17,3 +17,15 @@ export const changePassword = async (data) => request.put(
   "/auth/change-password",
   await encryptCredentialFields(data, ["old_password", "new_password"]),
 );
+
+export const uploadAvatar = (formData) =>
+  request.post("/auth/avatar", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+export const deleteAvatar = () => request.delete("/auth/avatar");
+
+export const getAvatarHistory = () => request.get("/auth/avatar-history");
+
+export const restoreAvatar = (historyId) =>
+  request.post("/auth/avatar/restore", { history_id: historyId });

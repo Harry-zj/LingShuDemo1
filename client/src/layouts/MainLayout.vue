@@ -64,7 +64,8 @@
             class="user-trigger"
             @click="showUserMenu = !showUserMenu"
           >
-            <VIcon icon="mdi:account-circle-outline" />
+            <img v-if="avatarUrl" :src="avatarUrl" class="nav-avatar-img" alt="" />
+            <VIcon v-else icon="mdi:account-circle-outline" />
             <span>{{ displayName }}</span>
             <VIcon
               icon="mdi:chevron-down"
@@ -175,7 +176,9 @@
             class="side-user-trigger"
             @click="showUserMenu = !showUserMenu"
           >
+            <img v-if="avatarUrl" :src="avatarUrl" class="side-avatar-img" alt="" />
             <VIcon
+              v-else
               icon="mdi:account-circle-outline"
               class="side-avatar"
             />
@@ -259,6 +262,21 @@
         v-if="mobileMenuOpen"
         class="mobile-menu-panel"
       >
+        <!-- 移动端用户信息头部 -->
+        <router-link
+          v-if="userStore.isLoggedIn"
+          to="/module3/profile"
+          class="mobile-user-header"
+          @click="mobileMenuOpen = false"
+        >
+          <img v-if="avatarUrl" :src="avatarUrl" class="mobile-avatar-img" alt="" />
+          <VIcon v-else icon="mdi:account-circle-outline" class="mobile-avatar-icon" />
+          <div class="mobile-user-meta">
+            <strong>{{ displayName }}</strong>
+            <small>{{ roleName }}</small>
+          </div>
+        </router-link>
+
         <router-link
           v-for="item in navItems"
           :key="item.key"
@@ -492,6 +510,8 @@ const roleName = computed(() =>
   ROLE_NAMES[userStore.userRole] ||
   '已登录'
 )
+
+const avatarUrl = computed(() => userStore.user?.avatar || "")
 
 const MANAGEMENT_HOME_BY_ROLE = {
   student: '/module3/student',
@@ -1674,6 +1694,77 @@ onBeforeUnmount(() => {
 .mobile-logout-entry,
 .mobile-logout-entry svg {
   color: #ffffff;
+}
+
+/* 导航栏头像 */
+.nav-avatar-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.3);
+  flex-shrink: 0;
+}
+
+.side-avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.3);
+  flex-shrink: 0;
+  font-size: 36px;
+}
+
+/* 移动端菜单用户头部 */
+.mobile-user-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  text-decoration: none;
+  background: var(--color-surface-variant);
+  transition: background 0.15s;
+}
+
+.mobile-user-header:hover {
+  background: var(--color-gray-bg);
+}
+
+.mobile-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.4);
+  flex-shrink: 0;
+}
+
+.mobile-avatar-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 44px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.mobile-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mobile-user-meta strong {
+  font-size: 15px;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.mobile-user-meta small {
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 </style>

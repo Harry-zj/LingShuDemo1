@@ -137,3 +137,47 @@ exports.changePassword = async (req, res) => {
     res.json(Res.error(e.message));
   }
 };
+
+exports.uploadAvatar = async (req, res) => {
+  try {
+    if (!req.file) return res.json(Res.error("请选择头像图片"));
+    if (!["image/jpeg", "image/png", "image/gif", "image/webp"].includes(req.file.mimetype)) {
+      return res.json(Res.error("仅支持 JPG、PNG、GIF、WebP 格式"));
+    }
+    const user = await module3Service.uploadUserAvatar(req.user.id, req.file);
+    res.json(Res.success(user, "头像已更新"));
+  } catch (e) {
+    console.error("[头像上传] 失败:", e.message);
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.deleteAvatar = async (req, res) => {
+  try {
+    const user = await module3Service.deleteUserAvatar(req.user.id);
+    res.json(Res.success(user, "头像已移除"));
+  } catch (e) {
+    console.error("[头像删除] 失败:", e.message);
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.getAvatarHistory = async (req, res) => {
+  try {
+    const list = await module3Service.getAvatarHistory(req.user.id);
+    res.json(Res.success(list));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};
+
+exports.restoreAvatar = async (req, res) => {
+  try {
+    const { history_id } = req.body || {};
+    if (!history_id) return res.json(Res.error("缺少 history_id"));
+    const user = await module3Service.restoreAvatar(req.user.id, Number(history_id));
+    res.json(Res.success(user, "头像已恢复"));
+  } catch (e) {
+    res.json(Res.error(e.message));
+  }
+};

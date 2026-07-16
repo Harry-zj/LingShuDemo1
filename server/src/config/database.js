@@ -167,6 +167,16 @@ async function initDatabase() {
     try { await conn.execute("ALTER TABLE ai_tasks MODIFY status ENUM('pending','processing','completed','failed','cancelled') DEFAULT 'pending'"); }
     catch (e) { console.warn("[DB] V9迁移 ai_tasks:", e.message); }
 
+    // ★ V10 迁移：用户头像历史表
+    try { await conn.execute(`CREATE TABLE IF NOT EXISTS user_avatar_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      oss_url VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_uah_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); }
+    catch (e) { console.warn("[DB] V10迁移 avatar_history:", e.message); }
+
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 

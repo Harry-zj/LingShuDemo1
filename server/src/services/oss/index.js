@@ -102,4 +102,38 @@ async function deleteMultiple(keys) {
   await client.deleteMulti(fullKeys, { quiet: true });
 }
 
-module.exports = { uploadBuffer, downloadBuffer, deleteBuffer, deleteMultiple, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey };
+const AVATAR_KEY_PREFIX = 'avatars/';
+
+/**
+ * 上传头像 Buffer 到 OSS（使用 avatars/ 前缀）
+ * @param {Buffer} buffer 文件内容
+ * @param {string} key OSS 对象路径
+ * @param {string} mimeType MIME 类型
+ * @returns {Promise<string>} 完整 OSS 公开 URL
+ */
+async function uploadAvatarBuffer(buffer, key, mimeType) {
+  const client = getClient();
+  const fullKey = key.startsWith(AVATAR_KEY_PREFIX) ? key : AVATAR_KEY_PREFIX + key;
+  const result = await client.put(fullKey, buffer, {
+    mime: mimeType,
+    headers: { 'x-oss-object-acl': 'public-read' },
+  });
+  return buildPublicUrl(result.name);
+}
+
+/**
+ * 删除头像 OSS 对象（兼容 avatars/ 前缀和完整 URL）
+ * @param {string} key OSS key 或完整 URL
+ */
+async function deleteAvatarBuffer(key) {
+  const client = getClient();
+  let fullKey;
+  if (key.startsWith('http')) {
+    fullKey = extractKeyFromUrl(key);
+  } else {
+    fullKey = key.startsWith(AVATAR_KEY_PREFIX) ? key : AVATAR_KEY_PREFIX + key;
+  }
+  await client.delete(fullKey);
+}
+
+module.exports = { uploadBuffer, downloadBuffer, deleteBuffer, deleteMultiple, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey, uploadAvatarBuffer, deleteAvatarBuffer, AVATAR_KEY_PREFIX };
