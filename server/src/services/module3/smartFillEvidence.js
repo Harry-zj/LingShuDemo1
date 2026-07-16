@@ -58,6 +58,7 @@ function mergeSmartFillItems(items = [], sourceItems = []) {
     return {
       ...item,
       reason: inputReason || sourceReason,
+      extraData: item?.extraData || source?.extraData || null,
       evidence_ids: normalizeIds([
         ...normalizeIds(source?.evidence_ids),
         ...normalizeIds(item?.evidence_ids),

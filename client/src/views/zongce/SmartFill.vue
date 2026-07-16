@@ -55,20 +55,26 @@
         <h3>{{ sectionTitle }}</h3>
         <span v-if="currentBatch" class="section-batch-label">当前批次：{{ currentBatch.title }}</span>
       </div>
+      <!-- ★ 审核锁定提示 -->
+      <div v-if="!formCanEdit" class="readonly-banner">
+        <span>🔒</span>
+        <span>{{ formReadonlyReason || '当前不可编辑' }}</span>
+        <span class="hint">如需更改请联系评审人员驳回</span>
+      </div>
       <Transition name="step" mode="out-in">
-        <SmartFillF1 v-if="activeCard === 'f1'" key="f1" :score-policy="scorePolicy" :rule-set-id="publishedRuleSetId" :batch-id="currentBatch?.id" @complete="onF1Complete" />
-        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" :score-policy="scorePolicy" @saved="onF1F2Saved" @complete="onF2Complete" />
+        <SmartFillF1 v-if="activeCard === 'f1'" key="f1" :score-policy="scorePolicy" :rule-set-id="publishedRuleSetId" :batch-id="currentBatch?.id" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @complete="onF1Complete" />
+        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" :score-policy="scorePolicy" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @saved="onF1F2Saved" @complete="onF2Complete" />
         <SmartFillRule v-else-if="activeCard === 'rule'" key="rule" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
-        <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
-        <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" :score-policy="scorePolicy" @calculate="onCalculate" />
-        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" :score-policy="scorePolicy" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" @submit="formDone = true" />
+        <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
+        <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" :score-policy="scorePolicy" :readonly="!formCanEdit" @calculate="onCalculate" />
+        <SmartFillForm v-else-if="activeCard === 'form'" key="form" :templates="templates" :uploadedTemplate="uploadedTemplate" :scoreList="scoreList" :ruleSetId="publishedRuleSetId" :batchId="currentBatch?.id" :score-policy="scorePolicy" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @upload="onUploadTemplate" @fill="doFill" @download="downloadFill" @remove-template="removeTemplate" @score-changed="onScoreChanged" @submit="onFormSubmitted" />
       </Transition>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import SmartFillF1 from './SmartFillF1.vue'
 import SmartFillF2 from './SmartFillF2.vue'
 import SmartFillRule from './SmartFillRule.vue'
@@ -76,7 +82,7 @@ import SmartFillMaterial from './SmartFillMaterial.vue'
 import SmartFillScore from './SmartFillScore.vue'
 import SmartFillForm from './SmartFillForm.vue'
 import * as api from '../../api/zongce'
-import { getScorePolicy } from '../../api/module3'
+import { getScorePolicy, getStudentForm } from '../../api/module3'
 import { DEFAULT_GRADE_RULES, DEFAULT_SCORE_LIMITS } from '../../utils/scorePolicy'
 
 const scorePolicy = ref({ scoreLimits: { ...DEFAULT_SCORE_LIMITS }, gradeRules: [...DEFAULT_GRADE_RULES] })
@@ -105,6 +111,36 @@ async function loadStudentBatch() {
   } catch (e) {
     batchError.value = '获取批次信息失败: ' + (e.message || e)
   }
+}
+
+// ========== 表单审核状态 ==========
+const formStatus = ref(null)
+const formReadonlyReason = ref('')
+const formCanEdit = ref(true)  // 默认无表单=可编辑
+
+async function loadFormStatus() {
+  if (!currentBatch.value?.id) return
+  try {
+    const res = await getStudentForm(currentBatch.value.id)
+    if (res.code === 200 && res.data) {
+      formStatus.value = res.data.status
+      formReadonlyReason.value = res.data.readonly_reason || ''
+      formCanEdit.value = !!res.data.can_student_edit
+    } else {
+      formStatus.value = null
+      formReadonlyReason.value = ''
+      formCanEdit.value = true
+    }
+  } catch (_) {
+    formStatus.value = null
+    formReadonlyReason.value = ''
+    formCanEdit.value = true
+  }
+}
+
+function onFormSubmitted() {
+  formDone.value = true
+  loadFormStatus()
 }
 
 // ========== 导航 ==========
@@ -241,6 +277,11 @@ async function refreshTemplates() {
   }
 }
 
+// ★ 返回 stepper 时刷新表单状态
+watch(activeCard, (newVal) => {
+  if (newVal === null) loadFormStatus()
+})
+
 onMounted(async () => {
   try {
     const policyRes = await getScorePolicy()
@@ -249,6 +290,7 @@ onMounted(async () => {
   await loadStudentBatch()
   if (currentBatch.value) {
     await refreshAll()
+    await loadFormStatus()
   }
 })
 
@@ -464,6 +506,14 @@ const store = useSmartFillStore()
   opacity: 0;
   transform: translateY(-12px);
 }
+
+/* ===== 审核锁定提示 ===== */
+.readonly-banner {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 20px;
+  background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 10px; font-size: 13px; color: #d97706;
+}
+.readonly-banner .hint { color: var(--color-text-tertiary); font-size: 12px; margin-left: auto; }
 
 /* ===== 子面板 ===== */
 .section-panel {

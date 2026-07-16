@@ -678,5 +678,11 @@ onMounted(loadData)
 .sum-text { font-size:14px; color:var(--color-text-secondary); line-height:1.9; margin:0; }
 
 @media (max-width:1024px) { .report-layout { grid-template-columns:1fr; } .col-right { position:static; } }
-@media (max-width:600px) { .ar-detail-row { grid-template-columns:1fr; } .hl-row { grid-template-columns:1fr; } .goals-layout { flex-direction:column; } }
+@media (max-width:600px) {
+  .page-header { flex-wrap: wrap; gap: 12px; }
+  .header-right { flex-shrink: 0; }
+  .ar-detail-row { grid-template-columns:1fr; }
+  .hl-row { grid-template-columns:1fr; }
+  .goals-layout { flex-direction:column; }
+}
 </style>

@@ -68,7 +68,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 
-const props = defineProps({ materials: Array, evaluation: Object, scoreList: Object, scorePolicy: Object })
+const props = defineProps({
+  materials: Array,
+  evaluation: Object,
+  scoreList: Object,
+  scorePolicy: Object,
+  readonly: { type: Boolean, default: false },
+})
 defineEmits(['calculate', 'back'])
 
 const selected = ref(null)

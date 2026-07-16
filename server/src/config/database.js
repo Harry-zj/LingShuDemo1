@@ -177,6 +177,10 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); }
     catch (e) { console.warn("[DB] V10迁移 avatar_history:", e.message); }
 
+    // ★ V11 迁移：assessment_form_items 增加 extra_data 列（存储 F2 课程成绩数组等）
+    try { await conn.execute("ALTER TABLE assessment_form_items ADD COLUMN extra_data JSON DEFAULT NULL AFTER reason"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V11迁移 extra_data:", e.message); }
+
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);
 

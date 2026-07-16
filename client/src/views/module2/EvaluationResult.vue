@@ -582,6 +582,8 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); bChart?.
 .empty-state span { font-size:14px; color:var(--color-text-secondary); }
 
 @media (max-width:768px) {
+  .page-header { flex-wrap: wrap; gap: 12px; }
+  .header-right { flex-shrink: 0; }
   .overview-grid { grid-template-columns:1fr; }
   .student-bar { flex-wrap:wrap; }
   .fold-summary { display:none; }

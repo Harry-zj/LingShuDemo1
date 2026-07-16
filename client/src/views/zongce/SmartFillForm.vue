@@ -1,7 +1,7 @@
 ﻿<template>
   <div class="form-page">
     <!-- ===== 上传模板区 ===== -->
-    <div class="upload-section">
+    <div class="upload-section" v-if="!props.readonly">
       <h4>上传 Word 模板</h4>
       <p class="hint">上传您的综测登记表模板（.docx），在模板中按需插入占位符，系统一键自动填充</p>
 
@@ -25,7 +25,7 @@
             <div class="tpl-meta">{{ formatSize(props.uploadedTemplate.size) }} · 上传成功</div>
           </div>
         </div>
-        <button class="btn-text danger" @click="removeTemplate">✕ 删除</button>
+        <button v-if="!props.readonly" class="btn-text danger" @click="removeTemplate">✕ 删除</button>
       </div>
 
       <p v-if="formatError" class="error-msg">仅支持 .docx 格式，请重新上传</p>
@@ -82,9 +82,9 @@
     </div>
         <div v-if="props.uploadedTemplate" class="action-bar">
       <button class="btn primary large" :disabled="isFilling" @click="handleDoFill"><span v-if="isFilling" class="spinner"></span>一键填充</button>
-      <button v-if="!fillDone" class="btn success large" :disabled="isFilling" @click="submitToReview">保存个人中心</button>
+      <button v-if="!fillDone" class="btn success large" :disabled="isFilling || props.readonly" :title="props.readonly ? props.readonlyReason : ''" @click="submitToReview">保存个人中心</button>
       <button v-if="fillDone" class="btn success large" @click="handleDownload">下载已填写文件</button>
-      <button v-if="fillDone" class="btn outline" @click="resetFill">重新填表</button>
+      <button v-if="fillDone" class="btn outline" :disabled="props.readonly" @click="resetFill">重新填表</button>
     </div>
     <details class="placeholder-guide">
       <summary>占位符使用说明</summary>
@@ -115,7 +115,16 @@ import { updateSmartResult } from '@/api/module1'
 import { useSmartFillStore } from '@/stores/smartFill'
 
 
-const props = defineProps({ uploadedTemplate: Object, ruleSetId: Number, scoreList: Object, materials: Array, batchId: [Number, String], scorePolicy: Object })
+const props = defineProps({
+  uploadedTemplate: Object,
+  ruleSetId: Number,
+  scoreList: Object,
+  materials: Array,
+  batchId: [Number, String],
+  scorePolicy: Object,
+  readonly: { type: Boolean, default: false },
+  readonlyReason: { type: String, default: '' },
+})
 const smartFillStore = useSmartFillStore()
 
 const emit = defineEmits(['update:uploadedTemplate','upload-template','upload','fill','download','score-changed','remove-template','submit'])
@@ -362,6 +371,10 @@ function formatSize(b){if(!b)return'';return b<1048576?(b/1024).toFixed(1)+' KB'
 // ② assessment_form_items + assessment_forms (信息管理端)
 // ③ evaluation_results (个性化分析端)
 async function submitToReview() {
+  if (props.readonly) {
+    alert(props.readonlyReason || '正在审核中，无法更改，如需更改请联系评审人员驳回')
+    return
+  }
   if (isSubmitting.value) return
   isSubmitting.value = true
   try {
@@ -469,6 +482,8 @@ async function submitToReview() {
 
 <style scoped>
 .form-page{display:flex;flex-direction:column;gap:20px}
+.readonly-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 0; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; font-size: 13px; color: #d97706; }
+.readonly-notice .hint { color: var(--color-text-tertiary); font-size: 12px; margin-left: auto; }
 .upload-section h4{font-size:16px;margin:0 0 6px}
 .hint{font-size:13px;color: var(--color-text-tertiary);margin:0 0 12px}
 .upload-zone{border:2px dashed var(--color-border);border-radius:8px;padding:32px;text-align:center;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:8px;transition:all .2s}

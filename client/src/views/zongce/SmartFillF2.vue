@@ -8,7 +8,7 @@
             <h4>F2 课程学习成绩 <span class="f2-weight">权重 65%</span></h4>
           </div>
         </div>
-        <button class="btn-complete" :class="{ done: isCompleted }" @click="handleComplete">
+        <button v-if="!props.readonly" class="btn-complete" :class="{ done: isCompleted }" @click="handleComplete">
           <span v-if="isCompleted">✓ 已完成</span>
           <span v-else>完成填写</span>
         </button>
@@ -17,14 +17,14 @@
       <div class="course-table">
         <div class="course-header"><span>课程名称</span><span>学分</span><span>成绩</span><span></span></div>
         <div v-for="(c, i) in store.f2Courses" :key="i" class="course-row">
-          <input class="course-inp name" v-model="c.name" placeholder="如：高等数学" />
-          <input class="course-inp credit" type="number" v-model.number="c.credit" min="0" max="10" step="0.5" />
-          <input class="course-inp score" type="number" v-model.number="c.score" min="0" :max="courseLimit" @input="clampCourse(c)" />
-          <button class="btn-del" @click="removeCourse(i)" title="删除">×</button>
+          <input class="course-inp name" v-model="c.name" placeholder="如：高等数学" :disabled="props.readonly" />
+          <input class="course-inp credit" type="number" v-model.number="c.credit" min="0" max="10" step="0.5" :disabled="props.readonly" />
+          <input class="course-inp score" type="number" v-model.number="c.score" min="0" :max="courseLimit" @input="clampCourse(c)" :disabled="props.readonly" />
+          <button v-if="!props.readonly" class="btn-del" @click="removeCourse(i)" title="删除">×</button>
         </div>
       </div>
 
-      <button class="btn-add" @click="addCourse"><span class="add-icon">+</span> 添加课程</button>
+      <button v-if="!props.readonly" class="btn-add" @click="addCourse"><span class="add-icon">+</span> 添加课程</button>
 
       <div class="f2-summary">
         <div class="summary-item">
@@ -52,7 +52,11 @@ import * as api from '@/api/zongce'
 const emit = defineEmits(['saved', 'complete'])
 const store = useSmartFillStore()
 const isCompleted = ref(false)
-const props = defineProps({ scorePolicy: { type: Object, default: () => ({}) } })
+const props = defineProps({
+  scorePolicy: { type: Object, default: () => ({}) },
+  readonly: { type: Boolean, default: false },
+  readonlyReason: { type: String, default: '' },
+})
 const courseLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.COURSE ?? 100))
 const sectionLimit = computed(() => Number(props.scorePolicy?.scoreLimits?.F2 ?? 100))
 const weightedAvg = computed(() => Math.min(Number(store.f2WeightedAvg || 0), sectionLimit.value))
@@ -67,6 +71,7 @@ watch(courseLimit, () => store.f2Courses.forEach(clampCourse), { immediate: true
 
 let saveTimer = null
 watch(() => store.f2Courses.map(c => ({ name: c.name, credit: c.credit, score: c.score })), () => {
+  if (props.readonly) return
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
     const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: 0 }))
@@ -75,6 +80,7 @@ watch(() => store.f2Courses.map(c => ({ name: c.name, credit: c.credit, score: c
 }, { deep: true })
 
 onBeforeUnmount(() => {
+  if (props.readonly) return
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: 0 }))
   if (items.length) api.saveFillData(items).catch(() => {})
@@ -98,6 +104,8 @@ function handleComplete() {
 
 <style scoped>
 .f2-root { width: 100%; }
+.readonly-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 16px; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; font-size: 13px; color: #d97706; }
+.readonly-notice .hint { color: var(--color-text-tertiary); font-size: 12px; margin-left: auto; }
 .f2-card {
   background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
   border-radius: 16px; overflow: hidden;

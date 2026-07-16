@@ -155,6 +155,22 @@
                 <template v-else>
                   <div class="item-title">{{ item.title }} <span>+{{ item.score }}分</span></div>
                   <p class="item-reason">{{ item.reason }}</p>
+                  <!-- ★ F2 课程成绩详细表格 -->
+                  <table v-if="item.section === 'F2' && item.subKey === 'COURSE' && item.extra_data?.length" class="f2-course-table">
+                    <thead>
+                      <tr><th>课程名称</th><th>学分</th><th>成绩</th></tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="(course, ci) in item.extra_data" :key="ci">
+                        <td>{{ course.name || '-' }}</td>
+                        <td class="num">{{ course.credit }}</td>
+                        <td class="num">{{ course.score }}</td>
+                      </tr>
+                    </tbody>
+                    <tfoot>
+                      <tr><td>加权平均分</td><td colspan="2" class="num"><strong>{{ item.score }}</strong></td></tr>
+                    </tfoot>
+                  </table>
                   <div class="item-review-result" v-if="item.reviews?.length">
                     <div v-for="review in item.reviews" :key="review.id">
                       <strong>{{ review.reviewer_role === 'assessment_member' ? '评价小组' : review.reviewer_role === 'counselor' ? '辅导员' : '学生工作处' }}</strong>
@@ -667,6 +683,17 @@ function removeItem(item) {
 .objection-check input { width: 16px; height: 16px; accent-color: var(--color-primary); }
 .objection-reason { width: 100%; min-height: 82px; margin-top: 10px; padding: 10px; border: 1px solid var(--color-border); border-radius: 8px !important; background: var(--color-surface); color: var(--color-text-primary); resize: vertical; }
 .item-objection small, .objection-not-selected { display: block; margin-top: 7px; color: var(--color-text-tertiary); font-size: 12px; }
+
+/* ===== F2 课程成绩表格 ===== */
+.f2-course-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+.f2-course-table thead { background: var(--color-bg); }
+.f2-course-table th { text-align: left; padding: 8px 12px; font-weight: 600; color: var(--color-text-secondary); border-bottom: 2px solid var(--color-border); }
+.f2-course-table th:last-child { text-align: center; }
+.f2-course-table td { padding: 8px 12px; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); }
+.f2-course-table td.num { text-align: center; font-weight: 600; color: var(--color-primary); }
+.f2-course-table tfoot { background: color-mix(in srgb, var(--color-primary) 6%, var(--color-bg)); font-weight: 600; }
+.f2-course-table tfoot td { border-bottom: none; }
+.f2-course-table tfoot strong { color: var(--color-primary); font-size: 15px; }
 
 /* 模块三局部圆角兜底：仅作用于当前模块三组件树，不影响顶部导航及其他模块。 */
 :deep(*) {

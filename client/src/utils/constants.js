@@ -1,13 +1,14 @@
 export const STATUS_MAP = {
   smart_ready: { label: "智能填表待提交", color: "#9AA0A6", bg: "#F1F3F4" },
-  pending_class_committee: { label: "待综测成员评价", color: "#E37400", bg: "#FEF7E0" },
+  pending_class_committee: { label: "已提交，正在等待综测成员评价", color: "#E37400", bg: "#FEF7E0" },
   returned_by_class_committee: { label: "综测成员退回", color: "#D93025", bg: "#FCE8E6" },
-  pending_counselor: { label: "待辅导员评价", color: "#E37400", bg: "#FEF7E0" },
+  pending_counselor: { label: "综测成员已通过，正在等待辅导员评价", color: "#E37400", bg: "#FEF7E0" },
   returned_by_counselor: { label: "辅导员退回", color: "#D93025", bg: "#FCE8E6" },
-  pending_student_affairs: { label: "待学生工作处评价", color: "#E37400", bg: "#FEF7E0" },
+  pending_student_affairs: { label: "辅导员已通过，正在等待学生工作处评价", color: "#E37400", bg: "#FEF7E0" },
   returned_by_student_affairs: { label: "学生工作处退回", color: "#D93025", bg: "#FCE8E6" },
-  approved: { label: "学生工作处认定通过", color: "#34A853", bg: "#E6F4EA" },
-  rejected: { label: "不予认定", color: "#D93025", bg: "#FCE8E6" }
+  pending_objection_review: { label: "已提交异议，正在等待原评价小组成员再次评测", color: "#9333EA", bg: "#F3E8FF" },
+  approved: { label: "已认定通过，当前不可修改", color: "#34A853", bg: "#E6F4EA" },
+  rejected: { label: "当前结果已不予认定，当前不可修改", color: "#D93025", bg: "#FCE8E6" }
 };
 
 export const ROLE_LABEL = {

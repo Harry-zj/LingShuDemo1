@@ -263,6 +263,7 @@ CREATE TABLE IF NOT EXISTS assessment_form_items (
   sub_key VARCHAR(20) NOT NULL DEFAULT '',
   title VARCHAR(200) DEFAULT '',
   reason TEXT,
+  extra_data JSON DEFAULT NULL,
   score DECIMAL(5,2) DEFAULT 0,
   evidence_ids JSON DEFAULT NULL,
   editable TINYINT(1) DEFAULT 1,
@@ -822,6 +823,9 @@ CREATE TABLE IF NOT EXISTS zongce_config (
 
 -- ALTER TABLE rule_sets
 --   MODIFY COLUMN status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft';
+
+-- ★ 为 assessment_form_items 表增加 extra_data 列（存储 F2 课程成绩数组等扩展数据）
+-- ALTER TABLE assessment_form_items ADD COLUMN extra_data JSON DEFAULT NULL AFTER reason;
 
 -- ALTER TABLE document_parse_runs
 --   MODIFY COLUMN status ENUM('running','completed','failed','parse_structure_failed') DEFAULT 'running';

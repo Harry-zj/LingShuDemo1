@@ -1,6 +1,6 @@
 <template>
   <div class="material-page">
-    <div class="add-bar">
+    <div class="add-bar" v-if="!props.readonly">
       <button class="btn-create" @click="$emit('create')">
         <svg width="18" height="18" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         新建材料项
@@ -42,10 +42,10 @@
           <div class="card-tags" v-if="mat.attachments?.length">
             <span v-for="att in mat.attachments" :key="att.id" class="file-tag">
               {{ att.file_name }}
-              <button class="tag-del" @click.stop="deleteAttach(mat.id, att.id)">×</button>
+              <button v-if="!props.readonly" class="tag-del" @click.stop="deleteAttach(mat.id, att.id)">×</button>
             </span>
           </div>
-          <div class="card-actions">
+          <div class="card-actions" v-if="!props.readonly">
             <button class="act-upload" @click="fileInputs[mat.id]?.click()">
               <svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 2v8M3 6l4-4 4 4M2 10v1.5c0 .28.22.5.5.5h9a.5.5 0 00.5-.5V10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
               上传
@@ -77,12 +77,12 @@
                 </div>
                 <div class="res-desc-row">
                   <label>加分描述</label>
-                  <button v-if="!sp._genDescLoading && !sp._confirmed" class="btn-ai-mini" @click.stop="genDesc(mat, sp, spi)">🤖 AI生成</button>
+                  <button v-if="!props.readonly && !sp._genDescLoading && !sp._confirmed" class="btn-ai-mini" @click.stop="genDesc(mat, sp, spi)">🤖 AI生成</button>
                   <span v-if="sp._genDescLoading">⏳ 生成中…</span>
-                  <textarea v-model="sp.ai_description" rows="2" class="res-desc-inp" :placeholder="sp._confirmed ? '' : '输入或AI生成…'" :disabled="sp._confirmed"></textarea>
+                  <textarea v-model="sp.ai_description" rows="2" class="res-desc-inp" :placeholder="sp._confirmed ? '' : '输入或AI生成…'" :disabled="sp._confirmed || props.readonly"></textarea>
                 </div>
               </div>
-              <div class="res-footer" v-if="!sp._confirmed">
+              <div class="res-footer" v-if="!props.readonly && !sp._confirmed">
                 <span class="res-score-hint">建议 +{{ sp.score_preview || 0 }} 分</span>
                 <button class="btn-confirm" @click="doConfirmV3(mat, sp, spi)" :disabled="sp._confirming">{{ sp._confirming ? '确认中…' : '✓ 确认加分' }}</button>
               </div>
@@ -104,7 +104,11 @@
 import { watch, ref } from 'vue'
 import * as api from '../../api/zongce'
 
-const props = defineProps({ materials: Array })
+const props = defineProps({
+  materials: Array,
+  readonly: { type: Boolean, default: false },
+  readonlyReason: { type: String, default: '' },
+})
 const emit = defineEmits(['create', 'upload', 'remove', 'score-recalc'])
 const fileInputs = {}
 const extractingIds = ref(new Set())
@@ -199,6 +203,8 @@ watch(() => props.materials, (mats) => {
 
 <style scoped>
 .material-page { display: flex; flex-direction: column; gap: 22px; }
+.readonly-notice { display: flex; align-items: center; gap: 10px; padding: 12px 16px; margin-bottom: 0; background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.25); border-radius: 10px; font-size: 13px; color: #d97706; }
+.readonly-notice .hint { color: var(--color-text-tertiary); font-size: 12px; margin-left: auto; }
 .add-bar { display: flex; align-items: center; gap: 14px; }
 .hint { font-size: 13px; color: var(--color-text-tertiary); }
 .btn-create { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border: 1.5px dashed rgba(196,168,130,0.35); border-radius: 12px; background: rgba(196,168,130,0.06); color: #c4a882; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.2s; }
