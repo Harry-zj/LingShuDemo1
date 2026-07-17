@@ -3,8 +3,42 @@ const { chatStreamJson } = require("../deepseek");
 const { V3_RULE_PARSE_SYSTEM } = require("../prompts");
 const { validateV2RuleParse } = require("../schemas");
 const { extractStructure, buildChapterTree, buildParseTasks } = require("./docStructure");
+const { isOssUrl, downloadBuffer } = require("../../../../services/oss");
 const path = require("path");
+const fs = require("fs");
 const crypto = require("crypto");
+
+// ★ 文件文本提取（Buffer → text，兼容 OSS 和本地读取）
+async function extractText(buffer, fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+
+  if ([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp"].includes(ext)) {
+    const { ocrImage } = require("../aiService");
+    const base64 = buffer.toString("base64");
+    let mime = "image/png";
+    if (ext === ".jpg" || ext === ".jpeg") mime = "image/jpeg";
+    else if (ext === ".gif") mime = "image/gif";
+    return await ocrImage(base64);
+  }
+  if (ext === ".docx") {
+    const mammoth = require("mammoth");
+    return (await mammoth.extractRawText({ buffer })).value;
+  }
+  if (ext === ".pdf") {
+    const pdfParse = require("pdf-parse");
+    return (await pdfParse(buffer)).text;
+  }
+  if ([".xlsx", ".xls"].includes(ext)) {
+    const XLSX = require("xlsx");
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    let text = "";
+    for (const name of workbook.SheetNames) {
+      text += `[Sheet: ${name}]\n${XLSX.utils.sheet_to_csv(workbook.Sheets[name])}\n\n`;
+    }
+    return text;
+  }
+  return buffer.toString("utf-8");
+}
 
 // ============================================================
 //  Task 拆分 —— 章节识别后，对超阈值的 task 按业务块/表格语义单元细分
@@ -248,16 +282,23 @@ async function parseRuleSourceV2(sourceId, userId, onProgress, batchId, cancelTo
   const source = sources[0];
   if (source.source_type !== "file" || !source.file_path) throw new Error("V2 仅支持文件解析");
 
-  const filePath = path.join(__dirname, "../../../../../uploads", source.file_path);
+  // ★ 统一获取文件 Buffer（OSS 下载 / 本地磁盘读取）
+  let fileBuffer;
+  if (isOssUrl(source.file_path)) {
+    fileBuffer = await downloadBuffer(source.file_path);
+  } else {
+    const filePath = path.join(__dirname, "../../../../../uploads", source.file_path);
+    fileBuffer = fs.readFileSync(filePath);
+  }
   const ext = path.extname(source.file_name).toLowerCase();
 
   // ===== 1. 提取文档结构 =====
   let blocks, inputHash;
   if (ext === ".docx") {
-    const result = await extractStructure(filePath);
+    const result = await extractStructure(fileBuffer);
     blocks = result.blocks; inputHash = result.inputHash;
   } else {
-    const text = await extractText(filePath, source.file_name);
+    const text = await extractText(fileBuffer, source.file_name);
     blocks = [{ block_type: "paragraph", content: text, order_index: 0, title: "", source_location: "", style_info: {}, numbering_info: null, structured_content: null, structure_confidence: 0.5 }];
   }
   if (!blocks.length) throw new Error("文档无内容");

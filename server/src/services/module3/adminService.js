@@ -18,6 +18,14 @@ function normalizeText(value) {
   return String(value || "").trim();
 }
 
+function normalizeClassGrade(value) {
+  const matched = normalizeText(value).match(/^(\d{4})(?:级)?$/);
+  if (!matched) throw new Error("请选择有效年级");
+  const year = Number(matched[1]);
+  if (year < 2000 || year > 2126) throw new Error("年级必须在 2000-2126 之间");
+  return `${year}级`;
+}
+
 async function withTransaction(work) {
   const conn = await pool.getConnection();
   try {
@@ -49,7 +57,7 @@ async function listUsers(operator, query = {}) {
   const params = [];
   let sql = `SELECT id, username, role, real_name, student_no, class_id, class_name, college, major, grade, phone, avatar,
                     is_assessment_member, created_at, updated_at
-             FROM users WHERE role IN ('student','counselor','student_affairs','admin')`;
+             FROM users WHERE role IN ('student','counselor','student_affairs','admin') AND COALESCE(is_active,1)=1`;
   if (role) {
     sql += " AND role=?";
     params.push(role);
@@ -68,6 +76,68 @@ async function listUsers(operator, query = {}) {
   }));
 }
 
+async function resolveStudentOrganization(data = {}) {
+  const college = normalizeText(data.college);
+  const major = normalizeText(data.major);
+  let grade = normalizeText(data.grade);
+  const className = normalizeText(data.class_name);
+
+  if (!college && !major && !grade && !className) {
+    return { college: "", major: "", grade: "", className: "", classId: null };
+  }
+  if (!college) throw new Error("请先选择学院");
+
+  const [[collegeRow]] = await pool.execute(
+    "SELECT id, name FROM assessment_colleges WHERE name=? AND COALESCE(is_active,1)=1 LIMIT 1",
+    [college]
+  );
+  if (!collegeRow) throw new Error("所选学院不存在或已停用");
+
+  let majorRow = null;
+  if (major) {
+    [[majorRow]] = await pool.execute(
+      "SELECT id, name FROM assessment_majors WHERE college_id=? AND name=? AND COALESCE(is_active,1)=1 LIMIT 1",
+      [collegeRow.id, major]
+    );
+    if (!majorRow) throw new Error("所选专业不属于该学院或已停用");
+  }
+
+  if (grade) {
+    grade = normalizeClassGrade(grade);
+    const params = [collegeRow.name, grade];
+    let gradeSql = "SELECT id FROM assessment_classes WHERE college=? AND grade=? AND COALESCE(status,'active') <> 'inactive'";
+    if (majorRow) {
+      gradeSql += " AND major=?";
+      params.push(majorRow.name);
+    }
+    gradeSql += " LIMIT 1";
+    const [[gradeRow]] = await pool.execute(gradeSql, params);
+    if (!gradeRow) throw new Error("所选年级在当前学院或专业下没有可用班级");
+  }
+
+  let classId = null;
+  if (className) {
+    if (!majorRow || !grade) throw new Error("选择班级前请先选择专业和年级");
+    const [[classRow]] = await pool.execute(
+      `SELECT id, name, college, major, grade
+         FROM assessment_classes
+        WHERE name=? AND college=? AND major=? AND grade=? AND COALESCE(status,'active') <> 'inactive'
+        LIMIT 1`,
+      [className, collegeRow.name, majorRow.name, grade]
+    );
+    if (!classRow) throw new Error("所选班级不存在、已停用或与学院专业年级不匹配");
+    classId = classRow.id;
+  }
+
+  return {
+    college: collegeRow.name,
+    major: majorRow?.name || "",
+    grade,
+    className,
+    classId,
+  };
+}
+
 async function createStudentAccount(operator, data = {}) {
   requireAdmin(operator);
   const studentNo = normalizeText(data.student_no || data.username);
@@ -75,17 +145,23 @@ async function createStudentAccount(operator, data = {}) {
   const [existing] = await pool.execute("SELECT id FROM users WHERE username=? OR student_no=? LIMIT 1", [studentNo, studentNo]);
   if (existing.length) throw new Error("该学号已存在");
   const password = await bcrypt.hash(studentNo, 10);
-  const classId = await module3Service.ensureClass({
-    name: data.class_name,
-    college: data.college,
-    major: data.major,
-    grade: data.grade,
-  });
+  const organization = await resolveStudentOrganization(data);
   await withTransaction(async conn => {
     await conn.execute(
       `INSERT INTO users (username, password, role, real_name, student_no, class_id, class_name, college, major, grade, phone)
        VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [studentNo, password, data.real_name || "", studentNo, classId, data.class_name || "", data.college || "", data.major || "", data.grade || "", data.phone || ""]
+      [
+        studentNo,
+        password,
+        data.real_name || "",
+        studentNo,
+        organization.classId,
+        organization.className,
+        organization.college,
+        organization.major,
+        organization.grade,
+        data.phone || "",
+      ]
     );
     await addAdminLog(conn, operator, "创建学生账号", studentNo, "管理员手动创建学生账号，初始密码为学号");
   });
@@ -171,7 +247,7 @@ async function resetPassword(operator, data = {}) {
   requireAdmin(operator);
   const account = normalizeText(data.account || data.username || data.student_no);
   if (!account) throw new Error("请输入需要重置的学号或账号");
-  const [users] = await pool.execute("SELECT id, username, role, student_no FROM users WHERE username=? OR student_no=? LIMIT 1", [account, account]);
+  const [users] = await pool.execute("SELECT id, username, role, student_no FROM users WHERE (username=? OR student_no=?) AND COALESCE(is_active,1)=1 LIMIT 1", [account, account]);
   if (!users.length) throw new Error("账号不存在");
   const password = await bcrypt.hash("000000", 10);
   await withTransaction(async conn => {
@@ -179,6 +255,46 @@ async function resetPassword(operator, data = {}) {
     await addAdminLog(conn, operator, "重置密码", users[0].username, "密码已重置为 000000");
   });
   return { account: users[0].role === "student" ? users[0].student_no || users[0].username : users[0].username, password: "000000" };
+}
+
+async function deleteUserAccount(operator, userId) {
+  requireAdmin(operator);
+  const id = Number(userId || 0);
+  if (!Number.isInteger(id) || id <= 0) throw new Error("账号参数无效");
+  if (Number(operator.id) === id) throw new Error("不能删除当前登录的管理员账号");
+
+  return withTransaction(async conn => {
+    const [[target]] = await conn.execute(
+      "SELECT id, username, student_no, role, real_name, is_active FROM users WHERE id=? LIMIT 1 FOR UPDATE",
+      [id]
+    );
+    if (!target || Number(target.is_active) === 0) throw new Error("账号不存在或已删除");
+    if (target.role === "admin") {
+      const [[adminCount]] = await conn.execute(
+        "SELECT COUNT(*) AS count FROM users WHERE role='admin' AND COALESCE(is_active,1)=1"
+      );
+      if (Number(adminCount.count || 0) <= 1) throw new Error("系统至少需要保留一个管理员账号");
+    }
+
+    await conn.execute(
+      "UPDATE users SET is_active=0, deleted_at=NOW(), is_assessment_member=0 WHERE id=?",
+      [id]
+    );
+    await conn.execute(
+      "UPDATE assessment_batch_members SET status='removed', removed_at=NOW() WHERE student_id=? AND status='active'",
+      [id]
+    );
+    await conn.execute("DELETE FROM assessment_review_assignment_members WHERE reviewer_id=?", [id]);
+    await conn.execute(
+      "UPDATE assessment_review_tasks SET status='cancelled', completed_at=NOW() WHERE reviewer_id=? AND status='pending'",
+      [id]
+    );
+    await conn.execute("DELETE FROM counselor_scopes WHERE counselor_id=?", [id]);
+
+    const account = target.role === "student" ? target.student_no || target.username : target.username;
+    await addAdminLog(conn, operator, "删除账号", account, `停用${ROLE_LABEL[target.role] || target.role}账号并保留历史业务数据`);
+    return { id, account, role: target.role, role_name: ROLE_LABEL[target.role] || target.role };
+  });
 }
 
 async function listOrganizations(operator) {
@@ -210,7 +326,7 @@ async function createClass(operator, data = {}) {
   requireAdmin(operator);
   const collegeId = Number(data.college_id || 0);
   const majorId = Number(data.major_id || 0);
-  const grade = normalizeText(data.grade);
+  const grade = normalizeClassGrade(data.grade);
   const name = normalizeText(data.name);
   if (!collegeId || !majorId || !grade || !name) throw new Error("学院、专业、年级和班级名称均不能为空");
   const [[college]] = await pool.execute("SELECT name FROM assessment_colleges WHERE id=? LIMIT 1", [collegeId]);
@@ -287,6 +403,7 @@ module.exports = {
   importStudentAccounts,
   generateRoleAccounts,
   resetPassword,
+  deleteUserAccount,
   listOrganizations,
   createCollege,
   createMajor,

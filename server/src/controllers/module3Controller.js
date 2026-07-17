@@ -113,6 +113,14 @@ exports.getSettings = async (_req, res) => {
   }
 };
 
+exports.getScorePolicy = async (_req, res) => {
+  try {
+    res.json(Res.success(await service.getScorePolicy()));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
+};
+
 exports.updateSettings = async (req, res) => {
   try {
     res.json(Res.success(await service.updateSettings(req.body, await currentUser(req)), "设置已保存"));
@@ -140,10 +148,28 @@ exports.getFormDetail = async (req, res) => {
 exports.getFormWordPreview = async (req, res) => {
   try {
     const source = await service.getFormWordSource(req.params.id, await currentUser(req));
-    const result = await mammoth.convertToHtml({ path: source.path });
+    const convertImage = mammoth.images.imgElement(image =>
+      image.read("base64").then(imageBuffer => ({
+        src: `data:${image.contentType || "application/octet-stream"};base64,${imageBuffer}`,
+      }))
+    );
+    const result = await mammoth.convertToHtml({ path: source.path }, {
+      convertImage,
+      ignoreEmptyParagraphs: false,
+      styleMap: [
+        "p[style-name='Title'] => h1.doc-title:fresh",
+        "p[style-name='Subtitle'] => p.doc-subtitle:fresh",
+        "p[style-name='标题'] => h1.doc-title:fresh",
+        "p[style-name='副标题'] => p.doc-subtitle:fresh",
+      ],
+    });
+    const messages = (result.messages || [])
+      .map(message => message.message)
+      .filter(Boolean);
     res.json(Res.success({
       html: result.value || "<p>该 Word 文档暂无可预览内容。</p>",
-      messages: (result.messages || []).map(message => message.message).filter(Boolean),
+      messages,
+      warning_count: messages.length,
       name: source.name,
     }));
   } catch (error) {
@@ -160,13 +186,6 @@ exports.downloadFormWord = async (req, res) => {
   }
 };
 
-exports.setFormLevel = async (req, res) => {
-  try {
-    res.json(Res.success(await service.setFormLevel(req.params.id, req.body.level, await currentUser(req)), "等级已更新"));
-  } catch (error) {
-    res.json(Res.error(error.message));
-  }
-};
 
 exports.getPendingReviews = async (req, res) => {
   try {
@@ -287,6 +306,14 @@ exports.adminGenerateAccounts = async (req, res) => {
 exports.adminResetPassword = async (req, res) => {
   try {
     res.json(Res.success(await adminService.resetPassword(await currentUser(req), req.body || {}), "密码已重置为 000000"));
+  } catch (error) {
+    res.json(Res.error(error.message));
+  }
+};
+
+exports.adminDeleteUser = async (req, res) => {
+  try {
+    res.json(Res.success(await adminService.deleteUserAccount(await currentUser(req), req.params.id), "账号已删除"));
   } catch (error) {
     res.json(Res.error(error.message));
   }

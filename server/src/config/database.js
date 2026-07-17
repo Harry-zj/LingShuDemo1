@@ -10,7 +10,7 @@ const pool = mysql.createPool({
   host: process.env.DB_HOST || "localhost",
   port: process.env.DB_PORT || 3306,
   user: process.env.DB_USER || "root",
-  password: process.env.DB_PASSWORD || "135246",
+  password: process.env.DB_PASSWORD || "Zj317317",
   database: "lingshu_zongce",
   charset: "utf8mb4",
   multipleStatements: true,
@@ -25,7 +25,7 @@ async function initDatabase() {
     host: process.env.DB_HOST || "localhost",
     port: process.env.DB_PORT || 3306,
     user: process.env.DB_USER || "root",
-    password: process.env.DB_PASSWORD || "135246",
+    password: process.env.DB_PASSWORD || "Zj317317",
     charset: "utf8mb4",
     multipleStatements: true,
   });
@@ -132,6 +132,33 @@ async function initDatabase() {
     try { await conn.execute("ALTER TABLE scoring_rules MODIFY item_name VARCHAR(100)"); }
     catch (e) { console.warn("[DB] V7迁移 item_name:", e.message); }
 
+    // ★ V8 迁移：batch_fill_tasks 支持 OSS URL 和软删除
+    try { await conn.execute("ALTER TABLE batch_fill_tasks ADD COLUMN is_deleted TINYINT(1) DEFAULT 0"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V8迁移 is_deleted:", e.message); }
+    try { await conn.execute("ALTER TABLE batch_fill_tasks ADD COLUMN deleted_at TIMESTAMP NULL"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V8迁移 deleted_at:", e.message); }
+    try { await conn.execute("ALTER TABLE batch_fill_tasks ADD COLUMN result_files JSON DEFAULT NULL"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V8迁移 result_files:", e.message); }
+
+    // ★ V9 迁移：chat_fill_sessions 改造 + chat_fill_messages 建表
+    try { await conn.execute("ALTER TABLE chat_fill_sessions ADD COLUMN template_name VARCHAR(255) DEFAULT '' AFTER template_id"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V9迁移 template_name:", e.message); }
+    try { await conn.execute("ALTER TABLE chat_fill_sessions ADD COLUMN template_oss_url VARCHAR(500) DEFAULT '' AFTER template_name"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V9迁移 template_oss_url:", e.message); }
+    try { await conn.execute("ALTER TABLE chat_fill_sessions ADD COLUMN result_oss_url VARCHAR(500) DEFAULT '' AFTER fields_json"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V9迁移 result_oss_url:", e.message); }
+    try { await conn.execute("ALTER TABLE chat_fill_sessions ADD COLUMN is_deleted TINYINT(1) DEFAULT 0"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V9迁移 chat_fill_sessions.is_deleted:", e.message); }
+    try { await conn.execute(`CREATE TABLE IF NOT EXISTS chat_fill_messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      session_id VARCHAR(64) NOT NULL,
+      field_key VARCHAR(100) NOT NULL,
+      role ENUM('user','assistant') NOT NULL,
+      content TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_cfmsg_session_field (session_id, field_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); }
+    catch (e) { console.warn("[DB] V9迁移 chat_fill_messages:", e.message); }
     try { await conn.execute("ALTER TABLE scoring_rules MODIFY score DECIMAL(5,2) NOT NULL DEFAULT 0"); }
     catch (e) { console.warn("[DB] V8迁移 score:", e.message); }
     try { await conn.execute("ALTER TABLE scoring_rules MODIFY max_score DECIMAL(5,2) DEFAULT NULL"); }
@@ -139,6 +166,20 @@ async function initDatabase() {
 
     try { await conn.execute("ALTER TABLE ai_tasks MODIFY status ENUM('pending','processing','completed','failed','cancelled') DEFAULT 'pending'"); }
     catch (e) { console.warn("[DB] V9迁移 ai_tasks:", e.message); }
+
+    // ★ V10 迁移：用户头像历史表
+    try { await conn.execute(`CREATE TABLE IF NOT EXISTS user_avatar_history (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      oss_url VARCHAR(500) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_uah_user (user_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`); }
+    catch (e) { console.warn("[DB] V10迁移 avatar_history:", e.message); }
+
+    // ★ V11 迁移：assessment_form_items 增加 extra_data 列（存储 F2 课程成绩数组等）
+    try { await conn.execute("ALTER TABLE assessment_form_items ADD COLUMN extra_data JSON DEFAULT NULL AFTER reason"); }
+    catch (e) { if (e.errno !== 1060) console.warn("[DB] V11迁移 extra_data:", e.message); }
 
     // 种子数据（INSERT IGNORE 幂等安全，仅含系统配置）
     await seedDevData(conn);

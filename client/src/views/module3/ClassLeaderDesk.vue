@@ -1,12 +1,14 @@
 <template>
-  <Module3FeatureMenu
-    v-if="view === 'menu'"
-    :title="`${currentRoleName}待评价任务`"
-    description="首次评价和异议复评分开进入，避免不同处理规则的任务混在同一列表。"
-    :back-path="workbenchPath"
-    back-label="返回管理员工作台"
-    :cards="menuCards"
-  />
+  <template v-if="view === 'menu'">
+    <Module3FeatureMenu
+      :title="`${currentRoleName}待评价任务`"
+      description=""
+      :back-path="workbenchPath"
+      back-label="返回工作台"
+      :cards="menuCards"
+    />
+
+  </template>
 
   <div v-else class="class-leader-desk">
     <button class="back-link" @click="router.push('/module3/class-leader')"><VIcon icon="mdi:arrow-left" />返回待评价任务</button>
@@ -14,6 +16,7 @@
       <h2>{{ view === 'objection' ? '异议复评任务' : '首次评价任务' }}</h2>
       <p class="page-desc">只显示明确分配给当前账号的{{ view === 'objection' ? '异议复评' : '首次评价' }}表单。</p>
     </div>
+
 
     <div class="stats-row">
       <div class="stat-card warning"><VIcon icon="mdi:clock-outline" class="stat-icon" /><div class="stat-num">{{ filteredPending.length }}</div><div class="stat-lbl">当前待处理</div></div>
@@ -25,7 +28,7 @@
       <div class="panel-header"><h3><VIcon icon="mdi:clipboard-account-outline" />{{ view === 'objection' ? '异议复评' : '首次评价' }}列表</h3><span class="panel-badge">{{ filteredPending.length }} 份待处理</span></div>
       <div class="student-list">
         <div class="student-row" v-for="(form, i) in filteredPending" :key="form.id" :style="{ animationDelay: (i * 0.06) + 's' }" @click="goDetail(form.id)">
-          <div class="student-main"><VIcon icon="mdi:account-circle-outline" class="student-icon" /><div><div class="student-name">{{ form.student_name }} <span class="review-stage" v-if="form.review_stage === 'objection'">异议复评</span></div><div class="student-meta">学号：{{ form.student_no }} · 学院：{{ form.college }} · 年级：{{ form.grade }} · 班级：{{ form.class_name }} · 综合分：{{ form.scores.total }}</div></div></div>
+          <div class="student-main"><VIcon icon="mdi:account-circle-outline" class="student-icon" /><div><div class="student-name">{{ form.student_name || '未命名学生' }} <span class="review-stage" v-if="form.review_stage === 'objection'">异议复评</span></div><div class="student-meta">学号：{{ form.student_no || '-' }} · 学院：{{ form.college || '-' }} · 年级：{{ form.grade || '-' }} · 班级：{{ form.class_name || '-' }} · 综合分：{{ scoreTotal(form) }}</div></div></div>
           <div class="student-status"><span>{{ form.status_label }}</span><VIcon icon="mdi:chevron-right" /></div>
         </div>
         <div class="empty-state" v-if="!filteredPending.length"><VIcon icon="mdi:check-all" /><span>{{ emptyText }}</span></div>
@@ -58,11 +61,31 @@ const menuCards = computed(() => [
   { title: '异议复评任务', description: '只处理学生统一提交异议后返回的异议项目', icon: 'mdi:message-question-outline', to: '/module3/class-leader/objection', note: `${objectionCount.value} 份待处理` },
 ]);
 const emptyText = computed(() => userStore.role === 'student' && !userStore.user?.is_assessment_member ? '当前学生未被赋予评价小组身份' : `暂无分配给你的${view.value === 'objection' ? '异议复评' : '首次评价'}任务`);
-async function load() {
-  const pendingRes = await getPendingReviews(); if (pendingRes.code === 200) pending.value = pendingRes.data || [];
-  const statRes = await getStatistics(); if (statRes.code === 200) stats.value = statRes.data;
+function scoreTotal(form) {
+  const value = form?.scores?.total ?? form?.total_score ?? form?.score_total;
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2).replace(/\.00$/, '') : '-';
 }
-function goDetail(id) { router.push(`/module3/review-detail/${id}`); }
+
+async function load() {
+  const [pendingResult, statisticsResult] = await Promise.allSettled([
+    getPendingReviews(),
+    getStatistics(),
+  ]);
+
+  if (pendingResult.status === 'fulfilled' && pendingResult.value?.code === 200) {
+    pending.value = Array.isArray(pendingResult.value.data) ? pendingResult.value.data : [];
+  } else {
+    pending.value = [];
+  }
+
+  if (statisticsResult.status === 'fulfilled' && statisticsResult.value?.code === 200) {
+    stats.value = statisticsResult.value.data || null;
+  } else {
+    stats.value = null;
+  }
+}
+function goDetail(id) { if (id) router.push(`/module3/review-detail/${id}`); }
 onMounted(load);
 </script>
 

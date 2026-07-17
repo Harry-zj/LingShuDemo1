@@ -1,19 +1,32 @@
 ﻿const { pool } = require("../../config/database");
 const Res = require("../../utils/response");
+const path = require("path");
+const { uploadBuffer, generateKey } = require("../../services/oss");
 const { parseRuleSourceV2 } = require("../../services/zongce/ai/parsing/ruleParser");
 
-// 上传规则文件
+// 上传规则文件（★ OSS: buffer → 上传云端 → 存完整 URL）
 exports.uploadRuleFiles = async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) return res.json(Res.error("请选择文件"));
     const batchId = req.body.batch_id || req.query.batch_id || null;
     const inserted = [];
     for (const f of req.files) {
-      // multer 中文文件名编码修正
       const safeName = Buffer.from(f.originalname, 'latin1').toString('utf8');
+      // ★ 上传 buffer 到 OSS
+      const ossKey = generateKey(safeName);
+      let filePath;
+      try {
+        filePath = await uploadBuffer(f.buffer, ossKey, f.mimetype);
+      } catch (ossErr) {
+        console.error('[Rule] OSS 上传失败，回退到本地存储:', ossErr.message);
+        const fs = require("fs");
+        const localPath = path.join(__dirname, "../../../uploads", ossKey);
+        fs.writeFileSync(localPath, f.buffer);
+        filePath = ossKey;
+      }
       const [r] = await pool.execute(
         "INSERT INTO rule_sources (user_id, batch_id, source_type, file_name, file_path, status) VALUES (?, ?, 'file', ?, ?, 'pending')",
-        [req.user.id, batchId, safeName, f.filename]
+        [req.user.id, batchId, safeName, filePath]
       );
       inserted.push({ id: r.insertId, file_name: safeName, status: 'pending' });
     }

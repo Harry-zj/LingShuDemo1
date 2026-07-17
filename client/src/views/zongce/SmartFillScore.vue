@@ -68,7 +68,13 @@
 <script setup>
 import { ref, computed } from 'vue'
 
-const props = defineProps({ materials: Array, evaluation: Object, scoreList: Object })
+const props = defineProps({
+  materials: Array,
+  evaluation: Object,
+  scoreList: Object,
+  scorePolicy: Object,
+  readonly: { type: Boolean, default: false },
+})
 defineEmits(['calculate', 'back'])
 
 const selected = ref(null)
@@ -78,15 +84,20 @@ const indicators = computed(() => {
   const list = props.scoreList?.indicators || []
   return ['B1','B2','B3','B4','B5','B6','B7','B8'].map(code => {
     const found = list.find(ind => ind.code === code)
-    return found || { code, name: B_LABELS[code], score: 0, max_score: 30, facts: [], id: code }
+    const maxScore = Number(props.scorePolicy?.scoreLimits?.[code] ?? 30)
+    const source = found || { code, name: B_LABELS[code], score: 0, facts: [], id: code }
+    return { ...source, score: Math.min(Number(source.score || 0), maxScore), max_score: maxScore }
   })
 })
 
-const totalScore = computed(() => indicators.value.reduce((s,ind)=>s+(ind.score||0),0).toFixed(0))
+const totalScore = computed(() => Math.min(
+  indicators.value.reduce((s,ind)=>s+(ind.score||0),0),
+  Number(props.scorePolicy?.scoreLimits?.F3 ?? 100)
+).toFixed(2))
 const totalFactCount = computed(() => props.scoreList?.fact_count || 0)
 const ringProgress = computed(() => {
-  const max = indicators.value.reduce((s,ind)=>s+(ind.max_score||30),0)
-  const total = indicators.value.reduce((s,ind)=>s+(ind.score||0),0)
+  const max = Number(props.scorePolicy?.scoreLimits?.F3 ?? 100)
+  const total = Number(totalScore.value || 0)
   return max > 0 ? Math.min(total / max, 1) : 0
 })
 

@@ -38,9 +38,8 @@ const STATIC_HEADING_MAP = {
 //  内建 DOCX ZIP 读取器（零外部依赖）
 //  从 word/styles.xml 中发现文档实际使用的标题样式
 // ============================================================
-function readDocxStylesXml(filePath) {
+function readDocxStylesXmlFromBuffer(buffer) {
   try {
-    const buffer = fs.readFileSync(filePath);
     if (buffer.length < 22) return null;
 
     // 1. 查找 End of Central Directory Record (签名 0x06054b50)
@@ -214,12 +213,14 @@ function buildStyleMap(discoveredStyles) {
 // ============================================================
 //  主入口
 // ============================================================
-async function extractStructure(filePath) {
-  const buffer = fs.readFileSync(filePath);
+async function extractStructure(filePathOrBuffer) {
+  const buffer = Buffer.isBuffer(filePathOrBuffer)
+    ? filePathOrBuffer
+    : fs.readFileSync(filePathOrBuffer);
   const inputHash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 16);
 
   // 从 DOCX 内部 styles.xml 发现标题样式
-  const stylesXml = readDocxStylesXml(filePath);
+  const stylesXml = readDocxStylesXmlFromBuffer(buffer);
   const discovered = discoverHeadingStyles(stylesXml);
   if (Object.keys(discovered).length > 0) {
     console.log(`[DocStruct] 从 styles.xml 发现 ${Object.keys(discovered).length} 个标题样式:`, discovered);
@@ -597,6 +598,6 @@ module.exports = {
   isStrictChapterTitle,
   isTopLevelChapter,
   // 也导出内部工具，方便调试
-  readDocxStylesXml,
+  // readDocxStylesXml,
   discoverHeadingStyles,
 };

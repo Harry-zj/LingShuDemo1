@@ -16,6 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role ENUM('student','class_leader','teacher','class_committee','counselor','student_affairs','admin') NOT NULL DEFAULT 'student',
   is_assessment_member TINYINT(1) NOT NULL DEFAULT 0,
+  is_active TINYINT(1) NOT NULL DEFAULT 1,
+  deleted_at DATETIME DEFAULT NULL,
   real_name VARCHAR(50) DEFAULT '',
   student_no VARCHAR(20) DEFAULT NULL,
   class_id INT DEFAULT NULL,
@@ -261,6 +263,7 @@ CREATE TABLE IF NOT EXISTS assessment_form_items (
   sub_key VARCHAR(20) NOT NULL DEFAULT '',
   title VARCHAR(200) DEFAULT '',
   reason TEXT,
+  extra_data JSON DEFAULT NULL,
   score DECIMAL(5,2) DEFAULT 0,
   evidence_ids JSON DEFAULT NULL,
   editable TINYINT(1) DEFAULT 1,
@@ -351,6 +354,7 @@ CREATE TABLE IF NOT EXISTS counselor_scopes (
   id INT AUTO_INCREMENT PRIMARY KEY,
   counselor_id INT NOT NULL,
   college VARCHAR(100) NOT NULL DEFAULT '',
+  major VARCHAR(100) NOT NULL DEFAULT '',
   grade VARCHAR(20) NOT NULL DEFAULT '',
   class_ids JSON DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -480,8 +484,11 @@ CREATE TABLE IF NOT EXISTS batch_fill_tasks (
   mappings JSON DEFAULT NULL,
   status VARCHAR(30) DEFAULT 'uploaded',
   result_path VARCHAR(500) DEFAULT '',
+  result_files JSON DEFAULT NULL,
   success_count INT DEFAULT 0,
   fail_count INT DEFAULT 0,
+  is_deleted TINYINT(1) DEFAULT 0,
+  deleted_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -493,10 +500,25 @@ CREATE TABLE IF NOT EXISTS chat_fill_sessions (
   id VARCHAR(64) PRIMARY KEY,
   user_id INT NOT NULL,
   template_id INT NOT NULL,
+  template_name VARCHAR(255) DEFAULT '',
+  template_oss_url VARCHAR(500) DEFAULT '',
   fields_json JSON DEFAULT NULL,
+  result_oss_url VARCHAR(500) DEFAULT '',
   status VARCHAR(30) DEFAULT 'analyzed',
+  is_deleted TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 对话填表消息记录
+CREATE TABLE IF NOT EXISTS chat_fill_messages (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  session_id VARCHAR(64) NOT NULL,
+  field_key VARCHAR(100) NOT NULL,
+  role ENUM('user','assistant') NOT NULL,
+  content TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_cfmsg_session_field (session_id, field_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -801,6 +823,9 @@ CREATE TABLE IF NOT EXISTS zongce_config (
 
 -- ALTER TABLE rule_sets
 --   MODIFY COLUMN status ENUM('draft','published','archived','parse_structure_failed') DEFAULT 'draft';
+
+-- ★ 为 assessment_form_items 表增加 extra_data 列（存储 F2 课程成绩数组等扩展数据）
+-- ALTER TABLE assessment_form_items ADD COLUMN extra_data JSON DEFAULT NULL AFTER reason;
 
 -- ALTER TABLE document_parse_runs
 --   MODIFY COLUMN status ENUM('running','completed','failed','parse_structure_failed') DEFAULT 'running';

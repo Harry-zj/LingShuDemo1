@@ -169,5 +169,10 @@ onUnmounted(() => { window.removeEventListener("resize", handleResize); compareC
 .echart-box { width: 100%; height: 280px; }
 .no-data-hint { text-align: center; color: var(--color-gray); font-size: 14px; padding: 40px 0; }
 
-@media (max-width: 768px) { .overview-grid, .stats-row { grid-template-columns: 1fr; } .stats-row { flex-wrap: wrap; } .stat-card { flex: 1 1 45%; } }
+@media (max-width: 768px) {
+  .page-header { flex-wrap: wrap; gap: 12px; }
+  .overview-grid, .stats-row { grid-template-columns: 1fr; }
+  .stats-row { flex-wrap: wrap; }
+  .stat-card { flex: 1 1 45%; }
+}
 </style>

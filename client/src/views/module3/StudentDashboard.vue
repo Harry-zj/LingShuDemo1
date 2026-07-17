@@ -151,6 +151,13 @@
       <div class="loading-card glass-card" v-if="loading">
         <VIcon icon="mdi:loading" class="spin" />正在加载当前批次详情...
       </div>
+
+      <div class="back-to-top-row" v-if="viewMode === 'form' && form">
+        <button type="button" class="back-to-top-btn" @click="scrollToTop">
+          <VIcon icon="mdi:arrow-up-bold-circle-outline" />
+          回到页面顶部
+        </button>
+      </div>
     </template>
   </div>
 </template>
@@ -203,6 +210,10 @@ function clearObjectionDraft() {
 
 function backToBatchList() {
   router.push(viewMode.value === 'result' ? '/module3/student/results' : '/module3/student/forms');
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 async function loadDetail() {
@@ -268,6 +279,7 @@ async function saveEdit(options = {}) {
     });
     if (res.code === 200) {
       form.value = res.data;
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       if (!silent) alert('修改已保存');
       return true;
     }
@@ -297,6 +309,7 @@ async function submit() {
     const res = await submitStudentForm(batchId.value);
     if (res.code === 200) {
       form.value = res.data;
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       alert('已提交并分配给跨班评价小组成员');
     } else alert(res.msg || '提交失败');
   } catch (error) {
@@ -346,6 +359,7 @@ async function submitAllObjections() {
     if (res.code === 200) {
       form.value = res.data;
       clearObjectionDraft();
+      window.dispatchEvent(new CustomEvent('lingshu-module3-notice-change'));
       alert('异议申请已统一提交，等待原评价小组成员复评');
     } else alert(res.msg || '异议提交失败');
   } catch (error) {
@@ -412,6 +426,10 @@ onMounted(loadDetail);
 .objection-submit-panel h3 { display: flex; align-items: center; gap: 8px; font-size: 16px; margin-bottom: 6px; }
 .objection-submit-panel p { color: var(--color-text-secondary); font-size: 13px; line-height: 1.6; }
 .loading-card { display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--color-text-secondary); }
+.back-to-top-row { display: flex; justify-content: center; padding-top: 6px; }
+.back-to-top-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 180px; min-height: 44px; padding: 0 20px; border: 1px solid color-mix(in srgb, var(--color-primary) 36%, var(--color-border)); border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 9%, var(--color-surface)); color: var(--color-primary); font-size: 14px; font-weight: 700; cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease; }
+.back-to-top-btn:hover { transform: translateY(-2px); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 14%, var(--color-surface)); }
+.back-to-top-btn .v-icon { font-size: 20px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px) {

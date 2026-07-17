@@ -73,4 +73,67 @@ function generateKey(originalName) {
   return `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
 }
 
-module.exports = { uploadBuffer, downloadBuffer, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey };
+/**
+ * 删除单个 OSS 对象
+ * @param {string} key OSS key 或完整 URL
+ */
+async function deleteBuffer(key) {
+  const client = getClient();
+  let fullKey;
+  if (key.startsWith('http')) {
+    fullKey = extractKeyFromUrl(key);
+  } else {
+    fullKey = key.startsWith(KEY_PREFIX) ? key : KEY_PREFIX + key;
+  }
+  await client.delete(fullKey);
+}
+
+/**
+ * 批量删除 OSS 对象
+ * @param {string[]} keys OSS key 或 URL 数组
+ */
+async function deleteMultiple(keys) {
+  if (!keys || keys.length === 0) return;
+  const client = getClient();
+  const fullKeys = keys.map(k => {
+    if (k.startsWith('http')) return extractKeyFromUrl(k);
+    return k.startsWith(KEY_PREFIX) ? k : KEY_PREFIX + k;
+  });
+  await client.deleteMulti(fullKeys, { quiet: true });
+}
+
+const AVATAR_KEY_PREFIX = 'avatars/';
+
+/**
+ * 上传头像 Buffer 到 OSS（使用 avatars/ 前缀）
+ * @param {Buffer} buffer 文件内容
+ * @param {string} key OSS 对象路径
+ * @param {string} mimeType MIME 类型
+ * @returns {Promise<string>} 完整 OSS 公开 URL
+ */
+async function uploadAvatarBuffer(buffer, key, mimeType) {
+  const client = getClient();
+  const fullKey = key.startsWith(AVATAR_KEY_PREFIX) ? key : AVATAR_KEY_PREFIX + key;
+  const result = await client.put(fullKey, buffer, {
+    mime: mimeType,
+    headers: { 'x-oss-object-acl': 'public-read' },
+  });
+  return buildPublicUrl(result.name);
+}
+
+/**
+ * 删除头像 OSS 对象（兼容 avatars/ 前缀和完整 URL）
+ * @param {string} key OSS key 或完整 URL
+ */
+async function deleteAvatarBuffer(key) {
+  const client = getClient();
+  let fullKey;
+  if (key.startsWith('http')) {
+    fullKey = extractKeyFromUrl(key);
+  } else {
+    fullKey = key.startsWith(AVATAR_KEY_PREFIX) ? key : AVATAR_KEY_PREFIX + key;
+  }
+  await client.delete(fullKey);
+}
+
+module.exports = { uploadBuffer, downloadBuffer, deleteBuffer, deleteMultiple, isOssUrl, extractKeyFromUrl, buildPublicUrl, generateKey, uploadAvatarBuffer, deleteAvatarBuffer, AVATAR_KEY_PREFIX };

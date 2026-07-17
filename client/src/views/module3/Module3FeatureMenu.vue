@@ -8,7 +8,7 @@
       <div>
         <span class="eyebrow">FUNCTION MENU</span>
         <h2>{{ title }}</h2>
-        <p>{{ description }}</p>
+        <p v-if="description">{{ description }}</p>
       </div>
       <span class="count-chip">{{ cards.length }} 个功能</span>
     </section>

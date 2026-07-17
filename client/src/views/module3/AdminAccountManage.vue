@@ -20,11 +20,24 @@
       <div class="form-grid">
         <input v-model="student.student_no" placeholder="学号（必填，初始密码=学号）" />
         <input v-model="student.real_name" placeholder="姓名（选填）" />
-        <input v-model="student.college" placeholder="学院（选填）" />
-        <input v-model="student.major" placeholder="专业（选填）" />
-        <input v-model="student.grade" placeholder="年级（选填）" />
-        <input v-model="student.class_name" placeholder="班级（选填）" />
+        <select v-model="student.college" @change="onStudentCollegeChange">
+          <option value="">学院（选填）</option>
+          <option v-for="college in activeColleges" :key="college.id" :value="college.name">{{ college.name }}</option>
+        </select>
+        <select v-model="student.major" :disabled="!student.college" @change="onStudentMajorChange">
+          <option value="">专业（选填）</option>
+          <option v-for="major in studentMajorOptions" :key="major.id" :value="major.name">{{ major.name }}</option>
+        </select>
+        <select v-model="student.grade" :disabled="!student.college" @change="onStudentGradeChange">
+          <option value="">年级（选填）</option>
+          <option v-for="grade in studentGradeOptions" :key="grade" :value="grade">{{ grade }}</option>
+        </select>
+        <select v-model="student.class_name" :disabled="!student.college || !student.major || !student.grade">
+          <option value="">班级（选填）</option>
+          <option v-for="cls in studentClassOptions" :key="cls.id" :value="cls.name">{{ cls.name }}</option>
+        </select>
       </div>
+      <p class="hint organization-hint">学院、专业、年级和班级均来自组织结构管理；请先维护组织数据，再为学生选择归属信息。</p>
       <button class="btn-primary" @click="createStudent">创建学生账号</button>
     </section>
 
@@ -73,10 +86,17 @@
       </div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>账号/学号</th><th>角色</th><th>姓名</th><th>学院</th><th>年级</th><th>专业</th><th>班级</th></tr></thead>
+          <thead><tr><th>账号/学号</th><th>角色</th><th>姓名</th><th>学院</th><th>年级</th><th>专业</th><th>班级</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="u in users" :key="u.id">
               <td>{{ u.account }}</td><td>{{ u.role_name }}</td><td>{{ u.real_name || '-' }}</td><td>{{ u.college || '-' }}</td><td>{{ u.grade || '-' }}</td><td>{{ u.major || '-' }}</td><td>{{ u.class_name || '-' }}</td>
+              <td>
+                <button
+                  class="link-danger"
+                  :disabled="deletingId === u.id || Number(userStore.user?.id) === Number(u.id)"
+                  @click="deleteAccount(u)"
+                >{{ deletingId === u.id ? '删除中...' : '删除账号' }}</button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -103,10 +123,12 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import Module3FeatureMenu from './Module3FeatureMenu.vue';
-import { adminCreateStudent, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword } from '../../api/module3';
+import { adminCreateStudent, adminDeleteUser, adminGenerateAccounts, adminImportStudents, adminListUsers, adminResetPassword, getOrganizations } from '../../api/module3';
+import { useUserStore } from '../../stores/user';
 
 const props = defineProps({ view: { type: String, default: 'menu' } });
 const view = computed(() => props.view || 'menu');
+const userStore = useUserStore();
 const menuCards = [
   { title: '手动创建学生', description: '逐个录入学号和可选个人信息，初始密码与学号相同', icon: 'mdi:account-plus-outline', to: '/module3/account-manage/manual' },
   { title: '文本导入学生', description: '上传或粘贴每行一个学号的纯文本，自动跳过重复账号', icon: 'mdi:file-upload-outline', to: '/module3/account-manage/import' },
@@ -125,6 +147,25 @@ const pageTitle = computed(() => pageMeta[view.value]?.[0] || '账号管理');
 const pageDescription = computed(() => pageMeta[view.value]?.[1] || '');
 
 const student = ref({ student_no: '', real_name: '', college: '', major: '', grade: '', class_name: '' });
+const org = ref({ colleges: [], majors: [], classes: [] });
+const activeColleges = computed(() => org.value.colleges.filter(item => item.is_active !== 0 && item.is_active !== false));
+const selectedStudentCollege = computed(() => activeColleges.value.find(item => item.name === student.value.college));
+const studentMajorOptions = computed(() => org.value.majors.filter(item =>
+  item.is_active !== 0
+  && item.is_active !== false
+  && selectedStudentCollege.value
+  && Number(item.college_id) === Number(selectedStudentCollege.value.id)
+));
+const activeStudentClasses = computed(() => org.value.classes.filter(item => item.status !== 'inactive'));
+const studentGradeOptions = computed(() => [...new Set(activeStudentClasses.value
+  .filter(cls => cls.college === student.value.college && (!student.value.major || cls.major === student.value.major))
+  .map(cls => cls.grade)
+  .filter(Boolean))].sort().reverse());
+const studentClassOptions = computed(() => activeStudentClasses.value.filter(cls =>
+  cls.college === student.value.college
+  && cls.major === student.value.major
+  && cls.grade === student.value.grade
+));
 const importText = ref('');
 const importResult = ref(null);
 const latestResult = ref([]);
@@ -132,6 +173,25 @@ const generate = ref({ role: 'counselor', count: 1 });
 const resetAccount = ref('');
 const users = ref([]);
 const query = ref({ role: '', keyword: '' });
+const deletingId = ref(0);
+
+function onStudentCollegeChange() {
+  student.value.major = '';
+  student.value.grade = '';
+  student.value.class_name = '';
+}
+function onStudentMajorChange() {
+  student.value.grade = '';
+  student.value.class_name = '';
+}
+function onStudentGradeChange() {
+  student.value.class_name = '';
+}
+async function loadOrganizations() {
+  const res = await getOrganizations();
+  if (res.code === 200) org.value = res.data || { colleges: [], majors: [], classes: [] };
+  else alert(res.msg || '加载组织数据失败');
+}
 
 async function loadUsers() {
   const res = await adminListUsers(query.value);
@@ -174,14 +234,33 @@ async function resetPwd() {
     alert('密码已重置为 000000');
   } else alert(res.msg || '重置失败');
 }
+async function deleteAccount(user) {
+  if (Number(userStore.user?.id) === Number(user.id)) return alert('不能删除当前登录的管理员账号');
+  const ok = window.confirm(`确认删除账号“${user.account}”吗？删除后该账号将立即无法登录，历史业务数据会保留。`);
+  if (!ok) return;
+  deletingId.value = user.id;
+  try {
+    const res = await adminDeleteUser(user.id);
+    if (res.code === 200) {
+      alert('账号已删除');
+      await loadUsers();
+    } else alert(res.msg || '删除失败');
+  } finally {
+    deletingId.value = 0;
+  }
+}
 
-watch(view, value => { if (value === 'list') loadUsers(); }, { immediate: true });
+watch(view, value => {
+  if (value === 'list') loadUsers();
+  if (value === 'manual') loadOrganizations();
+}, { immediate: true });
 </script>
 
 <style scoped>
 .admin-page { display:flex; flex-direction:column; gap:22px; animation:fadeIn .35s var(--easing-decelerate); }
 .page-header h2 { font-size:22px; font-weight:var(--font-weight-semibold); }
 .page-desc, .hint { color:var(--color-text-secondary); font-size:13px; margin-top:4px; }
+.organization-hint { margin-top:12px; }
 .panel { padding:22px; border-radius: 8px !important; }
 .panel-header { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; }
 .panel-header h3 { display:flex; align-items:center; gap:8px; font-size:16px; }
@@ -203,6 +282,8 @@ textarea { margin-top:10px; resize:vertical; }
 table { width:100%; border-collapse:collapse; font-size:13px; }
 th, td { padding:10px; border-bottom:1px solid var(--color-border); text-align:left; white-space:nowrap; }
 th { color:var(--color-text-secondary); font-weight:600; }
+.link-danger { border:0; background:transparent; color:#dc2626; cursor:pointer; padding:4px 0; }
+.link-danger:disabled { opacity:.45; cursor:not-allowed; }
 .back-link { display:inline-flex; align-items:center; gap:6px; width:fit-content; border:0; padding:0; background:transparent; color:var(--color-primary); cursor:pointer; }
 @media (max-width:900px) { .form-grid, .result-list { grid-template-columns:1fr; } .panel-header, .filters, .inline-form { flex-direction:column; align-items:stretch; } }
 

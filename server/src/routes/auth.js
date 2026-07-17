@@ -1,10 +1,16 @@
 const router = require("express").Router();
 const ctrl = require("../controllers/authController");
 const auth = require("../middleware/auth");
+const uploadOss = require("../middleware/uploadOss");
+router.get("/public-key", ctrl.getCredentialPublicKey);
 router.get("/register-options", ctrl.getRegisterOptions);
 router.post("/register", ctrl.register);
 router.post("/login", ctrl.login);
 router.get("/profile", auth, ctrl.getProfile);
 router.put("/profile", auth, ctrl.updateProfile);
 router.put("/change-password", auth, ctrl.changePassword);
+router.post("/avatar", auth, uploadOss.single("avatar"), ctrl.uploadAvatar);
+router.delete("/avatar", auth, ctrl.deleteAvatar);
+router.get("/avatar-history", auth, ctrl.getAvatarHistory);
+router.post("/avatar/restore", auth, ctrl.restoreAvatar);
 module.exports = router;

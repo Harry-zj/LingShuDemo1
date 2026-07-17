@@ -35,6 +35,7 @@
         >
           <VIcon :icon="item.icon" />
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
         </router-link>
       </nav>
 
@@ -63,7 +64,8 @@
             class="user-trigger"
             @click="showUserMenu = !showUserMenu"
           >
-            <VIcon icon="mdi:account-circle-outline" />
+            <img v-if="avatarUrl" :src="avatarUrl" class="nav-avatar-img" alt="" />
+            <VIcon v-else icon="mdi:account-circle-outline" />
             <span>{{ displayName }}</span>
             <VIcon
               icon="mdi:chevron-down"
@@ -142,6 +144,7 @@
           </span>
 
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge side-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
 
           <span class="active-marker"></span>
         </router-link>
@@ -173,7 +176,9 @@
             class="side-user-trigger"
             @click="showUserMenu = !showUserMenu"
           >
+            <img v-if="avatarUrl" :src="avatarUrl" class="side-avatar-img" alt="" />
             <VIcon
+              v-else
               icon="mdi:account-circle-outline"
               class="side-avatar"
             />
@@ -223,9 +228,12 @@
       <button
         type="button"
         class="mobile-menu-button"
-        @click="mobileMenuOpen = !mobileMenuOpen"
+        :aria-label="mobileSidebarOpen ? '关闭侧栏菜单' : '打开侧栏菜单'"
+        :title="mobileSidebarOpen ? '关闭侧栏菜单' : '打开侧栏菜单'"
+        @click="mobileSidebarOpen = !mobileSidebarOpen"
       >
-        <VIcon :icon="mobileMenuOpen ? 'mdi:close' : 'mdi:menu'" />
+        <VIcon :icon="mobileSidebarOpen ? 'mdi:close' : 'mdi:menu'" />
+        <span v-if="module3NoticeCount" class="mobile-menu-notice" aria-label="有待处理消息">{{ formatNoticeCount(module3NoticeCount) }}</span>
       </button>
 
       <button
@@ -237,17 +245,7 @@
         <span>灵枢</span>
       </button>
 
-      <button
-        type="button"
-        class="mobile-layout-button"
-        @click="toggleNavMode"
-      >
-        <VIcon
-          :icon="navMode === 'top'
-            ? 'mdi:dock-left'
-            : 'mdi:dock-top'"
-        />
-      </button>
+      <ThemeToggle />
     </header>
 
     <!-- 移动端菜单 -->
@@ -256,6 +254,21 @@
         v-if="mobileMenuOpen"
         class="mobile-menu-panel"
       >
+        <!-- 移动端用户信息头部 -->
+        <router-link
+          v-if="userStore.isLoggedIn"
+          to="/module3/profile"
+          class="mobile-user-header"
+          @click="mobileMenuOpen = false"
+        >
+          <img v-if="avatarUrl" :src="avatarUrl" class="mobile-avatar-img" alt="" />
+          <VIcon v-else icon="mdi:account-circle-outline" class="mobile-avatar-icon" />
+          <div class="mobile-user-meta">
+            <strong>{{ displayName }}</strong>
+            <small>{{ roleName }}</small>
+          </div>
+        </router-link>
+
         <router-link
           v-for="item in navItems"
           :key="item.key"
@@ -266,6 +279,7 @@
         >
           <VIcon :icon="item.icon" />
           <span>{{ item.label }}</span>
+          <span v-if="item.noticeCount" class="nav-notice-badge mobile-notice-badge" aria-label="有待处理消息">{{ formatNoticeCount(item.noticeCount) }}</span>
         </router-link>
 
         <button
@@ -306,6 +320,74 @@
       </div>
     </transition>
 
+    <!-- ★ 移动端覆盖式侧栏（从左滑入，不推动主页面） -->
+    <transition name="overlay-sidebar">
+      <div
+        v-if="mobileSidebarOpen"
+        class="mobile-sidebar-overlay"
+        @click.self="mobileSidebarOpen = false"
+      >
+        <aside class="mobile-sidebar-panel">
+          <!-- 用户信息 -->
+          <router-link
+            v-if="userStore.isLoggedIn"
+            to="/module3/profile"
+            class="msb-user"
+            @click="mobileSidebarOpen = false"
+          >
+            <img v-if="avatarUrl" :src="avatarUrl" class="msb-avatar" alt="" />
+            <VIcon v-else icon="mdi:account-circle-outline" class="msb-avatar-icon" />
+            <div>
+              <strong>{{ displayName }}</strong>
+              <small>{{ roleName }}</small>
+            </div>
+          </router-link>
+          <router-link
+            v-else
+            to="/login"
+            class="msb-user"
+            @click="mobileSidebarOpen = false"
+          >
+            <VIcon icon="mdi:account-circle-outline" class="msb-avatar-icon" />
+            <div>
+              <strong>未登录</strong>
+              <small>点击登录</small>
+            </div>
+          </router-link>
+
+          <!-- 导航项 -->
+          <nav class="msb-nav">
+            <router-link
+              v-for="item in navItems"
+              :key="item.key"
+              :to="item.path"
+              class="msb-item"
+              :class="{ active: isNavActive(item) }"
+              @click="mobileSidebarOpen = false"
+            >
+              <VIcon :icon="item.icon" />
+              <span>{{ item.label }}</span>
+              <span v-if="item.noticeCount" class="nav-notice-badge msb-notice-badge">{{ formatNoticeCount(item.noticeCount) }}</span>
+            </router-link>
+          </nav>
+
+          <!-- 底部操作 -->
+          <div class="msb-footer">
+            <ThemeToggle />
+            <button
+              v-if="userStore.isLoggedIn"
+              type="button"
+              class="msb-logout"
+              @click="handleLogout"
+            >
+              <VIcon icon="mdi:logout" />
+              <span>退出登录</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </transition>
+
     <!-- 页面内容 -->
     <div
       ref="pageShell"
@@ -323,12 +405,15 @@ import {
   computed,
   nextTick,
   onBeforeUnmount,
+  onMounted,
   ref,
   watch,
 } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '../stores/user'
 import ThemeToggle from '../components/ThemeToggle.vue'
+import { getMyMaterials, getPendingReviews, getStudentBatches } from '../api/module3'
+import { calculateStudentNoticeCount, readModule3SeenNoticeKeys } from '../utils/module3Notice'
 
 const route = useRoute()
 const router = useRouter()
@@ -336,14 +421,18 @@ const userStore = useUserStore()
 
 const showUserMenu = ref(false)
 const mobileMenuOpen = ref(false)
+const mobileSidebarOpen = ref(false)
 
 const navMode = ref(getSavedNavMode())
 const pageShell = ref(null)
+const module3NoticeCount = ref(0)
 
 const NAV_SWITCH_DURATION = 320
+const NOTICE_REFRESH_INTERVAL = 60000
 
 let navResizeFrame = 0
 let navLayoutAnimation = null
+let noticeRefreshTimer = 0
 
 function getSavedNavMode() {
   try {
@@ -483,6 +572,8 @@ const roleName = computed(() =>
   '已登录'
 )
 
+const avatarUrl = computed(() => userStore.user?.avatar || "")
+
 const MANAGEMENT_HOME_BY_ROLE = {
   student: '/module3/student',
   admin: '/module3/batch-manage',
@@ -495,6 +586,53 @@ const managementHome = computed(() =>
   MANAGEMENT_HOME_BY_ROLE[userStore.userRole] ||
   '/module3/student'
 )
+
+
+function formatNoticeCount(count) {
+  const number = Number(count || 0)
+  return number > 99 ? '99+' : String(number)
+}
+
+async function refreshModule3NoticeCount() {
+  if (!userStore.isLoggedIn) {
+    module3NoticeCount.value = 0
+    return
+  }
+
+  const role = userStore.userRole
+  if (role === 'student') {
+    const jobs = [getStudentBatches(), getMyMaterials()]
+    if (userStore.user?.is_assessment_member) jobs.push(getPendingReviews())
+    const results = await Promise.allSettled(jobs)
+    const batchRes = results[0]?.status === 'fulfilled' ? results[0].value : null
+    const formRes = results[1]?.status === 'fulfilled' ? results[1].value : null
+    const pendingRes = results[2]?.status === 'fulfilled' ? results[2].value : null
+    const pendingCount = pendingRes?.code === 200 && Array.isArray(pendingRes.data)
+      ? pendingRes.data.length
+      : 0
+    module3NoticeCount.value = calculateStudentNoticeCount(
+      batchRes?.code === 200 && Array.isArray(batchRes.data) ? batchRes.data : [],
+      formRes?.code === 200 && Array.isArray(formRes.data) ? formRes.data : [],
+      pendingCount,
+      readModule3SeenNoticeKeys(userStore.user?.id)
+    )
+    return
+  }
+
+  if (['counselor', 'student_affairs'].includes(role)) {
+    try {
+      const response = await getPendingReviews()
+      module3NoticeCount.value = response?.code === 200 && Array.isArray(response.data)
+        ? response.data.length
+        : 0
+    } catch {
+      module3NoticeCount.value = 0
+    }
+    return
+  }
+
+  module3NoticeCount.value = 0
+}
 
 const navItems = computed(() => {
   const items = []
@@ -532,6 +670,7 @@ const navItems = computed(() => {
       path: '/module3/admin',
       section: '/module3/admin',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: 0,
     })
   }
 
@@ -542,6 +681,7 @@ const navItems = computed(() => {
       path: '/module3/counselor',
       section: '/module3/counselor',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -552,6 +692,7 @@ const navItems = computed(() => {
       path: '/module3/student-affairs',
       section: '/module3/student-affairs',
       icon: 'mdi:view-dashboard-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -562,6 +703,7 @@ const navItems = computed(() => {
       path: managementHome.value,
       section: '/module3',
       icon: 'mdi:account-group-outline',
+      noticeCount: module3NoticeCount.value,
     })
   }
 
@@ -601,7 +743,13 @@ function closeUserMenu() {
 }
 
 function goHome() {
-  router.push('/home')
+  const roleLanding = {
+    admin: '/module3/admin',
+    counselor: '/module3/counselor',
+    student_affairs: '/module3/student-affairs',
+    student: '/home',
+  }
+  router.push(roleLanding[userStore.userRole] || (userStore.isLoggedIn ? '/login' : '/home'))
 }
 
 function handleLogout() {
@@ -615,12 +763,33 @@ watch(
   () => {
     showUserMenu.value = false
     mobileMenuOpen.value = false
+    refreshModule3NoticeCount()
   }
 )
+
+function handleNoticeRefreshEvent() {
+  refreshModule3NoticeCount()
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') refreshModule3NoticeCount()
+}
+
+onMounted(() => {
+  refreshModule3NoticeCount()
+  noticeRefreshTimer = window.setInterval(refreshModule3NoticeCount, NOTICE_REFRESH_INTERVAL)
+  window.addEventListener('focus', handleNoticeRefreshEvent)
+  window.addEventListener('lingshu-module3-notice-change', handleNoticeRefreshEvent)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
 
 onBeforeUnmount(() => {
   cancelAnimationFrame(navResizeFrame)
   navLayoutAnimation?.cancel()
+  window.clearInterval(noticeRefreshTimer)
+  window.removeEventListener('focus', handleNoticeRefreshEvent)
+  window.removeEventListener('lingshu-module3-notice-change', handleNoticeRefreshEvent)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -739,6 +908,64 @@ onBeforeUnmount(() => {
 
 .nav-item.active svg {
   color: #f4b847;
+}
+
+.nav-notice-badge {
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 2px solid rgba(14, 15, 22, 0.96);
+  border-radius: 999px;
+  background: #ef4444;
+  color: #ffffff;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  animation: noticePulse 1.8s ease-in-out infinite;
+}
+
+.side-notice-badge {
+  position: absolute;
+  top: 8px;
+  right: 11px;
+  border-color: rgba(18, 19, 27, 0.97);
+}
+
+.mobile-notice-badge {
+  margin-left: auto;
+  border-color: rgba(17, 18, 26, 0.97);
+}
+
+.mobile-menu-button {
+  position: relative;
+}
+
+.mobile-menu-notice {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: -5px;
+  right: -7px;
+  border: 2px solid rgba(14, 15, 22, 0.98);
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+@keyframes noticePulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }
 
 .top-actions {
@@ -1319,6 +1546,130 @@ onBeforeUnmount(() => {
   }
 }
 
+/* ===== 移动端覆盖式侧栏 ===== */
+.mobile-sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+.mobile-sidebar-panel {
+  width: 270px;
+  max-width: 82vw;
+  height: 100%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: linear-gradient(180deg, rgba(17, 18, 26, 0.99), rgba(12, 13, 19, 0.97));
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+  overflow-y: auto;
+  box-shadow: 12px 0 60px rgba(0, 0, 0, 0.35);
+}
+
+/* 用户信息 */
+.msb-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.msb-user:hover { background: rgba(255, 255, 255, 0.09); }
+.msb-user strong { display: block; color: #fff; font-size: 15px; font-weight: 700; }
+.msb-user small { color: rgba(246, 242, 232, 0.45); font-size: 12px; }
+.msb-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(244, 184, 71, 0.35); flex-shrink: 0; }
+.msb-avatar-icon { font-size: 42px; color: #f4b847; flex-shrink: 0; }
+
+/* 导航项 */
+.msb-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.msb-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  color: rgba(246, 242, 232, 0.68);
+  font-size: 15px;
+  font-weight: 650;
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+}
+.msb-item:hover { color: #fff; background: rgba(255, 255, 255, 0.07); }
+.msb-item.active { color: #fff; background: rgba(255, 255, 255, 0.09); }
+.msb-item.active svg { color: #f4b847; }
+.msb-item svg { font-size: 22px; flex-shrink: 0; }
+.msb-notice-badge {
+  min-width: 19px; height: 19px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  margin-left: auto; border-radius: 999px;
+  background: #ef4444; color: #fff;
+  font-size: 10px; font-weight: 900;
+}
+
+/* 底部 */
+.msb-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  margin-top: 8px;
+}
+.msb-logout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(239, 119, 119, 0.25);
+  border-radius: 12px;
+  color: #ef7777;
+  background: rgba(239, 119, 119, 0.06);
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  font-family: inherit;
+}
+.msb-logout:hover { background: rgba(239, 119, 119, 0.12); }
+
+/* 动画 */
+.overlay-sidebar-enter-active { transition: opacity 0.22s ease; }
+.overlay-sidebar-leave-active { transition: opacity 0.18s ease; }
+.overlay-sidebar-enter-from,
+.overlay-sidebar-leave-to { opacity: 0; }
+.overlay-sidebar-enter-active .mobile-sidebar-panel {
+  animation: slideInLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.overlay-sidebar-leave-active .mobile-sidebar-panel {
+  animation: slideOutLeft 0.2s ease both;
+}
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slideOutLeft {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-100%); }
+}
+
 /* 动画 */
 
 .dropdown-enter-active,
@@ -1528,6 +1879,77 @@ onBeforeUnmount(() => {
 .mobile-logout-entry,
 .mobile-logout-entry svg {
   color: #ffffff;
+}
+
+/* 导航栏头像 */
+.nav-avatar-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.3);
+  flex-shrink: 0;
+}
+
+.side-avatar-img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.3);
+  flex-shrink: 0;
+  font-size: 36px;
+}
+
+/* 移动端菜单用户头部 */
+.mobile-user-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border);
+  text-decoration: none;
+  background: var(--color-surface-variant);
+  transition: background 0.15s;
+}
+
+.mobile-user-header:hover {
+  background: var(--color-gray-bg);
+}
+
+.mobile-avatar-img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(244, 184, 71, 0.4);
+  flex-shrink: 0;
+}
+
+.mobile-avatar-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 44px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.mobile-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mobile-user-meta strong {
+  font-size: 15px;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.mobile-user-meta small {
+  font-size: 12px;
+  color: var(--color-text-secondary);
 }
 
 </style>

@@ -2,7 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { pool } = require("../../config/database");
 const { getFillDataPreview } = require("../zongce/fillService");
-const { uploadBuffer, generateKey } = require("../oss");
+const { uploadBuffer, generateKey, uploadAvatarBuffer, deleteAvatarBuffer } = require("../oss");
+const { mergeSmartFillItems, resolveSmartFillEvidenceItem } = require("./smartFillEvidence");
 
 const ROLE_LABEL = {
   student: "学生",
@@ -13,15 +14,15 @@ const ROLE_LABEL = {
 
 const STATUS_LABEL = {
   smart_ready: "智能填表待提交",
-  pending_class_committee: "待评价小组评价",
-  returned_by_class_committee: "评价小组退回",
-  pending_counselor: "待辅导员评价",
+  pending_class_committee: "已提交，正在等待综测成员评价",
+  returned_by_class_committee: "综测成员退回",
+  pending_counselor: "综测成员已通过，正在等待辅导员评价",
   returned_by_counselor: "辅导员退回",
-  pending_student_affairs: "待学生工作处评价",
+  pending_student_affairs: "辅导员已通过，正在等待学生工作处评价",
   returned_by_student_affairs: "学生工作处退回",
-  approved: "认定通过",
-  rejected: "不予认定",
-  pending_objection_review: "待评价小组异议复评",
+  approved: "已认定通过，当前不可修改",
+  rejected: "当前结果已不予认定，当前不可修改",
+  pending_objection_review: "已提交异议，正在等待原评价小组成员再次评测",
 };
 
 const FORM_STRUCTURE = [
@@ -82,8 +83,8 @@ const SMART_FILL_ITEM_DEFINITIONS = [
 
 const DEFAULT_SETTINGS = {
   gradeRules: [
-    { grade: "优", min: 85 },
-    { grade: "良", min: 75 },
+    { grade: "优", min: 80 },
+    { grade: "良", min: 70 },
     { grade: "合格", min: 60 },
     { grade: "不合格", min: 0 },
   ],
@@ -98,6 +99,29 @@ const DEFAULT_SETTINGS = {
   objectionDays: 7,
   publishNotice: "请选择对应学年综测批次，确认智能填表结果后提交。",
 };
+
+const DEFAULT_SCORE_LIMITS = Object.freeze({
+  total: 100,
+  F1: 100,
+  F2: 100,
+  F3: 100,
+  A1: 20,
+  A2: 20,
+  A3: 20,
+  A4: 20,
+  A5: 20,
+  COURSE: 100,
+  B1: 30,
+  B2: 30,
+  B3: 30,
+  B4: 30,
+  B5: 30,
+  B6: 30,
+  B7: 30,
+  B8: 30,
+});
+
+const SCORE_LIMIT_KEYS = Object.keys(DEFAULT_SCORE_LIMITS);
 
 function parseJson(value, fallback) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -133,26 +157,184 @@ function buildCourseDescription(courses) {
     .join("；");
 }
 
-function buildSmartFillItems(fillData = {}) {
-  return SMART_FILL_ITEM_DEFINITIONS.map((definition, index) => ({
-    ...definition,
-    score: Number(fillData[definition.scoreKey] || 0),
-    reason: definition.section === "F2"
-      ? buildCourseDescription(fillData[definition.detailKey])
-      : String(fillData[definition.detailKey] || ""),
-    sortOrder: index + 1,
+function normalizeScoreLimits(input = {}) {
+  const source = input && typeof input === "object" ? input : {};
+  return Object.fromEntries(SCORE_LIMIT_KEYS.map(key => {
+    const raw = source[key] ?? DEFAULT_SCORE_LIMITS[key];
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < 0 || value > 999.99) {
+      throw new Error(`${key} 分数上限必须是 0-999.99 之间的有效数字`);
+    }
+    return [key, Number(value.toFixed(2))];
   }));
 }
 
-function calculateSmartFillScores(items) {
-  const f1 = items.filter(item => item.section === "F1").reduce((sum, item) => sum + Number(item.score || 0), 0);
-  const f2 = items.filter(item => item.section === "F2").reduce((sum, item) => sum + Number(item.score || 0), 0);
-  const f3 = items.filter(item => item.section === "F3").reduce((sum, item) => sum + Number(item.score || 0), 0);
+function scoreLimitForItem(section, subKey, scoreLimits = DEFAULT_SCORE_LIMITS) {
+  const limits = normalizeScoreLimits(scoreLimits);
+  return Number(limits[subKey] ?? limits[section] ?? limits.total ?? 100);
+}
+
+function normalizeFormItemsForLimits(items = [], scoreLimits = DEFAULT_SCORE_LIMITS, options = {}) {
+  const limits = normalizeScoreLimits(scoreLimits);
+  const rejectOnExceed = options.rejectOnExceed === true;
+  const normalized = (Array.isArray(items) ? items : []).map(item => {
+    const score = Number(item?.score ?? 0);
+    if (!Number.isFinite(score) || score < 0) throw new Error("分值必须是大于等于 0 的有效数字");
+    const limit = scoreLimitForItem(item?.section, item?.subKey || item?.sub_key, limits);
+    if (rejectOnExceed && score > limit) {
+      throw new Error(`${item?.subKey || item?.sub_key || item?.section || "该项"} 分值不能超过 ${limit} 分`);
+    }
+    return { ...item, score: Number(Math.min(score, limit).toFixed(2)) };
+  });
+
+  const grouped = new Map();
+  for (const item of normalized) {
+    const subKey = item.subKey || item.sub_key || item.section || "";
+    const key = `${item.section || ""}:${subKey}`;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(item);
+  }
+
+  for (const group of grouped.values()) {
+    const sample = group[0] || {};
+    const subKey = sample.subKey || sample.sub_key || sample.section || "";
+    const limit = scoreLimitForItem(sample.section, subKey, limits);
+    const total = group.reduce((sum, item) => sum + Number(item.score || 0), 0);
+    if (rejectOnExceed && total > limit + 0.0001) {
+      throw new Error(`${subKey || sample.section || "该分类"} 分类累计分值不能超过 ${limit} 分`);
+    }
+    if (!rejectOnExceed && total > limit) {
+      let remaining = limit;
+      for (const item of group) {
+        const next = Math.min(Number(item.score || 0), Math.max(remaining, 0));
+        item.score = Number(next.toFixed(2));
+        remaining = Number((remaining - next).toFixed(2));
+      }
+    }
+  }
+  return normalized;
+}
+
+function buildSmartFillItems(fillData = {}, scoreLimits = DEFAULT_SCORE_LIMITS, evidenceByItem = new Map()) {
+  const items = SMART_FILL_ITEM_DEFINITIONS.map((definition, index) => {
+    const isF2Course = definition.section === "F2" && definition.subKey === "COURSE";
+    const courses = isF2Course ? (Array.isArray(fillData[definition.detailKey]) ? fillData[definition.detailKey] : null) : null;
+    return {
+      ...definition,
+      score: Number(fillData[definition.scoreKey] || 0),
+      reason: isF2Course
+        ? buildCourseDescription(fillData[definition.detailKey])
+        : String(fillData[definition.detailKey] || ""),
+      extraData: courses,
+      evidence_ids: normalizeIds(evidenceByItem.get(`${definition.section}:${definition.subKey}`) || []),
+      sortOrder: index + 1,
+    };
+  });
+  return normalizeFormItemsForLimits(items, scoreLimits);
+}
+
+async function getPublishedRuleSetId(batchId, db = pool) {
+  const normalizedBatchId = Number(batchId || 0);
+  if (!normalizedBatchId) return 0;
+  const [rows] = await db.execute(
+    `SELECT id
+     FROM rule_sets
+     WHERE batch_id=? AND status='published'
+     ORDER BY published_at DESC, id DESC
+     LIMIT 1`,
+    [normalizedBatchId]
+  );
+  return Number(rows[0]?.id || 0);
+}
+
+async function getSmartFillEvidenceContext(studentId, ruleSetId, db = pool) {
+  const normalizedRuleSetId = Number(ruleSetId || 0);
+  if (!normalizedRuleSetId) return { byItem: new Map(), files: [] };
+
+  const [rows] = await db.execute(
+    `SELECT DISTINCT
+       m.id AS material_id,
+       m.title AS material_title,
+       ef.id AS fact_id,
+       ef.fact_data,
+       frm.preview_data,
+       a.id AS attachment_id,
+       a.file_name,
+       a.file_path,
+       a.file_type,
+       a.file_size,
+       a.created_at AS attachment_created_at
+     FROM fact_rule_matches frm
+     JOIN extracted_facts ef
+       ON frm.extracted_fact_id=ef.id AND ef.status='active'
+     JOIN material_analysis_runs mar
+       ON ef.analysis_run_id=mar.id
+     JOIN materials m
+       ON mar.material_id=m.id
+     JOIN attachments a
+       ON a.material_id=m.id
+     JOIN rule_match_runs rmr
+       ON frm.match_run_id=rmr.id
+     WHERE frm.review_status='confirmed'
+       AND frm.is_current=1
+       AND frm.is_selected=1
+       AND m.user_id=?
+       AND rmr.rule_set_id=?
+     ORDER BY m.id, ef.id, a.id`,
+    [studentId, normalizedRuleSetId]
+  );
+
+  const byItemSets = new Map();
+  const fileMap = new Map();
+  for (const row of rows) {
+    const attachmentId = Number(row.attachment_id || 0);
+    if (!attachmentId) continue;
+    if (!fileMap.has(attachmentId)) {
+      fileMap.set(attachmentId, {
+        id: attachmentId,
+        name: row.file_name || '证明材料',
+        type: row.file_type || '文件',
+        size: Number(row.file_size || 0),
+        url: attachmentPublicUrl(row.file_path),
+        material_id: Number(row.material_id || 0),
+        material_title: row.material_title || '',
+        created_at: row.attachment_created_at || null,
+      });
+    }
+
+    const target = resolveSmartFillEvidenceItem(row.preview_data, row.fact_data);
+    if (!target) continue;
+    if (!byItemSets.has(target.key)) byItemSets.set(target.key, new Set());
+    byItemSets.get(target.key).add(attachmentId);
+  }
+
+  return {
+    byItem: new Map([...byItemSets.entries()].map(([key, ids]) => [key, [...ids]])),
+    files: [...fileMap.values()],
+  };
+}
+
+function latestDate(...values) {
+  const timestamps = values
+    .flat()
+    .filter(Boolean)
+    .map(value => value instanceof Date ? value.getTime() : new Date(value).getTime())
+    .filter(Number.isFinite);
+  return timestamps.length ? new Date(Math.max(...timestamps)) : null;
+}
+
+function calculateSmartFillScores(items, scoreLimits = DEFAULT_SCORE_LIMITS) {
+  const limits = normalizeScoreLimits(scoreLimits);
+  const normalizedItems = normalizeFormItemsForLimits(items, limits);
+  const f1 = Math.min(normalizedItems.filter(item => item.section === "F1").reduce((sum, item) => sum + Number(item.score || 0), 0), limits.F1);
+  const f2 = Math.min(normalizedItems.filter(item => item.section === "F2").reduce((sum, item) => sum + Number(item.score || 0), 0), limits.F2);
+  const f3 = Math.min(normalizedItems.filter(item => item.section === "F3").reduce((sum, item) => sum + Number(item.score || 0), 0), limits.F3);
+  const weightedTotal = f1 * 0.1 + f2 * 0.65 + f3 * 0.25;
   return {
     f1_basic_quality: Number(f1.toFixed(2)),
     f2_course_learning: Number(f2.toFixed(2)),
     f3_innovation_practice: Number(f3.toFixed(2)),
-    total: Number((f1 * 0.1 + f2 * 0.65 + f3 * 0.25).toFixed(2)),
+    total: Number(Math.min(weightedTotal, limits.total).toFixed(2)),
   };
 }
 
@@ -160,13 +342,14 @@ async function getLatestSmartFillSource(studentId, batchId, db = pool) {
   const normalizedBatchId = Number(batchId || 0);
   if (!normalizedBatchId) return null;
 
+  // ★ 规则集由管理员创建，不应按 studentId 过滤 user_id
   const [ruleSets] = await db.execute(
     `SELECT id
      FROM rule_sets
-     WHERE user_id=? AND batch_id=? AND status='published'
+     WHERE batch_id=? AND status='published'
      ORDER BY published_at DESC, id DESC
      LIMIT 1`,
-    [studentId, normalizedBatchId]
+    [normalizedBatchId]
   );
   if (!ruleSets.length) return null;
 
@@ -180,13 +363,41 @@ async function getLatestSmartFillSource(studentId, batchId, db = pool) {
   );
   if (!results.length) return null;
 
+  const settings = await getSettings(db);
   const fillData = await getFillDataPreview(studentId, normalizedBatchId);
-  const items = buildSmartFillItems(fillData);
+  const evidence = await getSmartFillEvidenceContext(studentId, ruleSets[0].id, db);
+  const items = buildSmartFillItems(fillData, settings.scoreLimits, evidence.byItem);
+  const [[fillChange]] = await db.execute(
+    `SELECT MAX(updated_at) AS updated_at
+     FROM smart_fill_data
+     WHERE user_id=? AND (rule_set_id=? OR rule_set_id=0)`,
+    [studentId, ruleSets[0].id]
+  );
+  const [[matchChange]] = await db.execute(
+    `SELECT MAX(COALESCE(rmr.completed_at, rmr.created_at)) AS updated_at
+     FROM rule_match_runs rmr
+     JOIN fact_rule_matches frm ON frm.match_run_id=rmr.id
+     JOIN extracted_facts ef ON frm.extracted_fact_id=ef.id AND ef.status='active'
+     JOIN material_analysis_runs mar ON ef.analysis_run_id=mar.id
+     JOIN materials m ON mar.material_id=m.id
+     WHERE m.user_id=? AND rmr.rule_set_id=?
+       AND frm.review_status='confirmed'
+       AND frm.is_current=1
+       AND frm.is_selected=1`,
+    [studentId, ruleSets[0].id]
+  );
   return {
     fillResult: results[0],
     ruleSetId: ruleSets[0].id,
     items,
-    scores: calculateSmartFillScores(items),
+    evidenceFiles: evidence.files,
+    updatedAt: latestDate(
+      results[0].created_at,
+      fillChange?.updated_at,
+      matchChange?.updated_at,
+      evidence.files.map(file => file.created_at)
+    ),
+    scores: calculateSmartFillScores(items, settings.scoreLimits),
   };
 }
 
@@ -293,8 +504,34 @@ async function getSettings(db = pool) {
   return {
     ...general,
     gradeRules: Array.isArray(map.grade_rules) ? map.grade_rules : DEFAULT_SETTINGS.gradeRules,
+    scoreLimits: normalizeScoreLimits(map.score_limits || DEFAULT_SCORE_LIMITS),
     formStructure: FORM_STRUCTURE,
   };
+}
+
+async function getScorePolicy(db = pool) {
+  const settings = await getSettings(db);
+  return {
+    scoreLimits: settings.scoreLimits,
+    gradeRules: settings.gradeRules,
+    weights: { F1: 0.1, F2: 0.65, F3: 0.25 },
+  };
+}
+
+async function recalculateAllFormsForPolicy(db, scoreLimits, gradeRules) {
+  const [forms] = await db.execute("SELECT id FROM assessment_forms ORDER BY id");
+  for (const form of forms) {
+    const [items] = await db.execute(
+      "SELECT section, sub_key, score FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id",
+      [form.id]
+    );
+    const scores = calculateSmartFillScores(items, scoreLimits);
+    const level = calculateLevel(scores.total, gradeRules);
+    await db.execute(
+      "UPDATE assessment_forms SET scores=?, level=?, manual_level='', updated_at=NOW() WHERE id=?",
+      [JSON.stringify(scores), level, form.id]
+    );
+  }
 }
 
 async function updateSettings(data, operator) {
@@ -305,6 +542,7 @@ async function updateSettings(data, operator) {
         .filter(rule => rule.grade !== undefined && rule.min !== undefined)
         .map(rule => ({ grade: String(rule.grade), min: Number(rule.min) }))
     : settings.gradeRules;
+  const scoreLimits = normalizeScoreLimits(data.scoreLimits || settings.scoreLimits);
   const general = {
     submitDeadline: data.submitDeadline ?? settings.submitDeadline,
     allowStudentEdit: data.allowStudentEdit ?? settings.allowStudentEdit,
@@ -327,7 +565,12 @@ async function updateSettings(data, operator) {
       "INSERT INTO assessment_settings (setting_key, setting_value) VALUES ('general', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
       [JSON.stringify(general)]
     );
-    await addLog(conn, operator, "更新系统设置", "综测规则", "管理员更新截止时间、注册开关、等级规则或流程选项");
+    await conn.execute(
+      "INSERT INTO assessment_settings (setting_key, setting_value) VALUES ('score_limits', ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)",
+      [JSON.stringify(scoreLimits)]
+    );
+    await recalculateAllFormsForPolicy(conn, scoreLimits, gradeRules);
+    await addLog(conn, operator, "更新系统设置", "综测规则", "管理员更新流程选项、等级规则或各项分数上限；系统已重新计算现有综测成绩");
   });
   return getSettings();
 }
@@ -357,10 +600,10 @@ async function getUser(id, db = pool) {
     `SELECT u.id, u.username, u.role, u.real_name, u.student_no, u.class_id, u.class_name,
             u.college, u.major, u.grade, u.phone, u.avatar, u.is_assessment_member,
             (SELECT COUNT(*) FROM assessment_batch_members bm WHERE bm.student_id=u.id AND bm.status='active') AS active_member_count,
-            s.college AS scope_college, s.grade AS scope_grade, s.class_ids AS scope_class_ids
+            s.college AS scope_college, s.major AS scope_major, s.grade AS scope_grade, s.class_ids AS scope_class_ids
      FROM users u
      LEFT JOIN counselor_scopes s ON s.counselor_id = u.id
-     WHERE u.id = ? LIMIT 1`,
+     WHERE u.id = ? AND COALESCE(u.is_active,1)=1 LIMIT 1`,
     [id]
   );
   if (!rows.length) throw new Error("用户不存在");
@@ -390,6 +633,7 @@ function formatUser(row) {
   if (row.role === "counselor") {
     user.scope = {
       college: row.scope_college || row.college || "",
+      major: row.scope_major || "",
       grade: row.scope_grade || row.grade || "",
       class_ids: normalizeIds(parseJson(row.scope_class_ids, [])),
     };
@@ -407,6 +651,7 @@ function isInScope(user, target) {
   if (!scope.college || !scope.grade) return false;
   if (scope.college !== (target.college || "")) return false;
   if (scope.grade !== (target.grade || target.enrollment_grade || "")) return false;
+  if (scope.major && scope.major !== (target.major || "")) return false;
   const classIds = normalizeIds(scope.class_ids);
   return !classIds.length || classIds.includes(Number(target.class_id));
 }
@@ -459,7 +704,7 @@ async function enrichBatch(row, db = pool) {
   const options = parseJson(row.options, {});
   const [counts] = await db.execute(
     `SELECT
-       (SELECT COUNT(*) FROM users u WHERE u.role='student' AND u.college=? AND u.grade=?) AS target_student_count,
+       (SELECT COUNT(*) FROM users u WHERE u.role='student' AND COALESCE(u.is_active,1)=1 AND u.college=? AND u.grade=?) AS target_student_count,
        SUM(CASE WHEN f.status <> 'smart_ready' THEN 1 ELSE 0 END) AS submitted_count,
        SUM(CASE WHEN f.status = 'approved' THEN 1 ELSE 0 END) AS approved_count,
        SUM(CASE WHEN f.status IN ('pending_class_committee','pending_counselor','pending_student_affairs','pending_objection_review') THEN 1 ELSE 0 END) AS pending_count
@@ -729,14 +974,14 @@ async function getScopeOptions() {
     `SELECT u.id, u.username, u.role, u.real_name, u.student_no, u.class_id, u.class_name, u.college, u.major, u.grade,
             u.is_assessment_member,
             (SELECT COUNT(*) FROM assessment_batch_members bm WHERE bm.student_id=u.id AND bm.status='active') AS active_member_count
-     FROM users u WHERE u.role='student' ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
+     FROM users u WHERE u.role='student' AND COALESCE(u.is_active,1)=1 ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
   );
   const [batchMembers] = await pool.execute(
     `SELECT bm.id, bm.batch_id, bm.student_id, bm.status, bm.assigned_at, bm.removed_at,
             u.real_name, u.student_no, u.class_id, u.class_name, u.college, u.major, u.grade
      FROM assessment_batch_members bm
      JOIN users u ON u.id=bm.student_id
-     WHERE bm.status='active'
+     WHERE bm.status='active' AND COALESCE(u.is_active,1)=1
      ORDER BY bm.batch_id, u.class_name, u.student_no`
   );
   const formatted = students.map(formatUser);
@@ -817,28 +1062,135 @@ async function updateUserProfile(userId, data = {}) {
   return getUser(userId);
 }
 
+async function uploadUserAvatar(userId, file) {
+  const user = await getUser(userId);
+
+  // 归档旧头像（若存在且为 OSS URL）
+  const oldAvatar = (user.avatar || "").trim();
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 上传至 OSS
+  const ext = path.extname(file.originalname) || ".jpg";
+  const key = `avatars/${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const avatarUrl = await uploadAvatarBuffer(file.buffer, key, file.mimetype || "image/jpeg");
+
+  // 更新用户记录
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", [avatarUrl, userId]);
+
+  // 记录操作日志
+  await addLog(pool, user, "上传头像", user.username, "更新个人头像");
+
+  return getUser(userId);
+}
+
+async function deleteUserAvatar(userId) {
+  const user = await getUser(userId);
+
+  // 归档当前头像
+  const oldAvatar = (user.avatar || "").trim();
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 清空头像
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", ["", userId]);
+
+  // 记录操作日志
+  await addLog(pool, user, "删除头像", user.username, "移除个人头像");
+
+  return getUser(userId);
+}
+
+/** 获取用户的历史头像列表（最近 20 条） */
+async function getAvatarHistory(userId) {
+  const [rows] = await pool.execute(
+    "SELECT id, oss_url, created_at FROM user_avatar_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 20",
+    [userId]
+  );
+  return rows;
+}
+
+/** 从历史记录中恢复某张头像为当前头像 */
+async function restoreAvatar(userId, historyId) {
+  const [rows] = await pool.execute(
+    "SELECT id, oss_url FROM user_avatar_history WHERE id = ? AND user_id = ? LIMIT 1",
+    [historyId, userId]
+  );
+  if (!rows.length) throw new Error("历史头像记录不存在");
+
+  const user = await getUser(userId);
+  const oldAvatar = (user.avatar || "").trim();
+
+  // 先归档当前头像
+  if (oldAvatar && oldAvatar.startsWith("http")) {
+    await pool.execute(
+      "INSERT INTO user_avatar_history (user_id, oss_url) VALUES (?, ?)",
+      [userId, oldAvatar]
+    );
+  }
+
+  // 设为当前头像
+  await pool.execute("UPDATE users SET avatar = ? WHERE id = ?", [rows[0].oss_url, userId]);
+
+  // 从历史表中移除该条（已恢复到当前）
+  await pool.execute("DELETE FROM user_avatar_history WHERE id = ?", [historyId]);
+
+  await addLog(pool, user, "恢复头像", user.username, "从历史记录恢复头像");
+
+  return getUser(userId);
+}
+
 async function updateCounselorScope(userId, scope) {
   const counselor = await getUser(userId);
   if (counselor.role !== "counselor") throw new Error("仅辅导员可设置管辖范围");
-  if (!scope.college) throw new Error("学院为必选项");
-  if (!scope.grade) throw new Error("年级为必选项");
+  const college = String(scope.college || "").trim();
+  const grade = String(scope.grade || "").trim();
+  const major = String(scope.major || "").trim();
+  if (!college) throw new Error("学院为必选项");
+  if (!grade) throw new Error("年级为必选项");
+
+  if (major) {
+    const [majorClasses] = await pool.execute(
+      "SELECT id FROM assessment_classes WHERE college=? AND grade=? AND major=? AND COALESCE(status,'active') <> 'inactive' LIMIT 1",
+      [college, grade, major]
+    );
+    if (!majorClasses.length) throw new Error("所选专业与当前学院、年级不匹配");
+  }
+
   const classIds = normalizeIds(scope.class_ids);
   if (classIds.length) {
     const placeholders = classIds.map(() => "?").join(",");
-    const [classes] = await pool.execute(
-      `SELECT id FROM assessment_classes WHERE id IN (${placeholders}) AND college=? AND grade=?`,
-      [...classIds, scope.college, scope.grade]
-    );
-    if (classes.length !== classIds.length) throw new Error("所选班级必须属于当前学院和年级");
+    let classSql = `SELECT id FROM assessment_classes
+      WHERE id IN (${placeholders}) AND college=? AND grade=?
+        AND COALESCE(status,'active') <> 'inactive'`;
+    const classParams = [...classIds, college, grade];
+    if (major) {
+      classSql += " AND major=?";
+      classParams.push(major);
+    }
+    const [classes] = await pool.execute(classSql, classParams);
+    if (classes.length !== classIds.length) {
+      throw new Error(major
+        ? "所选班级必须属于当前学院、年级和专业"
+        : "所选班级必须属于当前学院和年级");
+    }
   }
   await withTransaction(async conn => {
     await conn.execute(
-      `INSERT INTO counselor_scopes (counselor_id, college, grade, class_ids)
-       VALUES (?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE college=VALUES(college), grade=VALUES(grade), class_ids=VALUES(class_ids)`,
-      [userId, scope.college, scope.grade, JSON.stringify(classIds)]
+      `INSERT INTO counselor_scopes (counselor_id, college, major, grade, class_ids)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE college=VALUES(college), major=VALUES(major), grade=VALUES(grade), class_ids=VALUES(class_ids)`,
+      [userId, college, major, grade, JSON.stringify(classIds)]
     );
-    await addLog(conn, counselor, "设置管辖范围", counselor.real_name || counselor.username, `${scope.college}${scope.grade}`);
+    await addLog(conn, counselor, "设置管辖范围", counselor.real_name || counselor.username, `${college}${grade}${major}`);
   });
   return getUser(userId);
 }
@@ -852,7 +1204,7 @@ async function listStudents(user) {
      LEFT JOIN assessment_forms f ON f.id = (
        SELECT f2.id FROM assessment_forms f2 WHERE f2.student_id=u.id ORDER BY f2.updated_at DESC, f2.id DESC LIMIT 1
      )
-     WHERE u.role='student'
+     WHERE u.role='student' AND COALESCE(u.is_active,1)=1
      ORDER BY u.college, u.grade DESC, u.class_name, u.student_no`
   );
   return rows
@@ -886,7 +1238,7 @@ async function getActiveBatchMembers(db, batchId, classId = null, excludeStudent
   let sql = `SELECT bm.id AS membership_id, u.id, u.real_name, u.username, u.student_no, u.class_id, u.class_name
              FROM assessment_batch_members bm
              JOIN users u ON u.id=bm.student_id
-             WHERE bm.batch_id=? AND bm.status='active' AND u.role='student'`;
+             WHERE bm.batch_id=? AND bm.status='active' AND u.role='student' AND COALESCE(u.is_active,1)=1`;
   if (classId) {
     sql += " AND u.class_id=?";
     params.push(Number(classId));
@@ -1139,12 +1491,16 @@ async function getReviewableItemIds(db, form, reviewer, task = null) {
   return rows.map(row => Number(row.id));
 }
 
-async function saveItemReviews(db, form, reviewer, reviewerRole, stage, itemReviews, reviewableIds, fallbackAction) {
+async function saveItemReviews(db, form, reviewer, reviewerRole, stage, itemReviews, reviewableIds, fallbackAction, scoreLimits) {
   const reviewMap = new Map((Array.isArray(itemReviews) ? itemReviews : []).map(item => [Number(item.item_id), item]));
-  const [items] = reviewableIds.length
-    ? await db.query("SELECT id, score FROM assessment_form_items WHERE form_id=? AND id IN (?)", [form.id, reviewableIds])
-    : [[]];
+  const [allItems] = await db.execute(
+    "SELECT id, section, sub_key, score FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id",
+    [form.id]
+  );
+  const reviewableSet = new Set(reviewableIds.map(Number));
+  const items = allItems.filter(item => reviewableSet.has(Number(item.id)));
   const savedReviews = [];
+  const proposedItems = allItems.map(item => ({ ...item }));
   for (const item of items) {
     const input = reviewMap.get(Number(item.id)) || {};
     const action = ["approve", "return", "reject"].includes(input.action) ? input.action : fallbackAction;
@@ -1152,17 +1508,29 @@ async function saveItemReviews(db, form, reviewer, reviewerRole, stage, itemRevi
     const reviewedScore = input.score === undefined || input.score === null || input.score === ""
       ? Number(item.score || 0)
       : Number(input.score);
-    if (!Number.isFinite(reviewedScore) || reviewedScore < 0 || reviewedScore > 999.99) {
-      throw new Error("复核分值必须是 0-999.99 之间的有效数字");
+    const itemLimit = scoreLimitForItem(item.section, item.sub_key, scoreLimits);
+    if (!Number.isFinite(reviewedScore) || reviewedScore < 0 || reviewedScore > itemLimit) {
+      throw new Error(`${item.sub_key || item.section} 复核分值必须在 0-${itemLimit} 分之间`);
     }
+    const proposed = proposedItems.find(current => Number(current.id) === Number(item.id));
+    if (proposed) proposed.score = reviewedScore;
+    savedReviews.push({ itemId: Number(item.id), reviewedScore: Number(reviewedScore.toFixed(2)) });
+  }
+
+  normalizeFormItemsForLimits(proposedItems, scoreLimits, { rejectOnExceed: true });
+
+  for (const item of items) {
+    const input = reviewMap.get(Number(item.id)) || {};
+    const action = ["approve", "return", "reject"].includes(input.action) ? input.action : fallbackAction;
+    const reason = String(input.reason || "").trim();
+    const saved = savedReviews.find(review => review.itemId === Number(item.id));
     await db.execute(
       `INSERT INTO assessment_item_reviews
         (form_id, item_id, reviewer_id, reviewer_role, stage, action, reason, reviewed_score)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE action=VALUES(action), reason=VALUES(reason), reviewed_score=VALUES(reviewed_score), updated_at=CURRENT_TIMESTAMP`,
-      [form.id, item.id, reviewer.id, reviewerRole, stage, action, reason, reviewedScore]
+      [form.id, item.id, reviewer.id, reviewerRole, stage, action, reason, saved?.reviewedScore ?? Number(item.score || 0)]
     );
-    savedReviews.push({ itemId: Number(item.id), reviewedScore: Number(reviewedScore.toFixed(2)) });
   }
   return savedReviews;
 }
@@ -1285,6 +1653,20 @@ async function buildFormView(form, viewer = null, db = pool) {
   const settings = await getSettings(db);
   const options = batchOptions(batch, settings);
   const [items] = await db.execute("SELECT * FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id", [form.id]);
+
+  // ★ 回填 F2 COURSE 的 extra_data（兼容迁移前保存的旧数据）
+  const f2CourseItem = items.find(item => item.section === 'F2' && item.sub_key === 'COURSE' && !item.extra_data);
+  if (f2CourseItem) {
+    const [sfdRows] = await db.execute(
+      "SELECT extra_data FROM smart_fill_data WHERE user_id=? AND section='F2' AND item_key='COURSE' AND extra_data IS NOT NULL ORDER BY updated_at DESC LIMIT 1",
+      [form.student_id]
+    );
+    if (sfdRows.length && sfdRows[0].extra_data) {
+      const extraData = typeof sfdRows[0].extra_data === 'string' ? sfdRows[0].extra_data : JSON.stringify(sfdRows[0].extra_data);
+      await db.execute("UPDATE assessment_form_items SET extra_data=? WHERE id=?", [extraData, f2CourseItem.id]);
+      f2CourseItem.extra_data = extraData;
+    }
+  }
   const [allRecords] = await db.execute("SELECT * FROM assessment_review_records WHERE form_id=? ORDER BY created_at ASC, id ASC", [form.id]);
   const [itemReviews] = await db.execute("SELECT * FROM assessment_item_reviews WHERE form_id=? ORDER BY created_at ASC, id ASC", [form.id]);
   const [objections] = await db.execute("SELECT * FROM assessment_objections WHERE form_id=? ORDER BY created_at ASC, id ASC", [form.id]);
@@ -1298,23 +1680,31 @@ async function buildFormView(form, viewer = null, db = pool) {
   }
   const [tasks] = await db.execute(taskSql, taskParams);
   const activeTask = assignedReviewer ? tasks.find(task => task.status === "pending") || tasks[0] : null;
-  const scores = parseJson(form.scores, { f1_basic_quality: 0, f2_course_learning: 0, f3_innovation_practice: 0, total: 0 });
+  const scores = calculateSmartFillScores(items, settings.scoreLimits);
   const wordDocument = await getWordDocumentMetadata(db, form);
-  const evidenceIds = [...new Set(items.flatMap(item => normalizeIds(parseJson(item.evidence_ids, []))))];
-  let evidenceMap = new Map();
+  const smartFillEvidence = form.from_smart_fill
+    ? await getSmartFillEvidenceContext(form.student_id, form.smart_fill_rule_set_id, db)
+    : { byItem: new Map(), files: [] };
+  const evidenceIds = [...new Set([
+    ...items.flatMap(item => normalizeIds(parseJson(item.evidence_ids, []))),
+    ...smartFillEvidence.files.map(file => Number(file.id)).filter(Boolean),
+  ])];
+  let evidenceMap = new Map(smartFillEvidence.files.map(file => [Number(file.id), file]));
   if (evidenceIds.length) {
     const placeholders = evidenceIds.map(() => "?").join(",");
     const [attachments] = await db.execute(
       `SELECT id, file_name, file_path, file_type, file_size FROM attachments WHERE id IN (${placeholders})`,
       evidenceIds
     );
-    evidenceMap = new Map(attachments.map(file => [Number(file.id), {
-      id: file.id,
-      name: file.file_name,
-      type: file.file_type || "文件",
-      size: Number(file.file_size || 0),
-      url: attachmentPublicUrl(file.file_path),
-    }]));
+    for (const file of attachments) {
+      evidenceMap.set(Number(file.id), {
+        id: file.id,
+        name: file.file_name,
+        type: file.file_type || "文件",
+        size: Number(file.file_size || 0),
+        url: attachmentPublicUrl(file.file_path),
+      });
+    }
   }
   const resultReleased = !!form.result_released_at && (isFinalStatus(form.status) || form.status === "pending_objection_review");
   const showReviewResult = !ownerStudent || resultReleased || String(form.status || "").startsWith("returned");
@@ -1322,10 +1712,14 @@ async function buildFormView(form, viewer = null, db = pool) {
   const visibleItemReviews = showReviewResult ? itemReviews : [];
   const objectionByItem = new Map(objections.map(item => [Number(item.item_id), item]));
   const normalizedItems = items.map(item => {
-    const ids = normalizeIds(parseJson(item.evidence_ids, []));
+    const storedIds = normalizeIds(parseJson(item.evidence_ids, []));
+    const autoIds = normalizeIds(smartFillEvidence.byItem.get(`${item.section}:${item.sub_key}`) || []);
+    const ids = storedIds.length ? storedIds : autoIds;
     return {
       ...item,
       subKey: item.sub_key,
+      max_score: scoreLimitForItem(item.section, item.sub_key, settings.scoreLimits),
+      extra_data: parseJson(item.extra_data, null),
       evidence_ids: ids,
       evidence_files: ids.map(id => evidenceMap.get(id)).filter(Boolean),
       editable: !!item.editable,
@@ -1343,7 +1737,7 @@ async function buildFormView(form, viewer = null, db = pool) {
       items: normalizedItems.filter(item => item.section === section.key && item.sub_key === child.key),
     })),
   }));
-  const level = form.manual_level || form.level || calculateLevel(scores.total, settings.gradeRules);
+  const level = calculateLevel(scores.total, settings.gradeRules);
   const deadline = form.result_released_at ? addDays(form.result_released_at, options.objectionDays) : null;
   const reviewableItemIds = viewer && !ownerStudent
     ? await getReviewableItemIds(db, form, viewer, activeTask)
@@ -1354,10 +1748,13 @@ async function buildFormView(form, viewer = null, db = pool) {
     batch_title: batch?.title || form.batch_title || "",
     batch_status: batch?.status || "",
     scores,
+    score_limits: settings.scoreLimits,
+    grade_rules: settings.gradeRules,
     word_document: wordDocument,
+    smart_fill_evidence_files: smartFillEvidence.files.map(({ created_at, ...file }) => file),
     level,
-    manual_level: form.manual_level || "",
-    auto_level: calculateLevel(scores.total, settings.gradeRules),
+    manual_level: "",
+    auto_level: level,
     status_label: STATUS_LABEL[form.status] || form.status,
     items: normalizedItems,
     review_records: visibleRecords,
@@ -1411,11 +1808,14 @@ async function syncStudentSmartFillForm(student, batch) {
 
     const settings = await getSettings(conn);
     const shouldCreate = !form;
+    const sourceUpdatedAt = source.updatedAt ? new Date(source.updatedAt).getTime() : 0;
+    const lastSyncedAt = form?.smart_fill_synced_at ? new Date(form.smart_fill_synced_at).getTime() : 0;
     const shouldRefresh = !!form
       && form.status === "smart_ready"
       && (
         Number(form.fill_result_id || 0) !== Number(source.fillResult.id)
         || Number(form.smart_fill_rule_set_id || 0) !== Number(source.ruleSetId || 0)
+        || sourceUpdatedAt > lastSyncedAt
       );
 
     if (shouldCreate) {
@@ -1476,9 +1876,9 @@ async function syncStudentSmartFillForm(student, batch) {
       for (const item of source.items) {
         await conn.execute(
           `INSERT INTO assessment_form_items
-            (form_id, section, sub_key, title, reason, score, evidence_ids, editable, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, JSON_ARRAY(), 1, ?)`,
-          [form.id, item.section, item.subKey, item.title, item.reason, item.score, item.sortOrder]
+            (form_id, section, sub_key, title, reason, extra_data, score, evidence_ids, editable, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+          [form.id, item.section, item.subKey, item.title, item.reason, item.extraData ? JSON.stringify(item.extraData) : null, item.score, JSON.stringify(normalizeIds(item.evidence_ids)), item.sortOrder]
         );
       }
       await addLog(
@@ -1568,6 +1968,13 @@ async function updateSmartResult(studentId, payload) {
   if (!payload?.batch_id) throw new Error("请先选择综测批次");
   const student = await getUser(studentId);
   assertProfileComplete(student, "填写综测");
+  // ★ 在事务外获取智能填表 Word 文档记录（read-only，使用 pool）
+  const smartFillSource = await getLatestSmartFillSource(student.id, Number(payload.batch_id));
+  const requestedRuleSetId = Number(payload.rule_set_id || 0);
+  const effectiveRuleSetId = requestedRuleSetId
+    || Number(smartFillSource?.ruleSetId || 0)
+    || await getPublishedRuleSetId(payload.batch_id);
+  const smartFillPreview = await getFillDataPreview(student.id, Number(payload.batch_id));
   return withTransaction(async conn => {
     const batch = await getBatchById(Number(payload.batch_id), conn);
     if (!batch) throw new Error("批次不存在或已删除");
@@ -1583,13 +1990,16 @@ async function updateSmartResult(studentId, payload) {
       const [result] = await conn.execute(
         `INSERT INTO assessment_forms
           (batch_id, batch_title, student_id, student_name, student_no, college, major, grade,
-           class_id, class_name, from_smart_fill, is_demo, status, level, scores, personal_summary)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 'smart_ready', ?, ?, ?)`,
+           class_id, class_name, from_smart_fill, is_demo, fill_result_id, smart_fill_rule_set_id,
+           status, level, scores, personal_summary)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, 'smart_ready', ?, ?, ?)`,
         [
           batch.id, batch.title || "",
           student.id, student.real_name || "", student.student_no || student.username || "",
           student.college || "", student.major || "", student.grade || "",
           student.class_id || null, student.class_name || "",
+          smartFillSource?.fillResult?.id || null,
+          effectiveRuleSetId || null,
           calculateLevel(0, DEFAULT_SETTINGS.gradeRules), JSON.stringify(scores), ""
         ]
       );
@@ -1602,39 +2012,39 @@ async function updateSmartResult(studentId, payload) {
 
     let scores = parseJson(form.scores, {});
     if (Array.isArray(payload.items)) {
-      await validateStudentEvidenceIds(conn, student.id, payload.items);
+      const evidence = await getSmartFillEvidenceContext(student.id, effectiveRuleSetId, conn);
+      const sourceItems = buildSmartFillItems(smartFillPreview || {}, settings.scoreLimits, evidence.byItem);
+      const normalizedInputs = mergeSmartFillItems(payload.items.map((input, index) => {
+        const source = input || {};
+        const section = FORM_STRUCTURE.find(item => item.key === source.section) || FORM_STRUCTURE[2];
+        const child = section.children.find(item => item.key === source.subKey) || section.children[0];
+        return {
+          ...source,
+          section: section.key,
+          subKey: child.key,
+          score: Number(source.score || 0),
+          sortOrder: index,
+        };
+      }), sourceItems);
+      await validateStudentEvidenceIds(conn, student.id, normalizedInputs);
+      normalizeFormItemsForLimits(normalizedInputs, settings.scoreLimits, { rejectOnExceed: true });
       await conn.execute("DELETE FROM assessment_form_items WHERE form_id=?", [form.id]);
-      let f1 = 0;
-      let f2 = 0;
-      let f3 = 0;
-      for (let index = 0; index < payload.items.length; index += 1) {
-        const input = payload.items[index] || {};
-        const section = FORM_STRUCTURE.find(item => item.key === input.section) || FORM_STRUCTURE[2];
-        const child = section.children.find(item => item.key === input.subKey) || section.children[0];
-        const score = Number(input.score || 0);
-        if (section.key === "F1") f1 += score;
-        if (section.key === "F2") f2 += score;
-        if (section.key === "F3") f3 += score;
+      for (const input of normalizedInputs) {
         await conn.execute(
           `INSERT INTO assessment_form_items
-            (form_id, section, sub_key, title, reason, score, evidence_ids, editable, sort_order)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [form.id, section.key, child.key, String(input.title || ""), String(input.reason || ""), score, JSON.stringify(normalizeIds(input.evidence_ids)), input.editable === false ? 0 : 1, index]
+            (form_id, section, sub_key, title, reason, extra_data, score, evidence_ids, editable, sort_order)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [form.id, input.section, input.subKey, String(input.title || ""), String(input.reason || ""), input.extraData ? JSON.stringify(input.extraData) : null, input.score, JSON.stringify(normalizeIds(input.evidence_ids)), input.editable === false ? 0 : 1, input.sortOrder]
         );
       }
-      scores = {
-        ...scores,
-        f1_basic_quality: f1,
-        f2_course_learning: f2,
-        f3_innovation_practice: f3,
-        total: Number((f1 * 0.1 + f2 * 0.65 + f3 * 0.25).toFixed(2)),
-      };
+      scores = calculateSmartFillScores(normalizedInputs, settings.scoreLimits);
     }
     const level = calculateLevel(scores.total, settings.gradeRules);
     await conn.execute(
-      "UPDATE assessment_forms SET personal_summary=?, scores=?, level=?, manual_level='', updated_at=NOW() WHERE id=?",
-      [payload.personal_summary ?? form.personal_summary ?? "", JSON.stringify(scores), level, form.id]
+      "UPDATE assessment_forms SET personal_summary=?, scores=?, level=?, manual_level='', fill_result_id=COALESCE(?, fill_result_id), smart_fill_rule_set_id=COALESCE(?, smart_fill_rule_set_id), smart_fill_synced_at=NOW(), updated_at=NOW() WHERE id=?",
+      [payload.personal_summary ?? form.personal_summary ?? "", JSON.stringify(scores), level, smartFillSource?.fillResult?.id || null, effectiveRuleSetId || null, form.id]
     );
+    await recalculateClassAvgForBatch(conn, form.batch_id);
     await addLog(conn, student, "保存综测信息", form.student_name, "学生在信息管理页保存当前批次综测表");
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], student, conn);
@@ -1646,23 +2056,25 @@ async function selectWorkflowReviewer(conn, form, stage) {
   let candidates = [];
   if (role === "counselor") {
     const [rows] = await conn.execute(
-      `SELECT u.id, u.username, u.real_name, u.student_no, u.college, u.grade,
-              s.college AS scope_college, s.grade AS scope_grade, s.class_ids AS scope_class_ids
+      `SELECT u.id, u.username, u.real_name, u.student_no, u.college, u.major, u.grade,
+              s.college AS scope_college, s.major AS scope_major, s.grade AS scope_grade, s.class_ids AS scope_class_ids
        FROM users u
        LEFT JOIN counselor_scopes s ON s.counselor_id=u.id
-       WHERE u.role='counselor'`
+       WHERE u.role='counselor' AND COALESCE(u.is_active,1)=1`
     );
     candidates = rows.filter(row => {
       const college = row.scope_college || row.college || "";
+      const major = row.scope_major || row.major || "";
       const grade = row.scope_grade || row.grade || "";
       const classIds = normalizeIds(parseJson(row.scope_class_ids, []));
       return college === String(form.college || "")
         && grade === String(form.grade || "")
+        && (!major || major === String(form.major || ""))
         && (!classIds.length || classIds.includes(Number(form.class_id)));
     });
   } else {
     const [rows] = await conn.execute(
-      "SELECT id, username, real_name, student_no FROM users WHERE role='student_affairs'"
+      "SELECT id, username, real_name, student_no FROM users WHERE role='student_affairs' AND COALESCE(is_active,1)=1"
     );
     candidates = rows;
   }
@@ -1746,7 +2158,7 @@ async function selectReviewer(conn, form) {
      JOIN assessment_batch_members bm ON bm.student_id=u.id AND bm.batch_id=? AND bm.status='active'
      LEFT JOIN assessment_review_tasks t
        ON t.reviewer_id=u.id AND t.batch_id=? AND t.status <> 'cancelled'
-     WHERE u.role='student' AND u.class_id=?
+     WHERE u.role='student' AND COALESCE(u.is_active,1)=1 AND u.class_id=?
      GROUP BY u.id
      ORDER BY task_count ASC, u.id ASC
      LIMIT 1`,
@@ -1760,6 +2172,8 @@ async function submitSmartResult(studentId, payload = {}) {
   if (!payload.batch_id) throw new Error("请先选择综测批次");
   const student = await getUser(studentId);
   assertProfileComplete(student, "提交综测");
+  // ★ 在事务外获取智能填表 Word 文档记录（read-only，使用 pool）
+  const smartFillSource = await getLatestSmartFillSource(student.id, Number(payload.batch_id));
   return withTransaction(async conn => {
     const [forms] = await conn.execute(
       "SELECT * FROM assessment_forms WHERE student_id=? AND batch_id=? ORDER BY updated_at DESC, id DESC LIMIT 1 FOR UPDATE",
@@ -1780,7 +2194,10 @@ async function submitSmartResult(studentId, payload = {}) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'assessment_member')`,
       [form.batch_id, form.id, reviewer.id, reviewer.real_name || reviewer.username || "", reviewer.student_no || "", reviewer.class_id, reviewer.class_name || assignment.reviewer_class_name, form.class_name || assignment.target_class_name]
     );
-    await conn.execute("UPDATE assessment_forms SET status='pending_class_committee', result_released_at=NULL, pre_objection_status='', updated_at=NOW() WHERE id=?", [form.id]);
+    await conn.execute(
+      "UPDATE assessment_forms SET status='pending_class_committee', result_released_at=NULL, pre_objection_status='', fill_result_id=COALESCE(?, fill_result_id), smart_fill_rule_set_id=COALESCE(?, smart_fill_rule_set_id), updated_at=NOW() WHERE id=?",
+      [smartFillSource?.fillResult?.id || null, smartFillSource?.ruleSetId || null, form.id]
+    );
     await addLog(conn, student, "提交综测表", batch.title, `系统已按工作量均分给 ${reviewer.real_name || reviewer.id}`);
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], student, conn);
@@ -1797,6 +2214,10 @@ async function listFormsByUser(user) {
     if (!user.scope?.college || !user.scope?.grade) return [];
     sql += " WHERE college=? AND grade=?";
     params.push(user.scope.college, user.scope.grade);
+    if (user.scope.major) {
+      sql += " AND major=?";
+      params.push(user.scope.major);
+    }
     const classIds = normalizeIds(user.scope.class_ids);
     if (classIds.length) {
       sql += ` AND class_id IN (${classIds.map(() => "?").join(",")})`;
@@ -1847,10 +2268,23 @@ async function getPendingReviews(user) {
            WHERE f.status IN ('pending_class_committee','pending_objection_review') AND t.reviewer_id=? AND t.status='pending'`;
     params = [user.id, user.id];
   } else if (user.role === "counselor") {
+    const scope = user.scope || {};
+    if (!scope.college || !scope.grade) return [];
     sql = `SELECT DISTINCT f.* FROM assessment_forms f
            JOIN assessment_review_tasks t ON t.form_id=f.id
-           WHERE f.status='pending_counselor' AND t.reviewer_id=? AND t.stage='counselor' AND t.status='pending'`;
-    params = [user.id];
+           WHERE f.status='pending_counselor'
+             AND t.reviewer_id=? AND t.stage='counselor' AND t.status='pending'
+             AND f.college=? AND f.grade=?`;
+    params = [user.id, scope.college, scope.grade];
+    if (scope.major) {
+      sql += " AND f.major=?";
+      params.push(scope.major);
+    }
+    const classIds = normalizeIds(scope.class_ids);
+    if (classIds.length) {
+      sql += ` AND f.class_id IN (${classIds.map(() => "?").join(",")})`;
+      params.push(...classIds);
+    }
   } else if (user.role === "student_affairs") {
     sql = `SELECT DISTINCT f.* FROM assessment_forms f
            JOIN assessment_review_tasks t ON t.form_id=f.id
@@ -1864,53 +2298,133 @@ async function getPendingReviews(user) {
   return Promise.all(rows.map(row => buildFormView(row, user)));
 }
 
-async function setFormLevel(formId, level, operator) {
-  if (!["counselor", "student_affairs"].includes(operator?.role)) {
-    throw new Error("当前角色不可单独调整综测等级");
-  }
-  return withTransaction(async conn => {
-    const [rows] = await conn.execute("SELECT * FROM assessment_forms WHERE id=? LIMIT 1 FOR UPDATE", [Number(formId)]);
-    if (!rows.length) throw new Error("评价表不存在");
-    const form = rows[0];
-    const settings = await getSettings(conn);
-    const batch = await getBatchById(form.batch_id, conn);
-    const options = batchOptions(batch, settings);
+async function recalculateClassAvgForBatch(conn, batchId) {
+  const [forms] = await conn.execute(
+    "SELECT id, student_id, scores, class_id, class_name FROM assessment_forms WHERE batch_id=?",
+    [Number(batchId)]
+  );
+  if (!forms.length) return;
 
-    let stage = "";
-    if (operator.role === "counselor") {
-      if (!options.requireCounselorReview || form.status !== "pending_counselor") {
-        throw new Error("当前表单不在辅导员待评价阶段");
-      }
-      if (!isInScope(operator, form)) throw new Error("只能调整管辖范围内学生的等级");
-      stage = "counselor";
-    } else {
-      if (!options.requireStudentAffairsReview || form.status !== "pending_student_affairs") {
-        throw new Error("当前表单不在学生工作处待评价阶段");
-      }
-      stage = "student_affairs";
+  // 按班级分组
+  const classGroups = new Map();
+  for (const f of forms) {
+    const key = f.class_id ? 'class_' + f.class_id : (f.class_name || 'default');
+    if (!classGroups.has(key)) classGroups.set(key, []);
+    classGroups.get(key).push(f);
+  }
+
+  for (const [className, formList] of classGroups) {
+    const n = formList.length;
+    const aKeys = ['A1','A2','A3','A4','A5'];
+    const bKeys = ['B1','B2','B3','B4','B5','B6','B7','B8'];
+    const aSum = {}, bSum = {};
+    for (const k of aKeys) aSum[k] = 0;
+    for (const k of bKeys) bSum[k] = 0;
+    let f1Sum = 0, f2Sum = 0, f3Sum = 0;
+
+    // F1/F2/F3 从 scores JSON 取
+    for (const f of formList) {
+      const scores = typeof f.scores === 'string' ? JSON.parse(f.scores) : (f.scores || {});
+      f1Sum += Number(scores.f1_basic_quality || 0);
+      f2Sum += Number(scores.f2_course_learning || 0);
+      f3Sum += Number(scores.f3_innovation_practice || 0);
     }
 
-    const [tasks] = await conn.execute(
-      "SELECT id FROM assessment_review_tasks WHERE form_id=? AND reviewer_id=? AND stage=? AND status='pending' LIMIT 1 FOR UPDATE",
-      [form.id, operator.id, stage]
-    );
-    if (!tasks.length) throw new Error("该表单未分配给当前账号，不能调整等级");
+    // A1-A5 / B1-B8 从 assessment_form_items 取
+    const formIds = formList.map(f => f.id);
+    const placeholders = formIds.map(() => '?').join(',');
+    if (formIds.length) {
+      const [items] = await conn.execute(
+        `SELECT form_id, section, sub_key, score FROM assessment_form_items WHERE form_id IN (${placeholders})`,
+        formIds
+      );
+      for (const it of items) {
+        if (it.section === 'F1' && aKeys.includes(it.sub_key)) aSum[it.sub_key] += Number(it.score || 0);
+        if (it.section === 'F3' && bKeys.includes(it.sub_key)) bSum[it.sub_key] += Number(it.score || 0);
+      }
+    }
 
-    const normalizedLevel = String(level || "").trim();
-    const allowedLevels = new Set((settings.gradeRules || []).map(rule => String(rule.grade || "").trim()).filter(Boolean));
-    if (normalizedLevel && !allowedLevels.has(normalizedLevel)) throw new Error("等级值不在当前等级规则中");
+    const classAvg = {};
+    for (const k of aKeys) classAvg[k] = parseFloat((aSum[k] / n).toFixed(1));
+    for (const k of bKeys) classAvg[k] = parseFloat((bSum[k] / n).toFixed(1));
+    classAvg['F1'] = parseFloat((f1Sum / n).toFixed(1));
+    classAvg['F2'] = parseFloat((f2Sum / n).toFixed(1));
+    classAvg['F3'] = parseFloat((f3Sum / n).toFixed(1));
 
-    await conn.execute("UPDATE assessment_forms SET manual_level=?, updated_at=NOW() WHERE id=?", [normalizedLevel, form.id]);
-    await addLog(conn, operator, "调整测评等级", form.student_name, `等级设置为 ${normalizedLevel || "自动"}`);
-    const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
-    return buildFormView(updated[0], operator, conn);
-  });
+    // 创建/更新 evaluation_results
+    for (const f of formList) {
+      const [existing] = await conn.execute(
+        "SELECT id, dimension_scores FROM evaluation_results WHERE user_id=? AND batch_id=?",
+        [f.student_id, Number(batchId)]
+      );
+      if (existing.length > 0) {
+        const dim = typeof existing[0].dimension_scores === 'string'
+          ? JSON.parse(existing[0].dimension_scores) : (existing[0].dimension_scores || {});
+        dim.classAvg = classAvg;
+        await conn.execute('UPDATE evaluation_results SET dimension_scores=? WHERE id=?',
+          [JSON.stringify(dim), existing[0].id]);
+      } else {
+        const total = parseFloat((f1Sum/n*0.1 + f2Sum/n*0.65 + f3Sum/n*0.25).toFixed(2));
+        await conn.execute(
+          'INSERT INTO evaluation_results (user_id, batch_id, total_score, dimension_scores) VALUES (?,?,?,?)',
+          [f.student_id, Number(batchId), total, JSON.stringify({ classAvg, aScores:{}, bScores:{}, scores:{F1:classAvg.F1,F2:classAvg.F2,F3:classAvg.F3} })]
+        );
+      }
+    }
+  }
+
+  // 计算班级排名和专业排名
+  const [allEvals] = await conn.execute(
+    `SELECT er.id, er.user_id, er.total_score, u.class_id, u.college, u.major, u.grade
+     FROM evaluation_results er
+     JOIN users u ON u.id = er.user_id
+     WHERE er.batch_id = ?`,
+    [Number(batchId)]
+  );
+
+  // 班级排名：按 class_id 分组
+  const rankGroups = new Map();
+  for (const ev of allEvals) {
+    const key = ev.class_id ? 'class_' + ev.class_id : 'no_class';
+    if (!rankGroups.has(key)) rankGroups.set(key, []);
+    rankGroups.get(key).push(ev);
+  }
+  for (const group of rankGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { rank: i + 1, totalStudents: total });
+    }
+  }
+
+  // 专业排名：按 college+major+grade 分组
+  const majorGroups = new Map();
+  for (const ev of allEvals) {
+    const key = (ev.college || '') + '|' + (ev.major || '') + '|' + (ev.grade || '');
+    if (!majorGroups.has(key)) majorGroups.set(key, []);
+    majorGroups.get(key).push(ev);
+  }
+  for (const group of majorGroups.values()) {
+    group.sort((a, b) => Number(b.total_score) - Number(a.total_score));
+    const total = group.length;
+    for (let i = 0; i < group.length; i++) {
+      await updateRank(conn, group[i].id, { majorRank: i + 1, majorTotal: total });
+    }
+  }
+}
+
+async function updateRank(conn, evalId, updates) {
+  const [rows] = await conn.execute('SELECT dimension_scores FROM evaluation_results WHERE id=?', [evalId]);
+  if (!rows.length) return;
+  const dim = typeof rows[0].dimension_scores === 'string'
+    ? JSON.parse(rows[0].dimension_scores) : (rows[0].dimension_scores || {});
+  Object.assign(dim, updates);
+  await conn.execute('UPDATE evaluation_results SET dimension_scores=? WHERE id=?', [JSON.stringify(dim), evalId]);
 }
 
 async function reviewForm(formId, reviewer, data = {}) {
   const action = data.action;
   const comment = String(data.comment || "");
-  const level = String(data.level || "");
   const itemReviews = Array.isArray(data.item_reviews) ? data.item_reviews : [];
   if (!["approve", "return", "reject"].includes(action)) throw new Error("无效评价操作");
   return withTransaction(async conn => {
@@ -1977,10 +2491,10 @@ async function reviewForm(formId, reviewer, data = {}) {
 
     const reviewableIds = await getReviewableItemIds(conn, form, reviewer, task);
     if (stage === "objection" && !reviewableIds.length) throw new Error("当前没有待处理的异议加分项");
-    const savedReviews = await saveItemReviews(conn, form, reviewer, reviewerRole, stage, itemReviews, reviewableIds, action);
+    const savedReviews = await saveItemReviews(conn, form, reviewer, reviewerRole, stage, itemReviews, reviewableIds, action, settings.scoreLimits);
 
     let recalculatedScores = parseJson(form.scores, {});
-    let recalculatedLevel = form.level || calculateLevel(recalculatedScores.total, settings.gradeRules);
+    let recalculatedLevel = calculateLevel(recalculatedScores.total, settings.gradeRules);
     if (action === "approve") {
       for (const review of savedReviews) {
         await conn.execute(
@@ -1989,10 +2503,10 @@ async function reviewForm(formId, reviewer, data = {}) {
         );
       }
       const [scoreItems] = await conn.execute(
-        "SELECT section, score FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id",
+        "SELECT section, sub_key, score FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id",
         [form.id]
       );
-      recalculatedScores = calculateSmartFillScores(scoreItems);
+      recalculatedScores = calculateSmartFillScores(scoreItems, settings.scoreLimits);
       recalculatedLevel = calculateLevel(recalculatedScores.total, settings.gradeRules);
     }
 
@@ -2027,8 +2541,7 @@ async function reviewForm(formId, reviewer, data = {}) {
       }
     }
 
-    let finalLevel = form.manual_level || recalculatedLevel || "";
-    if (["student", "counselor"].includes(reviewer.role) && action === "approve" && level) finalLevel = level;
+    const finalLevel = recalculatedLevel || "";
     const actionLabel = stage === "objection"
       ? "异议复评完成"
       : (action === "approve" ? "通过" : action === "return" ? "退回修改" : "不予认定");
@@ -2045,13 +2558,14 @@ async function reviewForm(formId, reviewer, data = {}) {
     const preObjection = stage === "objection" ? "''" : "pre_objection_status";
     await conn.execute(
       `UPDATE assessment_forms
-       SET status=?, scores=?, level=?, manual_level=?, result_released_at=${releasedAtSql}, pre_objection_status=${preObjection}, updated_at=NOW()
+       SET status=?, scores=?, level=?, manual_level='', result_released_at=${releasedAtSql}, pre_objection_status=${preObjection}, updated_at=NOW()
        WHERE id=?`,
-      [nextStatus, JSON.stringify(recalculatedScores), recalculatedLevel, finalLevel, form.id]
+      [nextStatus, JSON.stringify(recalculatedScores), recalculatedLevel, form.id]
     );
     const assignmentNote = nextTask ? `；下一环节已分配给 ${nextTask.reviewer_name}` : "";
     await addLog(conn, reviewer, `${actorLabel}评价`, form.student_name, `${actionLabel}：${comment || "无意见"}${assignmentNote}`);
     await expireBatchMembershipsIfComplete(conn, form.batch_id);
+    if (isFinalStatus(nextStatus)) await recalculateClassAvgForBatch(conn, form.batch_id);
     const [updated] = await conn.execute("SELECT * FROM assessment_forms WHERE id=?", [form.id]);
     return buildFormView(updated[0], reviewer, conn);
   });
@@ -2069,6 +2583,10 @@ async function getStatistics(query = {}, user = null) {
     if (!user.scope?.college || !user.scope?.grade) return emptyStatistics();
     where += " AND f.college=? AND f.grade=?";
     params.push(user.scope.college, user.scope.grade);
+    if (user.scope.major) {
+      where += " AND f.major=?";
+      params.push(user.scope.major);
+    }
     const classIds = normalizeIds(user.scope.class_ids);
     if (classIds.length) {
       where += ` AND f.class_id IN (${classIds.map(() => "?").join(",")})`;
@@ -2086,7 +2604,11 @@ async function getStatistics(query = {}, user = null) {
       "SELECT reviewer_name FROM assessment_review_tasks WHERE form_id=? AND status <> 'cancelled' ORDER BY assigned_at DESC, id DESC",
       [form.id]
     );
-    const scores = parseJson(form.scores, {});
+    const [scoreItems] = await pool.execute(
+      "SELECT section, sub_key, score FROM assessment_form_items WHERE form_id=? ORDER BY sort_order, id",
+      [form.id]
+    );
+    const scores = calculateSmartFillScores(scoreItems, settings.scoreLimits);
     rows.push({
       id: form.id,
       batch_id: form.batch_id,
@@ -2098,7 +2620,7 @@ async function getStatistics(query = {}, user = null) {
       class_name: form.class_name,
       reviewer_names: tasks.map(task => task.reviewer_name).filter(Boolean).join("、") || "未分配",
       total_score: Number(scores.total || 0),
-      level: form.manual_level || form.level || calculateLevel(scores.total, settings.gradeRules),
+      level: calculateLevel(scores.total, settings.gradeRules),
       status: form.status,
       status_label: STATUS_LABEL[form.status] || form.status,
     });
@@ -2109,7 +2631,7 @@ async function getStatistics(query = {}, user = null) {
      WHERE t.status <> 'cancelled' AND ${where}`,
     params
   );
-  const [[studentCount]] = await pool.execute("SELECT COUNT(*) AS count FROM users WHERE role='student'");
+  const [[studentCount]] = await pool.execute("SELECT COUNT(*) AS count FROM users WHERE role='student' AND COALESCE(is_active,1)=1");
   return {
     total_students: Number(studentCount.count || 0),
     submitted: forms.filter(form => form.status !== "smart_ready").length,
@@ -2166,8 +2688,13 @@ module.exports = {
   ensureClass,
   getUser,
   updateUserProfile,
+  uploadUserAvatar,
+  deleteUserAvatar,
+  getAvatarHistory,
+  restoreAvatar,
   missingProfileFields,
   getSettings,
+  getScorePolicy,
   updateSettings,
   listBatches,
   listStudentBatches,
@@ -2187,9 +2714,9 @@ module.exports = {
   getFormDetail,
   getFormWordSource,
   getPendingReviews,
-  setFormLevel,
   reviewForm,
   submitObjection,
+  recalculateClassAvgForBatch,
   getStatistics,
   exportCsv,
   getLogs,

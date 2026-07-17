@@ -68,6 +68,7 @@ async function createModule3Tables(conn) {
       id INT AUTO_INCREMENT PRIMARY KEY,
       counselor_id INT NOT NULL,
       college VARCHAR(100) NOT NULL DEFAULT '',
+      major VARCHAR(100) NOT NULL DEFAULT '',
       grade VARCHAR(20) NOT NULL DEFAULT '',
       class_ids JSON DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -293,6 +294,9 @@ async function removeLegacyDemoForms(conn) {
 
 async function migrateModule3(conn) {
   await tryQuery(conn, "ALTER TABLE users ADD COLUMN is_assessment_member TINYINT(1) NOT NULL DEFAULT 0 AFTER role");
+  await tryQuery(conn, "ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER is_assessment_member");
+  await tryQuery(conn, "ALTER TABLE users ADD COLUMN deleted_at DATETIME DEFAULT NULL AFTER is_active");
+  await tryQuery(conn, "ALTER TABLE users ADD KEY idx_users_active_role (is_active, role)");
   await tryQuery(conn, "ALTER TABLE assessment_batches ADD COLUMN school_year VARCHAR(20) NOT NULL DEFAULT '' AFTER id");
   await tryQuery(conn, "ALTER TABLE assessment_batches ADD COLUMN college VARCHAR(100) NOT NULL DEFAULT '' AFTER title");
   await tryQuery(conn, "ALTER TABLE assessment_batches ADD COLUMN grade VARCHAR(20) NOT NULL DEFAULT '' AFTER college");
@@ -313,6 +317,7 @@ async function migrateModule3(conn) {
   await tryQuery(conn, "ALTER TABLE assessment_classes ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'active' AFTER grade");
   await tryQuery(conn, "ALTER TABLE assessment_classes DROP INDEX uk_assessment_class");
   await tryQuery(conn, "ALTER TABLE assessment_classes ADD UNIQUE KEY uk_assessment_class_scope (college, major, grade, name)");
+  await tryQuery(conn, "ALTER TABLE counselor_scopes ADD COLUMN major VARCHAR(100) NOT NULL DEFAULT '' AFTER college");
   await backfillClasses(conn);
   await backfillOrganizations(conn);
   await backfillBatches(conn);
