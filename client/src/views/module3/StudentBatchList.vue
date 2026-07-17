@@ -32,15 +32,18 @@
       </div>
 
       <div class="batch-grid" v-if="batches.length">
-        <button v-for="batch in batches" :key="batch.id" class="batch-card glass-card" @click="openBatch(batch)">
+        <button v-for="batch in batches" :key="batch.id"
+          class="batch-card glass-card"
+          :class="{ 'batch-closed': batch.status === 'closed' || batch.status === 'archived' }"
+          @click="openBatch(batch)">
           <div class="batch-head">
-            <span class="status-pill">{{ statusText(batch.status) }}</span>
+            <span class="status-pill" :class="'status-' + batch.status">{{ statusText(batch.status) }}</span>
             <VIcon icon="mdi:arrow-right" />
           </div>
           <strong>{{ batch.title }}</strong>
-          <p>{{ batch.college }} · {{ batch.grade }}级</p>
+          <p>{{ batch.college }} · {{ batch.grade }}</p>
           <small>{{ batch.start_time || '-' }} 至 {{ batch.end_time || '-' }}</small>
-          <em>{{ view === 'result' ? '进入结果详情' : '进入综测填写详情' }}</em>
+          <em>{{ batch.status === 'closed' || batch.status === 'archived' ? '查看历史记录（只读）' : (view === 'result' ? '进入结果详情' : '进入综测填写详情') }}</em>
         </button>
       </div>
 
@@ -137,9 +140,14 @@ onMounted(loadBatches);
 .batch-head { display: flex; justify-content: space-between; align-items: center; }
 .batch-head > svg { color: var(--color-primary); }
 .status-pill { width: fit-content; padding: 5px 10px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 10%, transparent); color: var(--color-primary); font-size: 12px; }
+.status-pill.status-closed, .status-pill.status-archived { background: rgba(150,150,150,0.12); color: #888; }
 .batch-card strong { margin-top: 12px; font-size: 17px; }
 .batch-card p, .batch-card small { color: var(--color-text-secondary); line-height: 1.5; }
 .batch-card em { margin-top: auto; color: var(--color-primary); font-size: 12px; font-style: normal; font-weight: 600; }
+/* 已结束/已归档批次卡片 */
+.batch-card.batch-closed { opacity: 0.65; }
+.batch-card.batch-closed:hover { opacity: 0.85; }
+.batch-card.batch-closed em { color: #888; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 20px; border-radius: 8px !important; color: var(--color-text-tertiary); text-align: center; }
 .empty-state > svg { font-size: 42px; }
 .empty-state strong { color: var(--color-text-primary); }

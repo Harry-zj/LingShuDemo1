@@ -29,9 +29,13 @@
             <span class="status-chip muted" v-else-if="selectedBatch">{{ statusText(selectedBatch.status) }}</span>
             <span class="status-chip readonly" v-if="viewMode === 'form' && form && !canEdit">只读</span>
           </div>
-          <p class="overview-meta" v-if="selectedBatch">{{ selectedBatch.college }} · {{ selectedBatch.grade }}级</p>
+          <p class="overview-meta" v-if="selectedBatch">{{ selectedBatch.college }} · {{ selectedBatch.grade }}</p>
           <p class="overview-note" v-if="viewMode === 'form' && form">
             {{ canEdit ? '可逐项修改内容；保存仅更新草稿，确认提交后进入评价流程。' : (form.readonly_reason || '当前流程状态暂不允许学生端修改。') }}
+          </p>
+          <!-- ★ 已结束批次提示 -->
+          <p class="overview-note closed-note" v-if="selectedBatch && selectedBatch.status !== 'published' && selectedBatch.status !== 'draft'">
+            📦 此批次已{{ selectedBatch.status === 'closed' ? '结束' : '归档' }}，仅可查看历史填写信息，不可编辑
           </p>
         </div>
         <div class="overview-actions">
@@ -238,7 +242,12 @@ async function loadDetail() {
     if (res.code === 200) {
       form.value = res.data;
       if (!form.value) {
-        formLoadMessage.value = '当前批次尚未关联智能填表结果。请先在智能填表中生成 Word 文档，再返回本页。';
+        const batch = selectedBatch.value
+        if (batch && batch.status !== 'published') {
+          formLoadMessage.value = '该批次已' + (batch.status === 'closed' ? '结束' : '归档') + '，且无历史填写记录。仅可查看已填写的批次数据。'
+        } else {
+          formLoadMessage.value = '当前批次尚未关联智能填表结果。请先在智能填表中生成 Word 文档，再返回本页。'
+        }
       }
     } else formLoadMessage.value = res.msg || formLoadMessage.value;
   } catch (error) {
@@ -393,6 +402,7 @@ onMounted(loadDetail);
 .overview-title-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .overview-title-row h3 { font-size: 20px; }
 .overview-meta, .overview-note { margin-top: 6px; color: var(--color-text-secondary); font-size: 13px; line-height: 1.55; }
+.overview-note.closed-note { color: #888; font-style: italic; }
 .overview-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .status-chip { display: inline-flex; align-items: center; min-height: 25px; padding: 0 9px; border-radius: 8px !important; background: color-mix(in srgb, var(--color-primary) 11%, transparent); color: var(--color-primary); font-size: 12px; }
 .status-chip.muted { background: var(--color-bg); color: var(--color-text-secondary); }

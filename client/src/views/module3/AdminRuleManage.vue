@@ -21,7 +21,7 @@
       </select>
       <select v-model="selectedBatchId" @change="onBatchChange" class="batch-select" :disabled="!selectedYear">
         <option value="">选择批次</option>
-        <option v-for="b in filteredBatches" :key="b.id" :value="b.id">{{ b.college }} · {{ b.grade }}级</option>
+        <option v-for="b in filteredBatches" :key="b.id" :value="b.id">{{ b.college }} · {{ b.grade }}</option>
       </select>
       <span v-if="selectedBatch" class="batch-status-tag" :class="'status-' + selectedBatch.status">
         {{ selectedBatch.status === 'published' ? '进行中' : selectedBatch.status === 'draft' ? '草稿' : selectedBatch.status === 'closed' ? '已关闭' : selectedBatch.status }}

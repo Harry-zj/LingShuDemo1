@@ -54,6 +54,8 @@ const store = useSmartFillStore()
 const isCompleted = ref(false)
 const props = defineProps({
   scorePolicy: { type: Object, default: () => ({}) },
+  ruleSetId: { type: Number, default: 0 },
+  batchId: { type: [Number, String], default: null },
   readonly: { type: Boolean, default: false },
   readonlyReason: { type: String, default: '' },
 })
@@ -74,16 +76,16 @@ watch(() => store.f2Courses.map(c => ({ name: c.name, credit: c.credit, score: c
   if (props.readonly) return
   clearTimeout(saveTimer)
   saveTimer = setTimeout(() => {
-    const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: 0 }))
-    if (items.length) api.saveFillData(items).catch(() => {})
+    const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: props.ruleSetId || 0 }))
+    if (items.length) api.saveFillData(items, props.batchId).catch(() => {})
   }, 800)
 }, { deep: true })
 
 onBeforeUnmount(() => {
   if (props.readonly) return
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
-  const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: 0 }))
-  if (items.length) api.saveFillData(items).catch(() => {})
+  const items = store.f2Courses.filter(c => c.name).map(c => ({ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: [c], rule_set_id: props.ruleSetId || 0 }))
+  if (items.length) api.saveFillData(items, props.batchId).catch(() => {})
 })
 
 function addCourse() { store.f2Courses.push({ name: '', credit: 2, score: 0 }) }
@@ -97,7 +99,7 @@ function handleComplete() {
   if (saveTimer) { clearTimeout(saveTimer); saveTimer = null }
   const validCourses = store.f2Courses.filter(c => c.name)
   if (validCourses.length) {
-    api.saveFillData([{ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: validCourses, rule_set_id: 0 }]).catch(() => {})
+    api.saveFillData([{ section: 'F2', item_key: 'COURSE', score: 0, description: '', extra_data: validCourses, rule_set_id: props.ruleSetId || 0 }], props.batchId).catch(() => {})
   }
 }
 </script>

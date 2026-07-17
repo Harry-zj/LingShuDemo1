@@ -99,13 +99,22 @@ exports.resumeCalculation = async (req, res) => {
   } catch (e) { res.json(Res.error(e.message)); }
 };
 
-// 获取评估结果
+// 获取评估结果（★ 支持 batch_id 过滤，不提供时返回最新一条以兼容旧调用方）
 exports.getEvaluation = async (req, res) => {
   try {
-    const [rows] = await pool.execute(
-      "SELECT * FROM evaluation_results WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
-      [req.user.id]
-    );
+    const batchId = req.query.batch_id ? Number(req.query.batch_id) : 0;
+    let rows;
+    if (batchId) {
+      [rows] = await pool.execute(
+        "SELECT * FROM evaluation_results WHERE user_id = ? AND batch_id = ?",
+        [req.user.id, batchId]
+      );
+    } else {
+      [rows] = await pool.execute(
+        "SELECT * FROM evaluation_results WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
+        [req.user.id]
+      );
+    }
     if (!rows.length) return res.json(Res.success(null));
     res.json(Res.success(rows[0]));
   } catch (e) { res.json(Res.error(e.message)); }

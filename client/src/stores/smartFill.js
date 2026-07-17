@@ -33,8 +33,21 @@ export const useSmartFillStore = defineStore('smartFill', () => {
 
   const validCourseCount = computed(() => f2Courses.value.filter(c => c.name && c.credit > 0 && c.score > 0).length)
 
+  // ★ 重置为默认值（批次切换时调用）
+  function resetToDefaults() {
+    f1Items.value = [
+      { key: 'A1', label: '思想政治表现', score: 20, base: 20, detail: '' },
+      { key: 'A2', label: '道德品质修养', score: 20, base: 20, detail: '' },
+      { key: 'A3', label: '学习态度作风', score: 20, base: 20, detail: '' },
+      { key: 'A4', label: '组织纪律观念', score: 20, base: 20, detail: '' },
+      { key: 'A5', label: '身心健康素质', score: 20, base: 20, detail: '' },
+    ]
+    f2Courses.value = [{ name: '', credit: 2, score: 0 }]
+  }
+
   return {
     f1Items, f1Total, f1Weighted,
     f2Courses, f2WeightedAvg, f2Weighted, validCourseCount,
+    resetToDefaults,
   }
 })

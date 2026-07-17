@@ -1,11 +1,14 @@
 ﻿<template>
   <div class="dashboard">
-    <!-- ★ 当前批次（自动匹配，只读展示） -->
-    <div v-if="currentBatch" class="batch-info-bar">
+    <!-- ★ 批次选择器 -->
+    <div v-if="batches.length > 0" class="batch-info-bar">
       <span class="batch-icon">📋</span>
-      <span class="batch-title">{{ currentBatch.title }}</span>
-      <span class="batch-meta">{{ currentBatch.school_year }} · {{ currentBatch.college }} · {{ currentBatch.grade }}</span>
-      <span class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
+      <select v-model="selectedBatchId" class="batch-select" @change="onBatchChange">
+        <option v-for="b in sortedBatches" :key="b.id" :value="b.id">
+          {{ b.title }} ({{ b.school_year }}) {{ b.status === 'closed' ? '[已结束]' : b.status === 'archived' ? '[已归档]' : b.status === 'draft' ? '[草稿]' : '' }}
+        </option>
+      </select>
+      <span v-if="currentBatch" class="batch-status-tag" :class="'status-' + currentBatch.status">{{ batchStatusLabel }}</span>
     </div>
     <div v-else-if="batchError" class="batch-error-bar">
       <span class="batch-error-icon">⚠</span>
@@ -13,6 +16,12 @@
     </div>
     <div v-else class="batch-info-bar batch-loading">
       <span>加载批次信息...</span>
+    </div>
+
+    <!-- ★ 已结束批次提示横幅 -->
+    <div v-if="currentBatch && currentBatch.status !== 'published' && currentBatch.status !== 'draft'" class="closed-batch-banner">
+      <span>📦</span>
+      <span>此批次已{{ currentBatch.status === 'closed' ? '结束' : '归档' }}，仅可查看历史填写信息，不可编辑</span>
     </div>
 
     <!-- 标题 + 总分 -->
@@ -63,7 +72,7 @@
       </div>
       <Transition name="step" mode="out-in">
         <SmartFillF1 v-if="activeCard === 'f1'" key="f1" :score-policy="scorePolicy" :rule-set-id="publishedRuleSetId" :batch-id="currentBatch?.id" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @complete="onF1Complete" />
-        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" :score-policy="scorePolicy" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @saved="onF1F2Saved" @complete="onF2Complete" />
+        <SmartFillF2 v-else-if="activeCard === 'f2'" key="f2" :score-policy="scorePolicy" :rule-set-id="publishedRuleSetId" :batch-id="currentBatch?.id" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @saved="onF1F2Saved" @complete="onF2Complete" />
         <SmartFillRule v-else-if="activeCard === 'rule'" key="rule" :currentBatch="currentBatch" :publishedRules="publishedRules" @refresh="loadPublishedRules" />
         <SmartFillMaterial v-else-if="activeCard === 'material'" key="material" :materials="materials" :readonly="!formCanEdit" :readonly-reason="formReadonlyReason" @create="createMaterial" @upload="uploadFiles" @remove="removeMaterial" @score-recalc="onMaterialConfirmed" />
         <SmartFillScore v-else-if="activeCard === 'score'" key="score" :materials="materials" :evaluation="evaluation" :scoreList="scoreList" :score-policy="scorePolicy" :readonly="!formCanEdit" @calculate="onCalculate" />
@@ -87,7 +96,9 @@ import { DEFAULT_GRADE_RULES, DEFAULT_SCORE_LIMITS } from '../../utils/scorePoli
 
 const scorePolicy = ref({ scoreLimits: { ...DEFAULT_SCORE_LIMITS }, gradeRules: [...DEFAULT_GRADE_RULES] })
 
-// ========== 批次自动匹配 ==========
+// ========== 批次选择 ==========
+const batches = ref([])
+const selectedBatchId = ref(null)
 const currentBatch = ref(null)
 const batchError = ref('')
 const batchStatusLabel = computed(() => {
@@ -98,28 +109,79 @@ const batchStatusLabel = computed(() => {
   if (s === 'archived') return '已归档'
   return s || ''
 })
+// 排序后的批次列表（进行中 > 草稿 > 已结束 > 已归档，同状态下按学年降序）
+const sortedBatches = computed(() => {
+  const rank = { published: 0, draft: 1, closed: 2, archived: 3 }
+  return [...batches.value].sort((a, b) => {
+    const ra = rank[a.status] ?? 4
+    const rb = rank[b.status] ?? 4
+    if (ra !== rb) return ra - rb
+    return (b.school_year || '').localeCompare(a.school_year || '')
+  })
+})
 
-async function loadStudentBatch() {
+async function loadBatches() {
   try {
-    const r = await api.getStudentBatch()
-    if (r.code === 200 && r.data) {
-      currentBatch.value = r.data
+    const r = await api.getBatches()
+    if (r.code === 200 && r.data?.length) {
+      batches.value = r.data
+      // 默认选中最新批次（优先进行中的，按学年降序）
+      const preferred = sortedBatches.value[0]
+      selectedBatchId.value = preferred.id
+      setCurrentBatch(preferred)
       batchError.value = ''
     } else {
-      batchError.value = r.msg || '未找到匹配的测评批次'
+      batchError.value = '未找到匹配的测评批次'
     }
   } catch (e) {
     batchError.value = '获取批次信息失败: ' + (e.message || e)
   }
 }
 
+function setCurrentBatch(batch) {
+  currentBatch.value = batch
+}
+
+// ★ 批次切换处理
+async function onBatchChange() {
+  const batch = batches.value.find(b => b.id === selectedBatchId.value)
+  if (!batch) return
+  setCurrentBatch(batch)
+  // 清空本地状态
+  materials.value = []
+  evaluation.value = null
+  scoreList.value = null
+  templates.value = []
+  templatesLoaded.value = false
+  uploadedTemplate.value = null
+  publishedRules.value = []
+  ruleSets.value = []
+  f1Done.value = false
+  f2Done.value = false
+  formDone.value = false
+  // 重置 Pinia store
+  resetStoreForBatch()
+  // 关闭当前卡片回到 stepper 视图
+  activeCard.value = null
+  // 重新加载所有数据
+  await refreshAll()
+  await loadFormStatus()
+}
+
 // ========== 表单审核状态 ==========
 const formStatus = ref(null)
 const formReadonlyReason = ref('')
-const formCanEdit = ref(true)  // 默认无表单=可编辑
+const formCanEdit = ref(true)  // 默认无表单=可编辑，但在 loadFormStatus 中会根据批次状态修正
 
 async function loadFormStatus() {
   if (!currentBatch.value?.id) return
+  // ★ 批次已关闭/归档 → 强制只读，不允许编辑
+  if (currentBatch.value.status !== 'published') {
+    formStatus.value = null
+    formReadonlyReason.value = '该批次已结束，仅可查看历史填写信息'
+    formCanEdit.value = false
+    return
+  }
   try {
     const res = await getStudentForm(currentBatch.value.id)
     if (res.code === 200 && res.data) {
@@ -127,14 +189,16 @@ async function loadFormStatus() {
       formReadonlyReason.value = res.data.readonly_reason || ''
       formCanEdit.value = !!res.data.can_student_edit
     } else {
+      // 批次已发布但无表单 → 允许编辑（首次填写）
       formStatus.value = null
       formReadonlyReason.value = ''
       formCanEdit.value = true
     }
   } catch (_) {
+    // 请求失败时保守处理：检查批次状态
     formStatus.value = null
-    formReadonlyReason.value = ''
-    formCanEdit.value = true
+    formReadonlyReason.value = currentBatch.value?.status === 'published' ? '' : '该批次已结束，仅可查看历史填写信息'
+    formCanEdit.value = currentBatch.value?.status === 'published'
   }
 }
 
@@ -262,11 +326,11 @@ async function restoreStoreFromPreview() {
 }
 
 async function refreshMaterials() {
-  const r = await api.getMaterials()
+  const r = await api.getMaterials(currentBatch.value?.id)
   if (r.code === 200) materials.value = r.data || []
 }
 async function refreshEval() {
-  const r = await api.getEvaluation()
+  const r = await api.getEvaluation(currentBatch.value?.id)
   if (r.code === 200 && r.data) evaluation.value = r.data
 }
 async function refreshTemplates() {
@@ -282,12 +346,17 @@ watch(activeCard, (newVal) => {
   if (newVal === null) loadFormStatus()
 })
 
+// ★ 批次切换时重置 Pinia store
+function resetStoreForBatch() {
+  store.resetToDefaults()
+}
+
 onMounted(async () => {
   try {
     const policyRes = await getScorePolicy()
     if (policyRes.code === 200 && policyRes.data) scorePolicy.value = policyRes.data
   } catch (_) {}
-  await loadStudentBatch()
+  await loadBatches()
   if (currentBatch.value) {
     await refreshAll()
     await loadFormStatus()
@@ -419,9 +488,16 @@ const store = useSmartFillStore()
 }
 .batch-info-bar.batch-loading { color: var(--color-text-tertiary); }
 .batch-icon { font-size: 15px; opacity: 0.7; }
+.batch-select {
+  flex: 1; min-width: 180px; padding: 6px 12px; border: 1.5px solid rgba(196,168,130,0.25);
+  border-radius: 8px; font-size: 13px; font-weight: 600; font-family: inherit;
+  background: rgba(255,255,255,0.04); color: var(--color-text);
+  cursor: pointer; outline: none; transition: border-color 0.2s;
+}
+.batch-select:focus { border-color: var(--sf-sand); }
 .batch-title { font-weight: 600; color: var(--color-text); }
 .batch-meta { color: var(--color-text-tertiary); }
-.batch-status-tag { font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 500; }
+.batch-status-tag { font-size: 11px; padding: 2px 10px; border-radius: 10px; font-weight: 500; white-space: nowrap; }
 .batch-status-tag.status-draft { background: rgba(244,184,71,0.15); color: #c4952a; }
 .batch-status-tag.status-published { background: rgba(125,155,118,0.18); color: #5a8a54; }
 .batch-status-tag.status-closed { background: rgba(220,80,80,0.12); color: #c44; }
@@ -429,6 +505,13 @@ const store = useSmartFillStore()
 .batch-error-bar {
   background: rgba(244,184,71,0.10); border-radius: 12px; padding: 10px 16px;
   display: flex; align-items: center; gap: 8px; font-size: 13px; color: #c4952a;
+}
+
+/* ===== 已结束批次横幅 ===== */
+.closed-batch-banner {
+  display: flex; align-items: center; gap: 10px; padding: 12px 16px;
+  background: rgba(150,150,150,0.10); border: 1px solid rgba(150,150,150,0.20);
+  border-radius: 10px; font-size: 13px; color: #888;
 }
 
 /* ===== 页头 ===== */

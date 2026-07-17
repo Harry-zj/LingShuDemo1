@@ -34,8 +34,8 @@ export const deleteRuleSource = (id) =>
 export const createMaterial = (title) =>
   request.post("/zongce/materials", { title });
 
-export const getMaterials = () =>
-  request.get("/zongce/materials");
+export const getMaterials = (batchId) =>
+  request.get("/zongce/materials", { params: batchId ? { batch_id: batchId } : {} });
 
 export const uploadAttachments = (materialId, formData) =>
   request.post(`/zongce/materials/${materialId}/upload`, formData, {
@@ -84,8 +84,8 @@ export const calculateScore = (rule_set_id, material_ids, batch_id) =>
   request.post("/zongce/evaluation/calculate", { rule_set_id, material_ids, batch_id });
 
 export const getScoreList = (ruleSetId, batchId) => request.get("/zongce/evaluation/score-list", { params: { rule_set_id: ruleSetId, batch_id: batchId } });
-export const getEvaluation = () =>
-  request.get("/zongce/evaluation/result");
+export const getEvaluation = (batchId) =>
+  request.get("/zongce/evaluation/result", { params: batchId ? { batch_id: batchId } : {} });
 
 // ===== 模板与填表 =====
 export const uploadTemplate = (formData) =>

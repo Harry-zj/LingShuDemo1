@@ -23,12 +23,34 @@ exports.createMaterial = async (req, res) => {
 };
 
 // 获取材料列表（含附件和识别结果，一次查询避免 N+1）
+// ★ 支持 batch_id 过滤：提供时仅返回在当前批次规则集下有匹配的材料
 exports.getMaterials = async (req, res) => {
   try {
-    const [materials] = await pool.execute(
-      "SELECT * FROM materials WHERE user_id = ? ORDER BY created_at DESC",
-      [req.user.id]
-    );
+    const batchId = req.query.batch_id ? Number(req.query.batch_id) : 0;
+
+    let materials;
+    if (batchId) {
+      // ★ 按批次过滤：返回 ① 在当前批次有已确认匹配的材料 ② 尚未被分析过的新材料
+      const [rows] = await pool.execute(
+        `SELECT DISTINCT m.* FROM materials m
+         LEFT JOIN material_analysis_runs mar ON mar.material_id = m.id
+         LEFT JOIN extracted_facts ef ON ef.analysis_run_id = mar.id AND ef.status = 'active'
+         LEFT JOIN fact_rule_matches frm ON frm.extracted_fact_id = ef.id
+            AND frm.is_current = 1 AND frm.review_status = 'confirmed'
+         LEFT JOIN rule_match_runs rmr ON frm.match_run_id = rmr.id
+         LEFT JOIN rule_sets rs ON rmr.rule_set_id = rs.id AND rs.status = 'published'
+         WHERE m.user_id = ? AND (mar.id IS NULL OR rs.batch_id = ?)
+         ORDER BY m.created_at DESC`,
+        [req.user.id, batchId]
+      );
+      materials = rows;
+    } else {
+      [materials] = await pool.execute(
+        "SELECT * FROM materials WHERE user_id = ? ORDER BY created_at DESC",
+        [req.user.id]
+      );
+    }
+
     if (!materials.length) return res.json(Res.success([]));
 
     const ids = materials.map((m) => m.id);
